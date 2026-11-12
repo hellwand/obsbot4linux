@@ -2,7 +2,7 @@
 
 Control OBSBOT webcams on Linux, currently the Tiny 2 Lite: every setting OBSBOT Center
 offers, from the console and from the Dux (DankMaterialShell) bar widget
-[obsbot4linux-dux](https://github.com/nofuturekid/obsbot4linux-dux).
+[obsbot4linux-dux](https://github.com/hellwand/obsbot4linux-dux).
 
 The protocol comes from USB captures of OBSBOT Center (the protocol notes are not public
 at the moment); commands are tested byte for byte against the captured frames.
@@ -404,7 +404,7 @@ camera is at hand to capture and test (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 ## Install
 
 Download a package from the
-[releases](https://github.com/nofuturekid/obsbot4linux/releases) (x86_64 and aarch64;
+[releases](https://github.com/hellwand/obsbot4linux/releases) (x86_64 and aarch64;
 `SHA256SUMS` lists the checksums), then install it, with `VER` set to the release's version
 (for example `VER=0.6.0`):
 
