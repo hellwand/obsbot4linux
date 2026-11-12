@@ -14,6 +14,9 @@ All notable changes to OBSBot4Linux. The format follows
 
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
   leaves the repository clean; a local build is labelled with the release version (#120).
+- `docs/center-parity.md` describes obsbot4linux 0.13 instead of 0.6.0: hand area, auto zoom,
+  framing offset, gimbal rate and speed, stop, zone views, microphone volume, LED blink, power-on
+  mode and the firmware version are no longer listed as missing; gestures are read back (#122).
 
 ## [0.13.2] - 2026-10-31
 
