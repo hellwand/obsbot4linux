@@ -362,8 +362,6 @@ fn manual_exposure(
     Ok(())
 }
 
-/// One sequence for the whole process, so frames from separate `Camera` handles (the daemon
-/// opens the device per operation) never repeat a number.
 /// The answer to 0x0b84 is the 0-2 the setter takes, but a camera that was never set reports its
 /// default as the speed itself, 10 (read back from a Tiny 2 Lite); 30 and 50 are the other two.
 fn auto_zoom_speed_reading(v: u8) -> Option<AutoZoomSpeed> {
@@ -375,6 +373,8 @@ fn auto_zoom_speed_reading(v: u8) -> Option<AutoZoomSpeed> {
     }
 }
 
+/// One sequence for the whole process, so frames from separate `Camera` handles (the daemon
+/// opens the device per operation) never repeat a number.
 fn sequence() -> &'static Sequence {
     static SEQ: OnceLock<Sequence> = OnceLock::new();
     SEQ.get_or_init(Sequence::new)

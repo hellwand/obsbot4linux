@@ -17,6 +17,8 @@ All notable changes to OBSBot4Linux. The format follows
 - `docs/center-parity.md` describes obsbot4linux 0.13 instead of 0.6.0: hand area, auto zoom,
   framing offset, gimbal rate and speed, stop, zone views, microphone volume, LED blink, power-on
   mode and the firmware version are no longer listed as missing; gestures are read back (#122).
+- `audio --help` says that every microphone change restarts the camera, not only turning it off, and
+  `gimbal rate --help` says that an omitted axis is stopped (#123).
 
 ## [0.13.2] - 2026-10-31
 

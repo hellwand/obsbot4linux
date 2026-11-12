@@ -89,7 +89,8 @@ pub enum GimbalCmd {
     Center { x: f32, y: f32 },
     /// Keep turning at a speed in degrees per second (up to 178) UNTIL `gimbal stop` or a speed
     /// of 0, also when the client is gone; like the joystick of OBSBOT Center (switches
-    /// tracking to static first)
+    /// tracking to static first). An axis you leave out is stopped: `--pan 5` alone also
+    /// stops a running tilt turn
     Rate {
         /// Positive turns the camera to its left
         #[arg(long, allow_negative_numbers = true)]
@@ -287,7 +288,7 @@ pub enum Audio {
     },
     /// Keep the microphone on while the camera sleeps
     SleepMic { state: OnOff },
-    /// Microphone on/off; off makes the camera restart (about 18 s)
+    /// Microphone on/off; every change makes the camera restart (about 18 s)
     Mic { state: OnOff },
 }
 

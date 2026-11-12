@@ -13,6 +13,10 @@
 //! that only holds the node open (a control panel) does not map it. Capture through DMABUF or
 //! userptr buffers maps nothing, and processes of other users or in a sandbox are unreadable,
 //! so the list can be empty while `is_streaming` is true.
+//!
+//! On uvcvideo up to kernel 6.16 the probe holds the stream's exclusive right while it runs, so
+//! another application's `S_FMT`, `S_PARM`, `S_INPUT`, `REQBUFS` or `CREATE_BUFS` can fail with
+//! `EBUSY` at that moment. Kernel 6.17 and newer use the vb2 helpers and are unaffected.
 
 use nix::errno::Errno;
 use nix::ioctl_readwrite;
@@ -50,6 +54,11 @@ fn busy(result: Result<(), Errno>) -> bool {
 /// this takes the buffer queue for that moment (count 0 releases it again). Every error other
 /// than `EBUSY` (no access, no such node, no buffer support) counts as not streaming; the
 /// project has no logging, so they are not reported.
+///
+/// On uvcvideo up to kernel 6.16 the probe holds the stream's exclusive right for its duration,
+/// so another application's `S_FMT`, `S_PARM`, `S_INPUT`, `REQBUFS` or `CREATE_BUFS` can fail
+/// with `EBUSY` at that moment (kernel 6.17 and newer are unaffected). There is no code
+/// alternative; the probe does not retry.
 pub fn is_streaming(device: &Path) -> bool {
     busy(probe(device))
 }

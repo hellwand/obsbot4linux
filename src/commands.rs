@@ -215,7 +215,7 @@ pub fn auto_gain(on: bool) -> [u8; 3] {
 pub fn pickup_distance(distance: PickupDistance) -> [u8; 3] {
     [0x1b, 0x01, distance.to_u8()]
 }
-/// Microphone on/off. Off makes the camera restart (about 18 s).
+/// Microphone on/off. Every change makes the camera restart (about 18 s).
 pub fn microphone(on: bool) -> [u8; 3] {
     [0x1c, 0x01, on as u8]
 }
@@ -416,7 +416,7 @@ pub fn sleep(asleep: bool, seq: u16) -> [u8; FRAME_SIZE] {
 pub fn factory_reset(seq: u16) -> [u8; FRAME_SIZE] {
     frame(POWER, 0xa802, &[0x01], seq)
 }
-/// -1000 on the wire (any value from 179 up) keeps that axis where it is.
+/// -1000 on the wire keeps that axis where it is (any value of magnitude 179 or more does).
 const KEEP: f32 = -1000.0;
 
 /// The three targets (roll, pitch, yaw) of the pose commands; checked, so that a value the camera
@@ -556,8 +556,8 @@ pub fn part_mode(mode: PartMode, seq: u16) -> [u8; FRAME_SIZE] {
 /// The camera clamps the framing offset to this fraction of the frame; a larger value is refused
 /// here, so that the read-back is what was asked for.
 pub const FRAMING_OFFSET_MAX: f32 = 0.16;
-/// Horizontal (0x0bc4) or vertical (0x0c44) framing offset as a fraction of the frame, positive
-/// is right / down in the picture.
+/// Horizontal (0x0bc4) or vertical (0x0c44) framing offset as a fraction of the frame. Which way
+/// a positive value moves the framing was not checked.
 pub fn framing_offset(vertical: bool, offset: f32, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     if !(-FRAMING_OFFSET_MAX..=FRAMING_OFFSET_MAX).contains(&offset) {
         return Err(invalid("framing offset is -0.16 to 0.16 of the frame"));
