@@ -302,6 +302,181 @@ mod tests {
     }
 
     #[test]
+    fn every_status_field_reads_its_own_byte() {
+        // Each byte set alone changes exactly one field, so a field read from a neighbouring
+        // offset (a mirror read from 0x14, continuous autofocus from 0x0d, the sleep background
+        // from 0x1a) shows up as a second changed field or as none.
+        let zero = Status::decode(&[0; 60]);
+        let only = |at: usize, v: u8| Status::decode(&block(&[(at, v)]));
+        assert_eq!(
+            only(0x01, 1),
+            Status {
+                gesture_target_lock: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x04, 40),
+            Status {
+                digital_zoom_percent: 40,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x06, 1),
+            Status {
+                hdr: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x07, 1),
+            Status {
+                face_auto_exposure: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x08, 2),
+            Status {
+                noise_reduction: Some(NoiseReduction::Medium),
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x0d, 1),
+            Status {
+                autofocus_face: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x0e, 1),
+            Status {
+                continuous_autofocus: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x0f, 50),
+            Status {
+                manual_focus: 50,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x10, 1),
+            Status {
+                mic_in_sleep: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x13, 1),
+            Status {
+                mirror: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x19, 1),
+            Status {
+                auto_gain: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x1b, 1),
+            Status {
+                sleep_background: Some(SleepBackground::Image),
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x1d, 1),
+            Status {
+                sleep_background_mirror: true,
+                ..zero.clone()
+            }
+        );
+        assert_eq!(
+            only(0x1f, 30),
+            Status {
+                frame_rate: 30,
+                ..zero.clone()
+            }
+        );
+    }
+
+    #[test]
+    fn full_block_with_a_distinct_byte_per_field() {
+        // One block, every field set to a value of its own. The mirror byte (0x13) is 0 while the
+        // byte after it (0x14, "1 once booted") is 1, and continuous autofocus (0x0e) is off
+        // while its neighbours are on, so a neighbouring offset cannot stand in for a field.
+        let b = block(&[
+            (0x01, 1),
+            (0x02, 1),
+            (0x03, 2),
+            (0x04, 40),
+            (0x06, 1),
+            (0x07, 1),
+            (0x08, 3),
+            (0x0a, 0x2c),
+            (0x0b, 0x01),
+            (0x0d, 1),
+            (0x0e, 0),
+            (0x0f, 50),
+            (0x10, 1),
+            (0x11, 2),
+            (0x13, 0),
+            (0x14, 1),
+            (0x16, 33),
+            (0x18, 2),
+            (0x19, 1),
+            (0x1a, 0b0101),
+            (0x1b, 1),
+            (0x1c, 1),
+            (0x1d, 0),
+            (0x1f, 30),
+            (0x20, 0x21),
+            (0x21, 2),
+            (0x22, 0x11),
+            (0x24, 1),
+        ]);
+        assert_eq!(
+            Status::decode(&b),
+            Status {
+                asleep: true,
+                ai_mode: Some(AiMode::UpperBody),
+                tracking_speed: TrackingSpeed::Headroom,
+                hdr: true,
+                auto_sleep_enabled: true,
+                auto_sleep_seconds: 300,
+                sleep_background: Some(SleepBackground::Image),
+                sleep_background_mirror: false,
+                field_of_view: Some(FovReading::Narrow),
+                mirror: false,
+                led: 2,
+                mic_in_sleep: true,
+                noise_reduction: Some(NoiseReduction::Strong),
+                auto_gain: true,
+                pickup_distance: Some(PickupDistance::Standard),
+                gesture_target_lock: true,
+                anti_flicker: Some(AntiFlicker::Hz60),
+                digital_zoom_percent: 40,
+                wake_up_zoom_percent: 33,
+                sleep_images: vec![0, 2],
+                default_work_mode: WorkMode { main: 2, sub: 1 },
+                face_auto_exposure: true,
+                autofocus_face: true,
+                continuous_autofocus: false,
+                manual_focus: 50,
+                frame_rate: 30,
+            }
+        );
+    }
+
+    #[test]
     fn anti_flicker_auto_is_named_not_passed_on_as_3() {
         // 3 = automatic detection; the V4L2 control takes it, so the camera can report it
         let flicker = |v| Status::decode(&block(&[(0x03, v)])).anti_flicker;
