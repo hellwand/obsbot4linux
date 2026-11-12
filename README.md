@@ -1,8 +1,9 @@
 # OBSBot4Linux
 
-Control OBSBOT webcams on Linux, currently the Tiny 2 Lite: every setting OBSBOT Center
+Control OBSBOT webcams on Linux, currently the Tiny 2 Lite: most settings OBSBOT Center
 offers, from the console and from the Dux (DankMaterialShell) bar widget
-[obsbot4linux-dux](https://github.com/hellwand/obsbot4linux-dux).
+[obsbot4linux-dux](https://github.com/hellwand/obsbot4linux-dux). What is still missing
+is listed in [docs/center-parity.md](docs/center-parity.md).
 
 The protocol comes from USB captures of OBSBOT Center (the protocol notes are not public
 at the moment); commands are tested byte for byte against the captured frames.
@@ -13,9 +14,9 @@ One program, `obsbot4linux`:
 
 - **`obsbot4linux daemon`** owns the camera state. It runs as a systemd user service,
   started on demand through the socket `$XDG_RUNTIME_DIR/obsbot4linux.sock`. After every
-  change, from any client, it reads the camera again and sends the new state to all connected
-  clients (once, after the reply, about a second later; never a state with values from before
-  the change), and
+  change, from any client, it reads the camera again at once and sends the new state to all
+  connected clients (once, after the reply and that read, which takes about a second; never a
+  state with values from before the change), and
   it polls the camera in the background to notice changes the camera makes itself
   (a gesture switching AI tracking on, a factory reset, unplugging).
 - **CLI** (`obsbot4linux status`, `obsbot4linux fov wide`, `obsbot4linux gimbal --pan 10`, ... with
@@ -53,8 +54,8 @@ there, it returns to that pose and falls asleep again. Way out: `obsbot4linux wa
 ## Status
 
 The `obsbot4linux` CLI (library plus binary) controls the camera directly, with
-`--json` for every command, and `obsbot4linux daemon` / `obsbot4linux watch` implement the
-design above (JSON lines over `$XDG_RUNTIME_DIR/obsbot4linux.sock`, override with
+`--json` for every command except `daemon` and `watch`, and `obsbot4linux daemon` /
+`obsbot4linux watch` implement the design above (JSON lines over `$XDG_RUNTIME_DIR/obsbot4linux.sock`, override with
 `OBSBOT4LINUX_SOCKET`). The DMS widget uses `obsbot4linux watch` only. Other models would
 each get a module behind the same commands once one is at hand to capture and test.
 Builds on the Tiny 2 Lite support written for
@@ -106,7 +107,10 @@ the capture buffers, so obsbot4linux opens the video node and requests zero buff
 (`VIDIOC_REQBUFS`, count 0); `EBUSY` means some application streams. This sees every
 application, also sandboxed ones like Chrome and ones that do not map the node like Qt
 Multimedia. While nobody streams, the probe owns the buffer queue for a moment and releases it
-at once; it does not disturb a running stream. Any other error counts as not streaming.
+at once; it does not disturb a running stream. On uvcvideo up to kernel 6.16 the probe briefly
+holds the stream's exclusive right, so another application's format or buffer setup (`S_FMT`,
+`S_PARM`, `S_INPUT`, `REQBUFS`) can fail with "device busy" if it starts at that moment; 6.17 and
+newer are not affected. Any other error counts as not streaming.
 
 `streaming_apps` is best effort, only for names: a process that streams has the camera's
 `/dev/videoN` open and has mapped its buffers (the node appears in `/proc/<pid>/maps`). A
@@ -175,6 +179,11 @@ backed off.
 `image exposure_time` is refused unless the exposure is manual (a shutter time sent in automatic
 exposure freezes it); use `exposure manual --time`.
 
+A manual value needs its automatic control off first, as OBSBOT Center does it: while it is on,
+the driver can refuse the write with a bare "Permission denied". Send `image white_balance_auto 0`
+before `image white_balance_temperature`. For focus use `focus set`, which turns autofocus off
+itself, instead of `image focus`.
+
 ### Zone tracking and start pose
 
 `obsbot4linux --json status` and the state events of `obsbot4linux watch` carry the zone
@@ -195,7 +204,7 @@ positive = camera left, tilt positive = up.
   },
   "state": {
     "zone_follow": true,
-    "startup": { "pan": 0.0, "tilt": 0.0, "zoom": 1.0, "preset": null }
+    "startup": { "pan": 0.0, "tilt": 0.0, "zoom": 1.0, "preset": null, "ai_mode": "static" }
   }
 }
 ```
@@ -309,7 +318,9 @@ The daemon reads the two values together with the zone values (see above). Capab
 ### Gimbal and zoom moves
 
 `gimbal --pan P --tilt T` is unchanged (command `0x6444`, joint angles, as fast as the motors go,
-tracking switched to static first). New, all of them switch tracking to static first except `stop`:
+tracking switched to static first). New: the gimbal moves with `--speed`, `rate` and the hidden
+`center` switch tracking to static first too; `gimbal stop`, `zoom F --speed S` and `zoom stop`
+leave the AI mode alone:
 
 | Command | Does | Capability |
 | --- | --- | --- |
@@ -415,6 +426,9 @@ sudo pacman -U obsbot4linux-$VER-1-x86_64.pkg.tar.zst        # Arch Linux, Arch 
 tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz               # tarball: binary + systemd/ units
 ```
 
+The packages and the tarball binary need glibc 2.34 or newer (Debian 12, Ubuntu 22.04,
+Fedora 35, RHEL 9 or openSUSE Leap 15.6 and newer; Debian 11 and Ubuntu 20.04 have 2.31).
+
 The packages install `/usr/bin/obsbot4linux` and the user units, and do not enable
 anything. Enable the socket:
 
@@ -423,8 +437,19 @@ systemctl --user enable --now obsbot4linux.socket
 ```
 
 The socket starts `obsbot4linux.service` on the first connection. Without the
-units, `obsbot4linux watch` starts a daemon itself. From the tarball, put the
-binary on your `PATH` and copy `systemd/*` to `~/.config/systemd/user/`. The service runs
+units, `obsbot4linux watch` starts a daemon itself.
+
+If the DMS widget already runs, it has started such a daemon, and it holds the socket path.
+`enable --now` then lets systemd bind its own socket at that path, and the old daemon keeps
+running next to it. Enable the socket before the widget starts, or end the widget's daemon right
+after `enable --now`: `systemctl --user restart dms.service` when DMS runs as a user unit,
+otherwise log out and in.
+
+A daemon keeps running the binary it started from, so after upgrading the package restart it:
+`systemctl --user restart obsbot4linux.service`. A daemon started by `watch` ends with the
+shell's unit (`systemctl --user restart dms.service`) or at logout, not when the widget reloads.
+
+From the tarball, put the binary on your `PATH` and copy `systemd/*` to `~/.config/systemd/user/`. The service runs
 `/usr/bin/obsbot4linux`; for a binary elsewhere, `systemctl --user edit obsbot4linux.service`
 and point it there (the empty `ExecStart=` clears the packaged one):
 

@@ -5,6 +5,11 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
+- README and package text now say "most settings OBSBOT Center offers" and link `docs/center-parity.md` for the gaps; they also state the glibc 2.34 floor, how to switch to the socket units while the widget's daemon runs, to restart the daemon after an upgrade (`systemctl --user restart obsbot4linux.service`), that `zoom F --speed S` and `zoom stop` leave the AI mode alone, the `device busy` window of the on-air probe on uvcvideo up to 6.16, and the order of auto and manual image controls (#121).
+
 ### Fixed
 
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
