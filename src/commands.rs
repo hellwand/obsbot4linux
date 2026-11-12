@@ -579,7 +579,10 @@ mod tests {
     }
 
     #[test]
-    fn sleep_and_wake_match_capture() {
+    fn sleep_and_wake_frames() {
+        // The command and data are recorded (capture 13: 0xa0c2 with 01000000 on sleep, 00000000
+        // on wake), but these two frames, with their sequence numbers and CRCs, come from the
+        // Tiny4Linux port, not from a recording.
         assert_captured(
             sleep(false, 0xa5),
             "aa25a5000c005fef0a02c2a00400be0700000000",
@@ -624,7 +627,10 @@ mod tests {
     }
 
     #[test]
-    fn tracking_speed_hand_and_invert_match_capture() {
+    fn tracking_speed_hand_and_invert_frames() {
+        // The two tracking_speed frames (seq 0x20, 0x21) come from the Tiny4Linux port; capture 11
+        // records the same command with data 00 / 02 at other sequence numbers. The hand_side and
+        // invert frames are byte for byte from captures 11 and 05.
         assert_captured(
             tracking_speed(TrackingSpeed::Standard, 0x20),
             "aa2520000c00abcb0a04c40c0100e63f00",
@@ -663,7 +669,7 @@ mod tests {
         // capture 12: global (seq 494), then face (seq 495)
         assert_captured(
             autofocus_mode(false, 494),
-            "aa25ee010c00f1200a0202360400be07000000",
+            "aa25ee010c00f1200a0202360400be0700000000",
         );
         assert_captured(
             autofocus_mode(true, 495),
@@ -959,15 +965,79 @@ mod tests {
 
     #[test]
     fn short_commands() {
+        // all eight AI modes, capture 11 (the decoder drops trailing zero bytes, so `160202` is
+        // `16 02 02 00`): normal 160202, upper body 16020201, close-up 16020202, headless
+        // 16020203, lower body 16020204, hand 160203, group 160201, static 1602
+        assert_eq!(ai_mode(AiMode::Normal), [0x16, 0x02, 0x02, 0x00]);
         assert_eq!(ai_mode(AiMode::UpperBody), [0x16, 0x02, 0x02, 0x01]);
+        assert_eq!(ai_mode(AiMode::CloseUp), [0x16, 0x02, 0x02, 0x02]);
+        assert_eq!(ai_mode(AiMode::Headless), [0x16, 0x02, 0x02, 0x03]);
+        assert_eq!(ai_mode(AiMode::LowerBody), [0x16, 0x02, 0x02, 0x04]);
         assert_eq!(ai_mode(AiMode::Hand), [0x16, 0x02, 0x03, 0x00]);
+        assert_eq!(ai_mode(AiMode::Group), [0x16, 0x02, 0x01, 0x00]);
+        assert_eq!(ai_mode(AiMode::Static), [0x16, 0x02, 0x00, 0x00]);
         assert_eq!(auto_sleep(-120), [0x0b, 0x02, 0x88, 0xff]);
         assert_eq!(auto_sleep_off(120).unwrap(), auto_sleep(-120));
         assert_eq!(led(2).unwrap(), [0x1a, 0x01, 0x02]);
         assert!(led(4).is_err());
+        // capture 12: HDR off 0101, on 010101
+        assert_eq!(hdr(false), [0x01, 0x01, 0x00]);
         assert_eq!(hdr(true), [0x01, 0x01, 0x01]);
         // a short command, never the framed 0x3904 that arms the zone-Static flag (#79)
         assert_eq!(startup_go(), [0x00, 0x01, 0x01]);
+    }
+
+    #[test]
+    fn ai_mode_status_pairs_round_trip() {
+        // from_status is a second table; the two must not drift apart
+        for mode in AiMode::value_variants() {
+            let [main, sub] = mode.to_bytes();
+            assert_eq!(AiMode::from_status(main, sub), Some(*mode));
+        }
+    }
+
+    /// Every value is the short command of the capture named; the decoder drops trailing zero
+    /// bytes, so `0a01` is `0a 01 00`.
+    #[test]
+    fn display_and_audio_short_commands_match_capture() {
+        // capture 05: mirror on 140101, off 1401
+        assert_eq!(mirror(true), [0x14, 0x01, 0x01]);
+        assert_eq!(mirror(false), [0x14, 0x01, 0x00]);
+        // capture 09: field of view medium 040101, narrow 040102, wide 0401
+        assert_eq!(field_of_view(FieldOfView::Medium), [0x04, 0x01, 0x01]);
+        assert_eq!(field_of_view(FieldOfView::Narrow), [0x04, 0x01, 0x02]);
+        assert_eq!(field_of_view(FieldOfView::Wide), [0x04, 0x01, 0x00]);
+        // capture 03: black 0e02, built-in image 0e020001, mirror on 0e020201, off 0e0202
+        assert_eq!(
+            sleep_background(SleepBackground::Black),
+            [0x0e, 0x02, 0x00, 0x00]
+        );
+        assert_eq!(
+            sleep_background(SleepBackground::Image),
+            [0x0e, 0x02, 0x00, 0x01]
+        );
+        assert_eq!(sleep_background_mirror(true), [0x0e, 0x02, 0x02, 0x01]);
+        assert_eq!(sleep_background_mirror(false), [0x0e, 0x02, 0x02, 0x00]);
+        // capture 06: microphone while asleep on 130101, off 1301
+        assert_eq!(mic_in_sleep(true), [0x13, 0x01, 0x01]);
+        assert_eq!(mic_in_sleep(false), [0x13, 0x01, 0x00]);
+        // capture 06: noise reduction medium 0a0102, strong 0a0103, off 0a01, weak 0a0101
+        assert_eq!(noise_reduction(NoiseReduction::Medium), [0x0a, 0x01, 0x02]);
+        assert_eq!(noise_reduction(NoiseReduction::Strong), [0x0a, 0x01, 0x03]);
+        assert_eq!(noise_reduction(NoiseReduction::Off), [0x0a, 0x01, 0x00]);
+        assert_eq!(noise_reduction(NoiseReduction::Weak), [0x0a, 0x01, 0x01]);
+        // capture 06: auto gain off 1701, on 170101
+        assert_eq!(auto_gain(false), [0x17, 0x01, 0x00]);
+        assert_eq!(auto_gain(true), [0x17, 0x01, 0x01]);
+        // capture 06: pickup distance far 1b0102, standard 1b0101, near 1b01
+        assert_eq!(pickup_distance(PickupDistance::Far), [0x1b, 0x01, 0x02]);
+        assert_eq!(
+            pickup_distance(PickupDistance::Standard),
+            [0x1b, 0x01, 0x01]
+        );
+        assert_eq!(pickup_distance(PickupDistance::Near), [0x1b, 0x01, 0x00]);
+        // capture 14: microphone disabled 1c01 (the capture holds only this direction)
+        assert_eq!(microphone(false), [0x1c, 0x01, 0x00]);
     }
 
     #[test]
