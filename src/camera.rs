@@ -1591,7 +1591,7 @@ mod angle_conversion_tests {
             hand_enabled(&hex::decode(HAND_AREA_ANSWER).unwrap()),
             (Some(true), Some(true))
         );
-        // pan off, tilt on and the other way round; the bytes before (20 and 21) stay non-zero
+        // pan off, tilt on and the other way round; byte 21 before them stays non-zero
         assert_eq!(
             hand_enabled(&hand_answer(&[(22, 0)])),
             (Some(false), Some(true))
