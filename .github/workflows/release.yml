@@ -48,10 +48,11 @@ jobs:
           test -n "$ver"
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
-  # Tags only. Fails at once unless the tagged commit is on main, Cargo.toml, PKGBUILD and
-  # CHANGELOG.md match the tag and ci.yml tests with the same toolchain.
+  # Fails at once unless the tagged commit is on main, Cargo.toml, PKGBUILD and CHANGELOG.md
+  # match the tag and ci.yml tests with the same toolchain. On a pull request only the
+  # toolchain check runs. The job itself must not be skipped: GitHub then skips every job
+  # that depends on it, directly or not.
   verify:
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -59,15 +60,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: git merge-base --is-ancestor HEAD origin/main
-      - run: scripts/changelog-section.sh "$GITHUB_REF_NAME" > /dev/null
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: git merge-base --is-ancestor HEAD origin/main
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: scripts/changelog-section.sh "$GITHUB_REF_NAME" > /dev/null
       - run: |
           grep -qx "  RUSTUP_TOOLCHAIN: '$RUSTUP_TOOLCHAIN'" .github/workflows/ci.yml
 
-  # The fmt, clippy, test and msrv steps of ci.yml. On a pull request verify is skipped.
+  # The fmt, clippy, test and msrv steps of ci.yml.
   test:
     needs: verify
-    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
