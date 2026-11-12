@@ -1,0 +1,1794 @@
+# obsbot4linux 1.0: rebuild design
+
+Status: revision 2, draft for review (2026-11-12). Revision 1 (2026-11-01) was agreed with
+Thomas in the brainstorming session of that day. Revision 2 applies the design decisions of
+2026-11-12. They followed a review of revision 1 against the 0.13.2 code, an audit of that
+code, and a second camera model that may arrive soon. Section 15 lists every decision that
+changed, one row each, so that each can be overruled on its own.
+
+Words used with a fixed meaning:
+
+- **captured**: the bytes are in a recording of the vendor app talking to the camera
+  ("recorded from the vendor app"). Cited as "capture N".
+- **measured**: written from Linux and read back on the camera, or its effect observed
+  ("measured on the camera"). Cited with a date, a public issue or a camera-session item.
+- **backed**: a setting whose write and readback, or an action whose frames and effect, are
+  captured or measured on that model. A standard UVC control counts as measured once V4L2
+  reads back the written value on the camera. "0.13 uses it" is not a level.
+- **verified / unverified / unknown**: the status of a statement. Unknown means only a
+  device or a capture can settle it.
+- **must**, **never**: requirements. Every requirement in this document can be checked by a
+  test, a review of the diff, or a camera-session item (section 14).
+
+## 1. Goal
+
+obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and CLI with a clean
+structure and no legacy baggage. The camera knowledge earned so far is carried over: frame
+codec, command bytes, status decoding, recordings and byte-exact tests. The daemon, the
+protocol, the client library and the CLI are written new.
+
+Success criteria (the release gate is section 10.6):
+
+1. Every command and option of 0.13.2 has a row in the parity table (section 9.1). Each row
+   is verified on a real Tiny 2 Lite, or is a named parity exception with its reason
+   (section 9.2).
+2. No setting or action is offered on a guess. A released description holds only backed
+   fields. Section 9.3 lists the Tiny 2 Lite fields that are not backed today and the fate
+   of each.
+3. The CLI, the widget and the desktop app speak one versioned protocol, protocol 2: typed
+   envelopes, a generic path → value payload, a JSON schema and one description file per
+   model.
+4. Several cameras at once, hotplug, and a device identity that survives re-plugging.
+5. **Guarantee A.** A new model needs no change to `obsbot-proto` (types and client library)
+   or to the CLI. Hand-made UIs (widget, desktop app) keep working for the settings they
+   know, gate every control on the device description, and need an update only to show
+   settings that are new to them. 1.0 has no generated UI.
+6. A camera with a known OBSBOT vendor id that no model covers is listed as unsupported and
+   receives nothing (section 8.4).
+7. CI tests the daemon, the client and the CLI without a camera, with two fake models of
+   different shape and one unknown device running together (section 5.12).
+
+Out of scope for 1.0: a second camera model (M4), the device lease for the firmware updater
+(M5), network cameras, the desktop app (own repository, own spec), a generated UI, and any
+command catalogue. Section 13 lists them.
+
+## 2. Principles
+
+- **Clean over compatible.** The user base is very small. Breaking changes come with a
+  transition (release notes, minimum versions, migration notes), not by carrying old
+  structure. There is no protocol-1 adapter.
+- **The camera is the truth.** Byte-exact frame tests and recordings are kept: they encode
+  what the camera understands, not our design.
+- **The daemon owns the device.** No client touches the camera.
+- **One contract.** The socket protocol, the CLI's `--json` output and the schema describe
+  the same objects.
+- **Camera features only.** The daemon invents nothing. It never writes a setting the user
+  did not ask for, never switches an automatic control off on its own, and never sends a
+  command sequence as a workaround. Reporting camera state (on-air probe, target flag) is
+  fine.
+- **Nothing around the camera.** The daemon keeps no file: no state, no names, no keys, no
+  remembered settings, no migration. What the camera cannot do or report is not there.
+- **Evidence first.** Only backed fields enter a released description (section 8.5).
+- **No probing.** A capability is never discovered by trying ids. A model sends only the
+  frames in its send table (section 8.3). A device that no model covers receives nothing. A
+  blind query scan once broke the camera's query channel until a replug (measured).
+- **Unknown until captures.** Nothing about a model without a unit in hand is stated as a
+  device fact. This holds for the Tiny 3 and the Tiny 3 Lite (section 8.9).
+
+## 3. Architecture
+
+Cargo workspace, one repository, one release, four crates:
+
+```
+crates/obsbot-proto    protocol 2: envelopes, error codes, description types (Device,
+                       Setting, Action), validator, path helpers, schema generation, and
+                       the synchronous client. Depends on serde, serde_json, schemars.
+crates/obsbot-device   transport, family, models/{tiny2lite, fake}, registry,
+                       enumeration. Depends on obsbot-proto for the description types.
+crates/obsbot4linuxd   daemon binary; also a library with run(Config) for tests.
+crates/obsbot4linux    CLI binary, a pure client.
+descriptions/          <model>.json: the description of each real model (generated);
+descriptions/fake/     <model>.json: the descriptions of the fake models (generated)
+schema/protocol-2.json generated from obsbot-proto
+packaging/             arch, deb, rpm, systemd units, completions
+docs/                  protocol-2.md; field-ledger.md (Tiny 2 Lite);
+                       field-ledger-<model>.md for each further model
+scripts/check-model.sh live check of one device against its description (section 9.4)
+```
+
+Dependency direction: proto ← device ← daemon; proto ← CLI. The `[dependencies]` of the CLI
+crate never contain `obsbot-device` or `obsbot4linuxd`; a CI step checks this with
+`cargo metadata`. Its `[dev-dependencies]` may contain `obsbot4linuxd`, so that tests run a
+fake daemon in-process. All crates take `version`, `rust-version` and
+`license = "GPL-3.0-or-later"` from `[workspace.package]`.
+
+The firmware updater is a separate, private project. Whether it joins the workspace is
+decided with M5.
+
+### 3.1 Layers inside obsbot-device
+
+1. **transport**: `trait Transport`: extension-unit get, set and length by selector, UVC
+   control ioctls, and the descriptor facts read from sysfs. One implementation talks to USB
+   UVC devices. A replay implementation answers from recorded exchanges for tests.
+2. **family**: shared building blocks, not a driver: the frame codec (framing, CRC, sequence
+   numbers), answer matching, short-command write, status-block read, UVC helpers, the on-air
+   probe, and encoders and decoders that are byte-identical across models. A model uses a
+   shared encoder only where that model's own evidence covers it.
+3. **models/<key>**: one module per model. It implements `trait Camera` (section 8.2). A
+   model is code plus const tables (ids, offsets, enum tables, ranges) plus its own flows.
+   `models/fake` holds the fake models (section 5.12).
+
+`registry` maps USB (vendor id, product id) pairs to model keys (section 8.1).
+`enumeration` reads sysfs and returns the USB facts of every video device (section 5.3).
+
+### 3.2 Carry-over (0.13.2 → 1.0)
+
+| 0.13.2                                       | 1.0                                               | Decision                                        |
+| -------------------------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| `frame.rs` (frame, CRC, answer parser, seq.) | `obsbot-device/family`                            | carry over; the clock-seeded sequence stays     |
+| device access in `device.rs`, `camera.rs`    | `obsbot-device/transport`                         | carry over, regroup; the extension unit by GUID |
+| `commands.rs` byte builders, setting enums   | `models/tiny2lite`; `family` where byte-identical | carry over                                      |
+| `status.rs`, `presets.rs` parsers            | `models/tiny2lite`                                | carry over                                      |
+| `streaming.rs` (on-air probe)                | `obsbot-device/family`                            | carry over                                      |
+| `models.rs` (detection by name strings)      | `obsbot-device/registry` and `enumeration`        | rewrite: USB ids from sysfs                     |
+| `camera.rs` sequencing (Tiny 2 Lite flows)   | `models/tiny2lite` behind `trait Camera`          | carry over the logic, rewrite the shape         |
+| `camera.rs` `current_pose()`                 | –                                                 | not carried: it reads a remembered or V4L2 pose |
+| `daemon.rs`, `proto.rs`, `client.rs`         | `obsbot4linuxd`, `obsbot-proto`                   | rewrite                                         |
+| `cli.rs`                                     | `obsbot4linux`                                    | rewrite                                         |
+| `state.rs` (remembered values)               | –                                                 | drop: every value is read from the camera       |
+| byte-exact tests, recordings                 | `obsbot-device` tests, fixtures (section 8.5)     | carry over                                      |
+
+Carried code comes over with the fixes the audit of 0.13.2 asked for. Fixes that need no
+camera land on `main` first, in the 0.13 layout, so that the groundwork move carries them
+(section 10.2, stage G). Fixes whose acceptance needs the camera are camera-session items
+(section 14). Track A closes the list: each audit defect in carried code is fixed in
+`obsbot-device` or named in section 14. No known defect is copied into 1.0. The defects
+that need no camera:
+
+- the answer poll treats every read error as "not ready", so an unplug shows as "no
+  answer" after 1 s instead of failing at once;
+- the image setter writes the white-balance temperature and the absolute focus while their
+  automatic control is on (1.0: `requires`);
+- the on-air state and its applications are read at two moments (1.0: one sample);
+- a short preset list counts as a successful read;
+- "the current pose" is a remembered or V4L2 pose (1.0: the live pose);
+- `preset save` sends the pose before it validates the name (1.0: 4.1 rule 5).
+
+The camera-gated ones are U-8, U-9, U-18, CAM-18, CAM-19 and CAM-20.
+
+### 3.3 Licence
+
+Every crate is `GPL-3.0-or-later`. Files that carry an EUPL-1.2 Article 5 note keep it, and
+the note follows their code: every 1.0 file that receives code from such a file carries the
+note too, including model modules copied from another model.
+
+## 4. Protocol 2
+
+`docs/protocol-2.md` is the client reference: per-message schemas, a worked sequence with
+`pending`, lifecycle diagrams and a multi-device transcript. Its normative part is written
+in stage W0 from this section; stage W2 adds the worked examples. The evidence for each
+field of a model is in that model's ledger (`docs/field-ledger.md` for the Tiny 2 Lite).
+
+### 4.1 Messages
+
+JSON lines over the Unix socket `$XDG_RUNTIME_DIR/obsbot4linux.sock` (mode 0600; the
+environment variable `OBSBOT4LINUX_SOCKET` overrides the path). One JSON object per line,
+UTF-8. A request line longer than 64 KiB closes the connection. Lines from the daemon have no
+length limit, and clients must not cap them. The daemon accepts at most 64 connections; a
+further connection is closed at once.
+
+**Requests** carry `id` (integer or string, echoed verbatim) and exactly one verb:
+
+| Verb    | Shape                                                                                 | Reply `ok`                                                                                     |
+| ------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `hello` | `{"id","hello":{"protocol":2,"client":"<name version>","subscribe":bool,"live":[…]}}` | `{"protocol":2,"daemon":"<version>","devices":[<Device>…],"states":{"<id>":{"rev","state"}…}}` |
+| `get`   | `{"id","device","get":["<path>"…]\|null}`                                             | `{"rev","state"}`: the full state, or only the paths asked for                                 |
+| `set`   | `{"id","device","set":<patch>}`                                                       | `{"rev"}`                                                                                      |
+| `do`    | `{"id","device","do":"<action>","with":{…}}`                                          | `{"rev","result"?}`                                                                            |
+| `live`  | `{"id","live":["<topic>"…]}`                                                          | `{}`; replaces the connection's live list                                                      |
+
+`subscribe` defaults to `true` and `live` to `[]`. The first message on a connection must be
+`hello`. A second `hello` is answered `invalid`. A patch is an object of leaf paths; it may
+nest them (`{"zone":{"area":{"pan":…}}}`) or use dotted keys (`{"zone.area.pan":…}`).
+
+**Replies:** `{"id":<id>,"ok":{…}}` or `{"id":<id>,"error":{…}}`.
+
+**Events** (only on connections with `subscribe:true`):
+
+- `{"event":"state","device","rev","state"}`: the full state of one device.
+- `{"event":"devices","devices":[<Device>…]}`: the full device list. It is sent whenever an
+  entry is added, removed or changed (availability, identity hand-over, firmware, video
+  node).
+
+On unplug of a device with an `sn:` id the daemon sends the `devices` event first, then one
+`state` event that carries `available:false` and the last known values; no further state
+events follow until the device is back. On re-plug the order is the same: `devices`, then
+`state`. A `port:` entry is removed on unplug: the `devices` event no longer lists it, and
+no state event follows.
+
+**Errors:** `{"id","error":{"code","message","rev"?,"applied"?,"failed"?,"supported"?}}`.
+`message` is always present (English, for logs). `rev` is present whenever the daemon
+re-read the device before answering.
+
+| Code             | When                                                                                                                                            | Extra fields                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `protocol`       | the first message is not `hello`, or its protocol is not supported (the connection is closed; `id:null` if there was none)                      | `supported:[2]`                             |
+| `invalid`        | malformed request, no verb or two verbs, wrong value type, a read-only path, a second `hello`, a destructive action without `confirm:true`      | –                                           |
+| `unknown_device` | no device with this id                                                                                                                          | –                                           |
+| `unsupported`    | well-formed, but the path or action is not in this device's description (a typo included)                                                       | –                                           |
+| `out_of_range`   | the value lies outside the description (bounds, `writable`, string length)                                                                      | –                                           |
+| `conflict`       | valid, but the device's current state does not allow it: a `requires` condition not met, an empty preset slot, an unknown view id, no free view | –                                           |
+| `unavailable`    | the device is unplugged                                                                                                                         | –                                           |
+| `asleep`         | the camera is asleep and the description marks the setting or action `asleep: ignored`                                                          | –                                           |
+| `busy`           | 32 requests are already queued for the device (the lease of M5 will use it too)                                                                 | –                                           |
+| `camera`         | the camera refused or did not answer within the transport timeouts (section 5.8), the device node stayed locked, or the 15 s deadline passed    | `rev`, `applied:[paths]`, `failed:"<path>"` |
+| `internal`       | a daemon bug                                                                                                                                    | –                                           |
+
+**Ordering, `rev` and `pending` (normative):**
+
+1. `rev` is per device. It only goes up and restarts with the daemon. Every change of a
+   device's published state (values, `pending`, `unread`, `available`) gets a new `rev`.
+2. All requests for one device go through that device's queue and are answered in request
+   order, with these exceptions: `busy`, `unknown_device` and `unavailable` are answered at
+   once, and a stop (an action the model marks as a stop; on the Tiny 2 Lite `gimbal.stop` and
+   `zoom.stop`) is taken before every queued request and answered when the camera accepted
+   it. Requests for different devices may be answered in any order. Requests may be
+   pipelined.
+3. For a `set` or `do` that changes state, the daemon sends the state event to every
+   subscribed connection that receives it (rule 8), the requester included, **before** the
+   reply. The reply's `rev` is the rev of the first state that reflects the request: that
+   state shows the written value, or lists the path in `pending`. Several requests may share
+   one state and one rev. If nothing changed, the reply carries the current rev.
+4. `pending` is part of every state: a map from leaf path to the value written. A path is in
+   `pending` while the camera accepted a write but its readback does not show the written
+   value yet. It leaves `pending` when a read of its group shows the written value (after
+   rounding to the setting's precision), or when the setting's `settle_ms` has passed at a
+   read of its group; then the camera's value stands, whatever it is. A new write of the
+   same path replaces its pending value and restarts its bound. `pending` is emptied when
+   the device becomes unavailable. Clients show their own value from sending a request
+   until its reply arrives, and the state (its `pending` values included) after that. They
+   run no timers of their own.
+5. `set`: the whole patch is validated first, against the description and against the
+   current state with the patch applied. If any field fails, nothing is sent. The worker
+   then applies the leaves in the order the model defines. On a camera failure midway it
+   stops, re-reads, publishes the real state and answers `camera` with `applied` and
+   `failed`. There is no rollback: the camera has no transactions. The same holds for `do`:
+   all parameters are validated before the first frame is sent, and a failure after a frame
+   went out is answered the same way.
+6. Motion actions (on the Tiny 2 Lite `gimbal.move`, `gimbal.turn`, `zoom.move`,
+   `preset.recall`, `view.go`, `zone.go_return`, `hand.go_return`, `power_on.go`) reply
+   when the camera accepted the command. The state shows measured values (pose, zoom
+   factor), so it moves through later events.
+7. Additive changes (fields, actions, models, enum values, live topics, setting types,
+   units) keep `protocol: 2`. A breaking change raises the number. Clients ignore unknown
+   fields and unknown event types, show unknown enum values as raw text, show settings of an
+   unknown type read-only as text, and treat an unknown error code as `internal`.
+8. **Live topics.** The description names a live topic for each volatile leaf (section 4.2).
+   A state change that touches only volatile leaves, and that no request caused, is sent
+   only to connections whose live list holds one of their topics. Every other connection
+   receives the new values with its next event. A change caused by a `set` or `do` is sent
+   to every subscribed connection. A topic name no device uses has no effect.
+9. **Queue handling.**
+   - The worker takes the requests queued for its device as one batch. It runs them in
+     order, then re-reads once the union of the groups they touch (section 8.2), publishes
+     one state, and answers them in order. A camera failure ends the batch; the requests
+     after it stay queued.
+   - A `get` never reads the camera. It is answered, in its turn, from the published state:
+     the paths asked for, plus `available`, `pending` and `unread` in full.
+   - A `set` whose patch has exactly one leaf is answered `ok` with the current rev, without
+     being sent, when a later queued `set` from the same connection has the same single leaf.
+   - A request whose connection closed before the worker started it is dropped. A started
+     request runs to the end.
+   - Every device request (`get`, `set`, `do`) is answered within 15 s of its arrival
+     (`REQUEST_DEADLINE`). A request not started by then is dropped and answered `camera`.
+     A started request checks the deadline before each frame and, once it has passed,
+     stops as on a camera failure.
+
+**Reconnect (client behaviour):** reconnect with a backoff from 0.5 s, doubling up to 5 s.
+Socket activation starts the daemon. Requests die with their connection. After any
+reconnect a client drops every pending request and every own value, sends `hello` and
+rebuilds from its reply. Revs from two connections are never compared.
+
+**`hello` timing:** the daemon answers `hello` only after its first complete enumeration
+(section 5.2). The reply and the start of event delivery are atomic: no state published
+after the reply's snapshot is missing from the events that follow.
+
+### 4.2 Devices and descriptions
+
+```
+Device = { id, name, model, support, serial, firmware, video_node, available,
+           replaced_by?, usb, settings{<leaf path> → Setting},
+           actions{<name> → Action}, limits{<list path> → max items} }
+
+usb = { vendor, product, product_name, bcd_device, path, serial_present,
+        interfaces[<class>…], extension_units[{unit, guid, controls}…] }
+
+Setting = { type, label, readonly, nullable, readback, asleep, no_effect,
+            values[], writable[]          (enum)
+            min, max, step, unit, precision  (number, range, pose, point, box)
+            kind, optical_max             (zoom factor only; kind digital|optical|hybrid)
+            max_len, ascii                (string)
+            item{<field> → Setting}       (list; read-only)
+            optional                      (action parameters only)
+            requires[{path, equals}…], default, live, settle_ms, warning }
+
+Action = { label, params{<name> → Setting}, result{<name> → Setting}?, asleep,
+           requires[…]?, warning? }
+```
+
+Device fields:
+
+- `id`: `sn:<serial>` when the model's identity source gave a valid serial, else
+  `port:<usb path>` (section 5.5). A `port:` id is never stored.
+- `name`: the model's display name plus the last four characters of the serial
+  (`OBSBOT Tiny 2 Lite 0001`); without a serial, the display name plus the USB path; for an
+  unsupported device, the USB product name plus the USB path.
+- `model`: the model key (`tiny2lite`, `fake-a`, `fake-b`); `unknown` for an unsupported
+  device.
+- `support`: `tested`, `untested` or `unsupported` (section 8.6). It is device-level only.
+  Per-field evidence lives in the model's ledger, not in the protocol.
+- `serial`, `firmware`: as the camera reported them, or `null`.
+- `video_node`: `/dev/videoN` of the device's capture node, or `null`.
+- `usb`: read from sysfs at enumeration, never from the camera. `serial_present` says
+  whether the USB descriptor has a serial string; the string itself is never in `usb`.
+  `devices --report` prints this object (section 6.2).
+- `limits`: the maximum item count of a list setting, where the camera has one
+  (`{"presets":3}`). A list without an entry has no known maximum.
+
+Setting and Action fields:
+
+- `type`: `bool`, `enum`, `number`, `range` (`{min,max}`), `pose` (`{pan,tilt,zoom}`),
+  `point` (`{x,y}`), `box` (`{left,top,right,bottom}`), `string`, `list`. Shapes are always
+  objects. For `range`, `pose`, `point` and `box`, `min` and `max` are objects of the same
+  shape and bound each component.
+- `label`: English, for CLI output.
+- `values[]` are all values a state may show; `writable[]` the ones a `set` accepts.
+- `unit` is one of `deg`, `deg/s`, `factor`, `us`, `K`, `percent`, `s`, `fraction`, `fps`,
+  or absent for a raw camera value. New units are additive.
+- `readback`: `false` means the camera accepts the setting but cannot report it.
+- `asleep`: `accepted`, `ignored` or `unknown` (section 5.7).
+- `no_effect`: the camera accepts and reports the value, and it has no observable effect on
+  this model.
+- `requires`: conditions on other paths. The check uses the current state with the patch
+  applied, so `{"exposure":{"mode":"manual","time":20000}}` is accepted while the exposure
+  is automatic, and `exposure.time` alone is refused with `conflict`.
+- `default`: the camera's own default as it reports it (UVC). Absent when the camera
+  reports none or when the reported value lies outside the setting's range.
+- `live`: the live topic of a volatile leaf: a value that changes without a request (pose,
+  target box, values the camera adjusts itself).
+- `settle_ms`: the longest time the camera's readback may lag a write of this leaf
+  (rule 4). It is a measured property of the model.
+- `warning`: `restart` (the camera restarts after this write or action) or `destructive`
+  (data on the camera is lost). An action with `warning: destructive` requires the
+  parameter `confirm: true`; without it the daemon answers `invalid`. Generic UIs ask
+  before they send either.
+
+Rules:
+
+- **Leaves.** Settings are described per leaf path (`zone.area.pan`, `led.brightness`). Only
+  leaves are writable.
+- **One meaning per path.** A path means the same function, unit and frame on every model.
+  Models differ in which paths they have and in `values[]`, `writable[]` and bounds. A new
+  function gets a new path or a new enum value.
+- **Absent vs null.** A field the model does not have is absent from state and
+  description. `null` means one of: the camera reports "not set" (only where the description
+  says `nullable`); the leaf was never read (it is in `unread`); or a `readback:false` leaf
+  that was not written since the device last became available.
+- **`unread`** is part of every state: the leaf paths whose last read failed. They keep
+  their last value. Their group is read again at its next tier tick while the camera is
+  awake.
+- **Undecodable values.** A camera value the model cannot decode is published as the
+  string `raw:<n>` (n = the raw number) and logged once per device and value. It is never
+  turned into `null` or into a neighbouring value.
+- **`readback:false` lifetime.** The state shows the value written since the device last
+  became available, `null` before the first write, and `null` again after unplug,
+  re-enumeration and `factory_reset`. Nothing is re-sent. Across sleep the value is kept
+  until camera item CAM-6 shows otherwise.
+- **Units and frames.** Angles in degrees; pan positive = the camera turns to its left; tilt
+  positive = up; 0/0 = straight ahead. Picture coordinates 0..1 from the top-left corner.
+  Zoom as a factor (1.0 = widest). Gimbal speeds in °/s. Durations in seconds (precision
+  0.1). Exposure time in microseconds. Colour temperature in K. Percentages 0–100.
+- **Precision.** Each number has a precision in its description (angles 0.1, zoom 0.01,
+  fractions 0.01). Values are rounded to it where they are created (decode and echo), so
+  state and `--json` never show binary float noise.
+- **Identity and serial exposure.** The full id and serial travel on the socket and in the
+  CLI's `--json` and `watch` output. Human CLI output, logs and the journal show `…` plus the
+  last four characters (`sn:EXAMPLE0000001` → `…0001`), through one formatter. No log line
+  prints an identity answer.
+- **Lists.** Items of `presets` and `views` carry the camera's own numbers: preset slots
+  start at 0, view ids are the camera's ids.
+
+### 4.3 State model of the Tiny 2 Lite
+
+This is the reference model. `descriptions/tiny2lite.json` is its normative form,
+generated from the model module. Another model has other paths and values under the rules
+of 4.2. ✎ = writable leaf. Ranges, units and asleep behaviour are in the description; the
+evidence per field is in `docs/field-ledger.md`. Fields marked U-n are not backed today;
+section 9.3 gives their fate.
+
+```
+available                                        daemon: enumeration only
+pending { <path>: <value> }, unread [<path>…]    daemon
+asleep                                           read-only
+on_air     { active, apps[] }                    read-only
+gimbal     { pan, tilt, invert✎ }                pan, tilt: live topic "pose"
+zoom       { factor✎, field_of_view✎ }
+tracking   { mode✎, profile✎, speed✎ (U-1), target { detected, box } }
+framing    { auto_zoom✎, size✎, zoom_speed✎, offset { x✎, y✎ }, part✎ }      (U-3, U-4)
+gestures   { target_lock✎, zoom✎, zoom_ratio✎, dynamic_zoom✎, direction_change✎ }
+zone       { enabled✎, follow✎, area { pan✎, tilt✎ }, return }
+hand       { side✎, area { pan✎, tilt✎ }, axes { pan✎, tilt✎ } (U-5),
+             return_after✎ (U-6), move_gimbal✎, return }
+presets    [ { slot, name, pose } ]
+views      [ { id, name, pose } ]                (U-14)
+exposure   { mode✎, region✎, time✎, gain✎, compensation✎, hdr✎, anti_flicker✎ }
+image      { brightness✎, contrast✎, saturation✎, hue✎, sharpness✎,
+             white_balance { auto✎, temperature✎ }, mirror✎, frame_rate }
+focus      { mode✎ (U-15), region✎, position✎ (U-22) }
+audio      { enabled✎, volume✎ (U-17), noise_reduction✎, auto_gain✎, in_sleep✎ }
+led        { brightness✎, blink✎ }
+sleep      { auto { enabled✎, seconds✎ }, background✎, background_mirror✎,
+             wake_zoom✎ (U-21) }
+power_on   { mode✎, start { source, pose, mode✎ (U-18) }, settings { … } (U-19) }
+```
+
+Per group:
+
+- `on_air`: `active` and `apps` are taken together in one sample. `active` is true for any
+  reader of the video node, a client's own preview included; a client that wants "another
+  application" accounts for its own stream. `apps` holds process names, best effort. On
+  kernels up to 6.16 the probe briefly holds the stream's exclusive privilege, so another
+  application that starts its video at that moment can fail with "device busy"; 6.17 and
+  newer are not affected.
+- `gimbal.invert` reverses the gimbal's pan direction.
+- `zoom.factor`: 1.0–4.0, `kind: digital`. It follows `zoom.field_of_view`, the zoom
+  gestures and `preset.recall`.
+- `zoom.field_of_view`: values `wide|medium|narrow|custom`, writable `wide|medium|narrow`.
+- `tracking.mode`: `static|normal|upper_body|close_up|headless|lower_body|hand|group`. A mode
+  change rewrites `framing.*`: `upper_body` and `close_up` set `framing.auto_zoom` and
+  `framing.size`; `headless` and `lower_body` set `framing.part`.
+- `tracking.profile`: `standard|headroom|sport` (`headroom` is U-2). The vendor app labels
+  this "tracking speed".
+- `tracking.speed`: `lazy|slow|normal|fast|very_fast|auto`.
+- `tracking.target`: `detected` (bool) and `box` (`{left,top,right,bottom}` as picture
+  fractions, `null` without a target; layout measured, #71). `box` has the live topic
+  `target`.
+- `framing`: `size` `long_shot|medium_long_shot|medium_shot|medium_close_up|close_up|big_close_up`;
+  `zoom_speed` `slow|medium|fast`; `offset.x` and `offset.y` −0.16..0.16 (fraction);
+  `part` `normal|head_removal|lower_body`.
+- `gestures.zoom_ratio`: 1.0–4.0, step and precision 0.1 (the readback has one decimal).
+  `gestures.direction_change` reverses the direction of the dynamic zoom gesture.
+- `zone.area.pan` −150..150, `zone.area.tilt` −70..90 (degrees, ranges). `zone.return` is a
+  pose and never `null`: the camera has no "not set" for it.
+- `hand.side`: `left|right`. `hand.area` defaults to pan −45..45, tilt −30..30.
+  `hand.return_after` in seconds. `hand.move_gimbal`: `readback: false`; the camera does not
+  store it, and `false` stops the hand tracker's gimbal moves. `hand.return` is a pose or
+  `null` (nullable: the camera reports "not set").
+- `presets`: at most 3 (`limits.presets`), slots 0–2. `views`: no known maximum. Names are
+  at most 32 printable ASCII characters.
+- `exposure.mode`: `auto|manual`. `exposure.region`: `face|global`, the metering while the
+  exposure is automatic. `exposure.time` in µs; it `requires` `exposure.mode=manual` (a time
+  written while automatic freezes the automatic exposure); the camera rounds down to its own
+  steps, and the state shows the value it took. `exposure.gain` 1–64. `exposure.time` and
+  `exposure.gain` have the live topic `auto`. `exposure.compensation`: the camera's raw
+  value 0–18, default 9 (U-20). `exposure.anti_flicker`: values `off|50hz|60hz|auto`,
+  writable `off|50hz|60hz` (the kernel driver offers no way to set `auto` on this camera),
+  no `default`.
+- `image`: brightness, contrast, saturation, hue and sharpness are UVC controls with the
+  ranges and defaults the camera reports (constants of the model). The camera has no gamma
+  control. `white_balance.temperature` `requires` `white_balance.auto=false` and has the live
+  topic `auto`. `frame_rate` is read-only (fps).
+- `focus.mode`: `continuous|single|manual`. `focus.region`: `face|global`.
+  `focus.position` 0–100, `requires` `focus.mode=manual`, `no_effect` on this model (#99).
+- `audio.enabled`: `warning: restart`; the camera restarts on every write, both values
+  (about 18 s, measured). Its readback is the presence of the camera's USB audio interface
+  in sysfs (U-23). `audio.volume` 0–100. `audio.noise_reduction`: `off|weak|medium|strong`.
+- `led.brightness` 0–3. `led.blink`: `readback: false`.
+- `sleep.auto.enabled` and `sleep.auto.seconds` are one word on the camera. The camera keeps
+  the seconds while auto-sleep is off; writing `seconds` alone does not switch it on. Range
+  1–32767 s: the camera cannot store "off" together with 0 s, so 0 is not offered.
+  `sleep.background`: values `black|image|own_image`, writable `black|image` (`own_image`
+  shows after an upload, which 1.0 does not offer). `sleep.wake_zoom`: 1.0–4.0, `no_effect`.
+- `power_on.mode`: the tracking mode the camera starts in at power-on (0.13 `wake mode`), all
+  eight modes (measured, #102).
+- `power_on.start`: the camera's initial state (0.13 `startup`). `source` is `own` or
+  `preset_<slot>`, read-only. `pose` is read-only and set through actions. `mode` is the
+  tracking mode of the initial state: values `static|normal|upper_body|close_up|headless|`
+  `lower_body|hand|group|unset`, writable `static|normal|upper_body|headless|group|unset`
+  (all but `normal` and `unset` are U-18). `unset` is the camera's "not set" and differs
+  from `static`.
+- `power_on.settings`: read-only leaves of the same block (`tracking_speed`, `autofocus`,
+  `auto_exposure`, `exposure_compensation`, `white_balance_mode`, `white_balance_temperature`,
+  `contrast`, `saturation`, `sharpness`, `hue`) as raw camera values; `null` where the block
+  says "not set" (U-19). Changing the pose or the mode rewrites the block and keeps these
+  values.
+
+Live topics of the Tiny 2 Lite: `pose` (`gimbal.pan`, `gimbal.tilt`), `target`
+(`tracking.target.box`), `auto` (`exposure.time`, `exposure.gain`,
+`image.white_balance.temperature`).
+
+Removed from the 0.13.2 output (no settable function is lost; section 9):
+
+- `capabilities` and `limits`: the description replaces them.
+- `status` (the raw camera block) and `state` (the daemon's remembered values).
+- `model_info`, `digital_zoom_percent`, `sleep_images`, and the raw V4L2 fields.
+- `device` (the device path): now `video_node`. `streaming`: now `on_air`.
+
+Merged duplicates: `focus.auto` (UVC continuous autofocus) is the same camera bit as
+`focus.mode=continuous`. `audio.pickup` is `audio.volume` quantised (below 50 near, 50–84
+standard, from 85 far); UIs may offer those three as volume presets.
+
+Not offered in 1.0: flipping the image, resetting the start pose, resetting the zone area.
+Their candidate commands are neither recorded nor sent by 0.13.2 (CAM-11, CAM-12).
+
+### 4.4 Actions of the Tiny 2 Lite
+
+```
+gimbal.move {pan?, tilt?, speed? (U-9)}     gimbal.stop (U-10)
+gimbal.turn {pan_speed?, tilt_speed?, keep?}
+zoom.move {factor, speed (U-12)}            zoom.stop (U-11)
+preset.save {slot, name?, pose?}            preset.recall {slot}
+preset.rename {slot, name}                  preset.delete {slot}
+view.save {name, pose?} → {id}              view.go {id} (U-13)
+view.rename {id, name}                      view.delete {id}
+zone.return_here                            zone.go_return
+hand.return_here                            hand.go_return
+hand.return_clear                           hand.area_reset (U-7)
+focus.point {x, y} (U-16)
+power_on.set_pose {pose}                    power_on.use_current
+power_on.use_preset {slot}                  power_on.go (U-24)
+sleep                                       wake
+factory_reset {confirm}
+```
+
+- `gimbal.move`: at least one of `pan` and `tilt`; both missing is `invalid`. A missing axis
+  keeps its position (the camera is told to leave it). `speed` in °/s makes the move take as
+  long as that speed needs.
+- `gimbal.turn`: at least one of `pan_speed` and `tilt_speed` (°/s, up to 178); a missing
+  one is 0. It keeps turning until `gimbal.stop` or speed 0. It stops when the issuing
+  connection closes, unless `keep:true`; the CLI sends `keep:true`, so a one-shot call
+  works as `gimbal rate` did in 0.13. The daemon sends the stop when the camera falls asleep
+  while a turn runs, and best effort on a clean daemon shutdown (section 5.9).
+- `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move (the
+  tracking would move the gimbal back otherwise); the state after the reply shows the new
+  mode. `zoom.move`, `zoom.stop` and `gimbal.stop` leave the tracking mode alone.
+- `zoom.move`: `speed` is `slow|medium|fast` (`slow` and `fast` are U-12).
+- `preset.save`, `view.save` and `power_on.use_current` without `pose`, and
+  `zone.return_here` and `hand.return_here`, take the live pose and the current zoom factor
+  from the camera. While the camera sleeps its live pose is the parking pose, which lies
+  outside the tilt range, so these actions are `asleep: ignored` until CAM-22 shows
+  otherwise.
+- `preset.save` without `name` names the preset `Preset <slot + 1>` (0.13.2 behaviour).
+  `view.save` needs a name. Names are validated before the first frame is sent.
+- `preset.recall`, `preset.rename`, `preset.delete` and `power_on.use_preset` on an empty
+  slot, and `view.*` with an unknown id, are refused with `conflict`.
+- `power_on.set_pose`, `power_on.use_current` and `power_on.use_preset` rewrite the initial
+  state and keep its tracking mode and `power_on.settings`.
+- `sleep` and `wake` reply when the camera accepted the command. The state shows `asleep`
+  as the camera reports it; clients wait for that state, never for their own value.
+- `factory_reset`: `warning: destructive`, needs `confirm:true`. It replies when the camera
+  accepted it. The restart that follows is ordinary hotplug (section 5.3). It deletes the
+  presets.
+- Every action states its `asleep` behaviour in the description; section 8.8 lists the
+  Tiny 2 Lite's.
+
+Not carried over from 0.13: the hidden `gimbal center` (it moved the gimbal only toward the
+left and downward in tests). Revision 1's `gimbal.step`, `image.reset` and `device.rename`
+are dropped (section 15).
+
+## 5. Daemon (obsbot4linuxd)
+
+The daemon knows devices, groups, tiers, leaves, actions and live topics. It knows no
+command id, no offset and no selector of any model: everything model-specific comes through
+`trait Camera` (section 8.2).
+
+### 5.1 Threads
+
+Synchronous threads, no async runtime:
+
+- an acceptor;
+- per connection one reader thread, which parses requests and routes them, and one writer,
+  which drains the connection's outbound queue (64 lines; when it is full, the connection is
+  closed and a log line names it);
+- a registry thread, which runs the enumeration (5.3);
+- one worker per supported device: the only code that touches that device.
+
+A device table (id, description, rev, last state, pending, unread) sits outside the
+workers under one lock. `hello` takes that lock to build its snapshot and to register the
+connection for events.
+
+### 5.2 Start-up
+
+1. Take the single-instance lock (5.9). Inherit the socket from systemd, or bind it.
+2. Run one enumeration pass (5.3).
+3. For every supported device: start its worker, which runs the first identity attempt and
+   a first read of every group.
+4. Only then answer `hello`. A device found later enters by a `devices` event after its
+   first read attempt has finished. The leaves of a group whose first read failed are
+   `null` and listed in `unread`.
+
+### 5.3 Enumeration and hotplug
+
+- Once a second the registry thread lists `/sys/class/video4linux`. For each node it
+  resolves the USB device the node belongs to and reads, from sysfs only: vendor id, product
+  id, product string, whether a serial string exists, bcdDevice, the interface classes, the
+  extension units from the USB descriptors, and the node index. It never opens a video node
+  during the scan.
+- A USB device whose vendor id is not in the registry's vendor table (section 8.1) is
+  ignored and not listed.
+- A device with a known vendor id is matched by (vendor id, product id) against the
+  registry. A match becomes a supported device; its worker opens the node with index 0. A
+  miss becomes an unsupported device (5.4). The product string is never used for matching:
+  the camera can rename itself.
+- `available` changes only here: true when a device appears, false when its sysfs entry is
+  gone. A failed read never sets `available:false` and never drops the identity; it shows in
+  `unread` or as a `camera` error. A read that fails because the node is gone is reported at
+  once, without waiting for the answer timeout.
+- On unplug an `sn:` entry stays listed with `available:false` while the daemon runs; a
+  `port:` entry is removed. The re-plugged device takes its old `sn:` entry once its
+  identity is read (5.5).
+- A camera that re-enumerates (after `factory_reset`, after an `audio.enabled` write, in
+  firmware-update mode) is ordinary hotplug: the old node goes, a new one comes. A camera in
+  firmware-update mode has no video node, so the daemon treats it as unplugged and sends it
+  nothing.
+
+### 5.4 Unsupported devices
+
+A device with a known vendor id and an unregistered product id gets an entry with
+`support: unsupported`, `model: unknown`, id `port:<usb path>`, `serial: null`,
+`firmware: null`, its `usb` facts, its `video_node`, `available`, and empty `settings`,
+`actions` and `limits`. Its state is `{"available":…,"pending":{},"unread":[]}`. The daemon
+sends it nothing: no identity query, no status read, no on-air probe, no extension-unit
+request of any kind. It never opens its video node. One log line per plug-in names its USB
+ids. `set` and `do` on it are answered `unsupported`. Section 8.4 gives the whole
+walk-through.
+
+### 5.5 Identity
+
+- The identity source is a property of the model (section 8.2): the USB serial string when
+  the model has one, else the model's identity read, else none.
+- The model's identity read is sent at plug-in, whether the camera is asleep or awake. At
+  most three attempts: at plug-in and with the next two reads of the 5 s tier.
+- If no attempt gave a valid serial and the camera was asleep, one further series of three
+  attempts runs from its first wake: at the wake and with the next two reads of the 5 s
+  tier. After that the id stays as it is until unplug. The id can change at most once per
+  plug-in.
+- A serial is valid only if it matches `[A-Za-z0-9]{8,32}`. Without a valid serial the id is
+  `port:<usb path>` for this plug-in, with a log line.
+- If an available device already holds the same `sn:` id, the newcomer gets a `port:` id and
+  a log line.
+- Identity values (serial, firmware) are kept only once the camera answered them.
+- **Hand-over.** When a `port:` id resolves to `sn:<serial>`, the device takes that id. If an
+  unavailable entry with that id exists, the device takes that entry. The `devices` event
+  lists the old entry once more with `available:false` and `replaced_by:"<new id>"`, then
+  the old entry is gone. Requests to the old id are answered `unknown_device`. Clients move
+  their selection.
+
+### 5.6 Worker and write path
+
+- Each worker owns one device queue (FIFO, at most 32 requests; more is `busy`) and applies
+  the queue rules of 4.1 rule 9.
+- **Write path:** validate against the description and the current state (`invalid`,
+  `unsupported`, `out_of_range`, `conflict`, `asleep`) → send in the model's apply order →
+  re-read the groups the model marks as touched by the written leaves and actions → publish
+  (new rev, events) → reply.
+- After the re-read, each written leaf with `readback:true` either shows the written value
+  or enters `pending` with it (4.1 rule 4). While a leaf is pending, its group is also read
+  at every tick of the 5 s tier. A `readback:false` leaf takes the written value once the
+  camera accepted the write.
+- **Stops.** A stop action jumps the queue (4.1 rule 2). A group read in progress ends at
+  the next frame boundary; its leaves are then listed in `unread`, and the group is read
+  again at its next tick.
+- **Continuing motion.** The worker records which connection started an action the model
+  marks as continuing (on the Tiny 2 Lite `gimbal.turn`). Any other motion action of that
+  device clears the record. When the recorded connection closes without `keep:true`, the
+  worker queues the model's stop for it. When `asleep` turns true while a continuing action
+  is recorded, the worker sends the stop.
+
+### 5.7 Polling and asleep
+
+- **Poll plan.** The model names its groups. Each group has a tier: 1 s, 5 s, 60 s, or
+  `touched` (read at plug-in and after a request that touches it, never periodically).
+  Each group says whether it can be read while asleep. A group may name a live topic and a
+  faster tier used while at least one connection subscribes that topic.
+- Intervals count from the end of the previous read of that tier, so a slow read never
+  starves the 1 s tier.
+- Polls run group by group. Queued requests are served between groups, never inside one.
+  A group read stops at its first unanswered query; the group's leaves are listed in
+  `unread`, and the other groups go ahead.
+- An unchanged read produces no new rev and no event.
+- **Asleep.** If the description has the leaf `asleep`, the worker uses its value. While it
+  is true, only the groups readable while asleep are read. A setting or action with
+  `asleep: ignored` is refused with `asleep`. One with `accepted` or `unknown` is written; if
+  its group cannot be read while asleep, the path stays in `pending` until the first read
+  after wake, and its `settle_ms` counts from that read.
+
+### 5.8 Timeouts
+
+| Name                   | Value                                                            | When it runs out                                                                    |
+| ---------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ANSWER_POLL`          | 20 reads, 50 ms apart (about 1 s) per query                      | the query is unanswered; its group's leaves go to `unread`; a request gets `camera` |
+| `FRAME_GAP`            | 100 ms between two frames of one command, where a model needs it | –                                                                                   |
+| `NODE_LOCK_WAIT`       | 5 s for the per-operation lock on the video node                 | a request gets `camera`; a poll skips the cycle                                     |
+| `REQUEST_DEADLINE`     | 15 s from a request's arrival                                    | 4.1 rule 9                                                                          |
+| `CLIENT_REPLY_TIMEOUT` | 30 s, in the client library                                      | the client reports a lost daemon (CLI exit 4)                                       |
+| `ACCEPT_BACKOFF`       | 100 ms after a failed accept                                     | –                                                                                   |
+
+The per-operation lock on the video node is kept from 0.13: a second process that talks to
+the same camera (a second user's daemon, the firmware updater) takes turns with the daemon
+on single frames. One daemon per camera is assumed. The kernel's own UVC control timeout
+bounds each control transfer; its value is camera item CAM-29.
+
+### 5.9 Single instance, shutdown, failures
+
+- **Single instance.** Every daemon, socket-activated or not, takes an exclusive `flock` on
+  `<socket path>.lock` first. If the lock is held, it exits non-zero with a message that
+  names the lock file. A daemon that binds the socket itself first checks whether something
+  already accepts connections on that path and exits with a message if so; then it removes a
+  stale socket file and binds under umask 077.
+- **Shutdown.** On SIGTERM or SIGINT the daemon sends the stop of an active continuing
+  action (best effort) and exits 0. A crash leaves the camera as it is.
+- **Failures.** A panic in a worker, the registry thread or the acceptor ends the process
+  with a non-zero code, and systemd restarts it. A panic in a connection thread closes only
+  that connection. Locks are taken poison-tolerant.
+
+### 5.10 Operation
+
+- The unit names stay `obsbot4linux.socket` and `obsbot4linux.service`; `ExecStart` runs
+  `obsbot4linuxd`. The socket path does not change.
+- The daemon starts only through the systemd socket. Packages do not enable the socket (as
+  in 0.13). No CLI command, `watch` included, starts a daemon.
+- A client that cannot connect (no socket file, connection refused) exits 4 and prints
+  `systemctl --user enable --now obsbot4linux.socket`.
+- A reply to `hello` that is not a protocol-2 object (0.13 answers with `ok:false` and a
+  string `error`) means an older daemon is running. The client says so ("an obsbot4linux
+  daemon older than 1.0 is running: restart it or log out") and exits 4. Clients never stop
+  or restart a daemon.
+- Hardening in 1.0: `NoNewPrivileges=yes` in the service unit. Other lines come after 1.0.
+- A firmware update requires `obsbot4linux.socket` and `obsbot4linux.service` stopped until
+  M5 defines the lease.
+- The daemon reads and writes no file except its socket and its lock file.
+
+### 5.11 Logs
+
+Logs go to stderr and so to the journal. Serials and `sn:` ids are shortened by the one
+formatter of 4.2. No log line prints an identity answer. An unsupported device gets one log
+line per plug-in.
+
+### 5.12 Fake mode
+
+- `obsbot4linuxd --fake <model>[,<model>…]` runs the daemon with fake devices instead of the
+  sysfs scan. It never touches a real device.
+- The fake models are second implementations of `trait Camera`, in memory, in
+  `obsbot-device/models/fake`:
+  - `fake-a` uses the Tiny 2 Lite's description, for client work; `support: tested`.
+  - `fake-b` is deliberately different: other enum values, whole groups missing (no
+    `gimbal`, no `presets`), a setting and an action under a group no client knows, another
+    preset count, `readback:false` leaves, leaves with `asleep: ignored` and
+    `asleep: unknown`, a `requires`, a readback that lags its write by a set time,
+    `support: untested`.
+  - `unknown` is a device with an unregistered product id of a known vendor id. It enters
+    through the same registry lookup as a real device and so becomes an unsupported entry.
+- Fake devices have synthetic serials (`sn:FAKEA0000001`) and synthetic USB facts.
+- **Test control** goes through a second socket, `<socket path>.test`, which exists only in
+  fake mode. One JSON object per line: `{"plug":"<model>"}`, `{"unplug":"<id>"}`,
+  `{"sleep":"<id>"}`, `{"wake":"<id>"}`, `{"fail_next":"<id>"}` (the next camera operation
+  on that device fails, an identity read included). It is not part of protocol 2 and not in
+  any schema or description.
+- CI runs `--fake fake-a,fake-b,unknown` in every daemon, client and CLI test that needs a
+  daemon (section 11).
+
+## 6. Client and CLI
+
+### 6.1 Client library (`obsbot-proto`, module `client`)
+
+```rust
+let mut c = Client::connect(Hello::new("my-tool 1.0"))?;     // subscribe:false
+let devices: &[Device] = c.devices();
+let (rev, state) = c.get(&id, Some(&["zoom.factor"]))?;
+let rev = c.set(&id, Patch::new().leaf("zoom.factor", 1.5))?;
+let (rev, result) = c.act(&id, "preset.recall", json!({"slot": 1}))?;
+
+let (tx, rx) = Client::subscribe(Hello::new("widget 1.0").live(&["pose"]))?;
+let req = tx.set(&id, Patch::new().leaf("led.brightness", 2))?;  // returns the request id
+for msg in rx { match msg? { Incoming::Reply { id, .. } => …, Incoming::Event(e) => … } }
+```
+
+- State, patches and action parameters are path → JSON value. The library offers path
+  helpers (`state.at("zoom.factor")`, `Patch::leaf`) and no per-setting methods. It may
+  validate a patch against the description with the same validator the daemon uses; the
+  daemon stays authoritative.
+- `Client::connect` blocks per request. `Client::subscribe` returns a sender and a receiver;
+  a reader thread delivers replies (with their request ids) and events in arrival order.
+  The caller keeps its own device list from `hello` and the `devices` events.
+- Errors are typed (`ErrorCode`, with an unknown-code variant). There is no built-in retry:
+  on disconnect the receiver ends with an error, and the caller decides whether to
+  reconnect (4.1).
+- Public enums are `#[non_exhaustive]`, so additive protocol changes do not break Rust
+  callers.
+
+### 6.2 CLI (obsbot4linux)
+
+The CLI is generic. It maps 1:1 onto protocol 2, so a new model or setting needs no CLI
+change. There are no per-feature subcommands and no shortcuts.
+
+```
+obsbot4linux status                               state of one device, grouped
+obsbot4linux get <path>…                          leaves or groups
+obsbot4linux set <path>=<value> […]               one patch
+obsbot4linux do <action> [<param>=<value> …]
+obsbot4linux describe [<path|action>]             the device description
+obsbot4linux devices [--report]                   device list; --report: USB facts
+obsbot4linux watch [--live <topic>…]              hello reply and events as JSON lines
+  --device <id | serial suffix | model key>       needed only with more than one usable device
+  --json                                          print the protocol objects
+```
+
+- **Device selection.** `--device` takes the full id, a serial suffix of at least four
+  characters that matches exactly one device, or a model key that matches exactly one
+  device. Without `--device` the CLI uses the only usable device (support `tested` or
+  `untested`, available). With none it exits 3; with several it exits 2 and prints the list.
+  Unsupported devices never count as usable.
+- **Unsupported devices.** `devices`, `devices --report`, `describe` and `watch` work for
+  them. `status`, `get`, `set` and `do` exit 3 and print: "<name> (USB <vendor>:<product>)
+  is not supported by obsbot4linux <version>; `obsbot4linux devices --report` prints what
+  an issue report needs".
+- **Value syntax**, one per setting type: bool `on|off|true|false`; enum by name
+  (`upper_body`, also `upper-body`); number `1.5`; range `min,max`
+  (`zone.area.pan=-20,20`); pose `pan,tilt,zoom`; point `x,y`; string as given (quoted for
+  the shell). Only leaves are set. Action parameters use the same syntax
+  (`do view.save name=Desk pose=0,5,1.2`). A `key=value` argument never starts with `-`;
+  free text after `=` may.
+- **Output.** Human output is grouped, with units, serials shortened (4.2), and pending
+  values marked `(pending)`. `--json` prints exactly the protocol objects: the `ok` payload
+  of the reply, or for `status` the device entry and its state. With `--json`, an error
+  (usage errors included) prints `{"error":{"code","message"}}` on stdout; help and version
+  stay plain text.
+- **`devices --report`** prints, per device, the `usb` object of 4.2 together with
+  `model`, `support` and `firmware`. It never prints the serial value: only
+  `serial_present`.
+- **`watch`** sends `hello` with `subscribe:true` and the given live topics, prints the
+  reply as its first line and then every event, one JSON object per line, as received. It
+  reads nothing from stdin. It exits 0 on SIGINT or SIGTERM and 4 when the connection
+  ends.
+- **Exit codes:** 0 ok; 1 `internal`; 2 invalid input (`invalid`, `out_of_range`,
+  `unsupported`, `unknown_device`, a usage error, several usable devices without
+  `--device`); 3 device not usable (`conflict`, `unavailable`, `asleep`, `busy`, `camera`,
+  no usable device, an unsupported device addressed); 4 daemon unreachable, wrong protocol,
+  an older daemon, or no reply within `CLIENT_REPLY_TIMEOUT`.
+- **One-shot commands** send `hello` with `subscribe:false` and read with `get`. The CLI
+  waits for the reply; Ctrl-C closes the connection, which drops a request the daemon has
+  not started (4.1 rule 9).
+- **`gimbal.turn`**: the CLI always sends `keep:true` with it.
+- **Completions** for bash and zsh cover subcommands, flags, `get`/`describe` paths, `set`
+  paths with `=`, enum values after `=`, action names and their parameters. They are
+  generated from the CLI definition and the embedded description files
+  (`descriptions/*.json` of real models only, never the fakes), committed under
+  `packaging/completions/`, and a CLI-crate test fails when they are stale. Tab never
+  contacts the daemon, and `--device` values are not completed. A new model regenerates the
+  description file and the completions in its PR; the CLI code does not change. How the
+  scripts are generated is a choice of track C.
+- **Relay fallback.** If the widget cannot open the Unix socket from its shell (track D's
+  first check, section 10.3), the CLI gets `relay`: it connects, copies stdin lines to the
+  socket and socket lines to stdout unchanged, and sends nothing of its own. Owner: track
+  C. It is additive. It is not built unless that check fails.
+
+## 7. Multiple cameras
+
+The daemon handles any number of cameras. Mixed models are not a special case: each device
+brings its own description. The CLI needs `--device` only with more than one usable device.
+The widget and the desktop app have a device picker. CI runs every daemon, client and CLI
+test that needs a daemon with `fake-a`, `fake-b` and `unknown` together.
+
+## 8. Models
+
+### 8.1 Registry
+
+- The registry key is the USB (vendor id, product id) pair, read from sysfs before any I/O.
+  A model lists every pair it answers to. A test fails if a pair belongs to two models. The
+  product string, the vendor app's model number and the firmware's product code are notes
+  of the model, never keys.
+- The **vendor table** lists the OBSBOT vendor ids that make a device visible to the
+  daemon. It holds only vendor ids read from a unit in hand: today `0x3564` (measured on the
+  Tiny 2 Lite). A further vendor id is added in a registry PR when a unit with it is at
+  hand. A device whose vendor id is not in the table is not listed at all.
+- Registered today: `tiny2lite`, `3564:fef9` (measured). Nothing else.
+
+### 8.2 What a model provides (`trait Camera`)
+
+A model is one module in `obsbot-device/models/` plus a registry entry (key, display name,
+USB pairs, support level, a constructor that takes a `Transport`). Its type implements:
+
+```rust
+pub trait Camera: Send {
+    fn description(&self) -> &Description;              // settings, actions, limits; settle_ms
+    fn identity(&mut self) -> Result<Identity>;         // the model's identity source
+    fn poll_plan(&self) -> &[Group];                    // name, tier, readable asleep, live topic
+    fn read(&mut self, group: &str) -> Result<Values>;  // leaf path → value
+    fn order(&self, leaves: &[&str]) -> Vec<String>;    // safe apply order of a patch
+    fn apply(&mut self, leaf: &str, value: &Value) -> Result<()>;
+    fn act(&mut self, action: &str, params: &Value) -> Result<Option<Value>>;
+    fn touched(&self, target: Target) -> Vec<String>;   // groups to re-read after a leaf or action
+    fn stops(&self) -> &[&str];                         // actions that jump the queue
+    fn continuing(&self, action: &str) -> Option<&str>; // the stop of a continuing action
+    fn send_table(&self) -> &SendTable;                 // section 8.3
+}
+```
+
+The signatures are fixed in stage W0 and change only by a contract-change PR. The fake
+models implement the same trait, so it is designed against two shapes from the start. The
+model owns its frame codec choice: the family codec where its captures show the same
+layout, its own codec inside its module otherwise. A codec moves into `family` only when a
+second model uses it.
+
+### 8.3 What is sent
+
+- Each model declares its **send table**: every extension-unit frame it may send (selector;
+  for framed commands the receiver and command id; for short commands the command) and
+  every UVC control it may write. Each entry carries its evidence: a capture key or a
+  measurement. For the Tiny 2 Lite, entries that only 0.13.2 sends (the U-rows of 9.3) are
+  marked as such until camera session CS-1 either measures them or removes them.
+- The transport wrapper checks every outgoing frame against the active model's table in one
+  place. Anything else is refused with `internal`, logged and never sent.
+- Independently of the table, the wrapper refuses two whole classes: every extension-unit
+  selector outside the set the family uses (commands, short commands, query answers,
+  status block, preset list and entry); and, on the receiver that answers identity queries
+  (`0x0d` on the Tiny 2 Lite), every frame that is not one of the model's declared identity
+  queries.
+- No raw send path exists anywhere: not in the daemon, the CLI, the protocol or the fakes.
+  Public code and docs name only what is sent.
+- A test drives every setting and action of each model at its boundary values on the replay
+  transport and asserts that every frame is in the send table.
+- **No probing.** Capabilities come from the model's code, never from trying ids. The
+  extension unit is found by its GUID in the USB descriptor (read from sysfs), never by a
+  request.
+
+### 8.4 A camera with a known vendor id and an unknown product id (walk-through 2)
+
+1. The kernel enumerates the camera. Within a second the daemon's scan (5.3) finds a video
+   node whose USB device has a vendor id from the vendor table and a product id the registry
+   does not know.
+2. The daemon creates the unsupported entry of 5.4: id `port:<usb path>`, `model: unknown`,
+   `support: unsupported`, the USB facts from sysfs, empty settings and actions. It opens no
+   node and sends nothing. It logs one line with the USB ids.
+3. Subscribed clients get a `devices` event with the new entry. The widget lists it as not
+   supported.
+4. `obsbot4linux devices` lists it with "not supported" and exits 0.
+   `obsbot4linux devices --report` prints its USB facts (no serial value).
+5. If it is the only device, `status`, `get`, `set` and `do` exit 3 with the message of
+   6.2. If a supported camera is also connected, the CLI uses that camera without
+   `--device`, because unsupported devices never count as usable.
+6. A `set` or `do` that reaches the daemon for it is answered `unsupported`.
+7. On unplug its `port:` entry is removed and a `devices` event is sent.
+8. The user opens an issue with the `devices --report` output. If the maintainers have the
+   device at hand, onboarding (8.7) starts at step 1. Otherwise nothing changes.
+
+CI runs this walk-through with the `unknown` fake (section 11).
+
+### 8.5 Evidence, ledgers, fixtures and public text
+
+- **Ledger.** Each model has a ledger: `docs/field-ledger.md` for the Tiny 2 Lite,
+  `docs/field-ledger-<model>.md` for every further model. One row per leaf and action:
+  path, write (command and encoding), readback, evidence level with its key, asleep
+  behaviour, `readback`, `settle_ms`. Rows refer to spec sections, never to spec line
+  numbers.
+- **Levels.** `captured` and `measured` are the only levels that let a field into a
+  released description. The model module records each field's level as a constant. A test
+  in stage W3 fails if any field of a model with `support: tested` has another level.
+- **Fixtures** are single exchanges (request frame and answer), inline in a test or in a
+  small text table, each with its capture key. Recording files never enter the repository.
+  Identity answers and descriptors that hold a serial string are never fixtures; tests use
+  synthetic values. Fixtures come from the raw recordings, or from decoded files made by a
+  decoder that keeps zero-value writes.
+- **Public text.** The repository is public. Spec, ledgers, code comments, fixtures and
+  issues may contain: paths, the command ids and encodings that are sent, ranges, units, a
+  model's own USB ids, evidence levels and opaque keys ("capture 11", "measured
+  2026-10-31"). They never contain: paths or file names of private notes, names of
+  vendor-app methods or firmware symbols, whole command tables, descriptions of factory,
+  debug or upgrade commands, lists of ids that must not be sent, recordings or excerpts of
+  them, serial numbers or fragments of them, the address of a private server, or third
+  parties named as sources. The only statements about how knowledge was obtained are
+  "recorded from the vendor app" and "measured on the camera".
+
+### 8.6 Support levels
+
+- **`tested`**: the maintainers verified every row of the model's check on a unit (for the
+  Tiny 2 Lite: every parity row, section 9). The description holds only backed fields. The
+  README support table names the model and the firmware versions it was tested on.
+- **`untested`**: built from an owner's captures (8.7 steps 1–6) without steps 7–8 by the
+  maintainers. Release notes list it under "Untested models", never as supported. Package
+  descriptions name tested models only. The description of an untested model has no action
+  with `warning: destructive`.
+- **`unsupported`**: a known vendor id with an unregistered product id (5.4).
+- The CLI prints the level next to every device that is not `tested`. The daemon logs it
+  once per plug-in. The widget and the desktop app show a marker for `untested` and
+  `unsupported` devices.
+
+### 8.7 Onboarding a model (walk-through 1)
+
+A model is added only with a unit in hand and with our own captures or an owner's captures.
+Nothing is built for a model before that. Steps, in this order:
+
+0. **Visibility.** Plug the unit into a Linux host running obsbot4linux 1.0.
+   - If `obsbot4linux devices` lists it as unsupported, go to step 1.
+   - If it is not listed, its vendor id is not in the vendor table. Read `idVendor` and
+     `idProduct` of the unit from sysfs (`/sys/bus/usb/devices/<usb path>/`; `lsusb` shows
+     the same pair), add the vendor id to the table in a registry PR, and start again.
+     Nothing is sent to the camera in this step.
+1. **Descriptor report.** Run `obsbot4linux devices --report --device port:<usb path>` and
+   keep the output: USB ids, product name, bcdDevice, whether a serial string exists,
+   interface classes, extension units with GUID and control count, video node. If the unit
+   shows other product ids in other modes, record each. Open a tracking issue with the
+   report.
+2. **Captures.** Record the USB traffic between the vendor app and the unit (for example
+   usbmon on a Linux host that passes the camera to a virtual machine running the vendor
+   app). Stop `obsbot4linux.socket` and `obsbot4linux.service` first, so that nothing else
+   talks to the camera. Keep a capture log: one line per step with time, control, old value
+   and new value. Record, in this order:
+   1. the connect sequence: recording on, plug in, start the vendor app, 60 s idle (this
+      also records the idle poll);
+   2. each setting the vendor app shows for this model, one value change per step, ending
+      at the original value;
+   3. each action the vendor app offers;
+   4. sleep and wake, and a plug-in while the camera sleeps.
+
+   Nothing is sent from Linux in this step.
+
+3. **Private set and public fixtures.** The recordings and logs go to the owner's private
+   notes. Public fixtures are cut from them under 8.5: single exchanges, identity answers
+   replaced by synthetic values, each with its capture key.
+4. **Model module** `models/<key>` with its registry entry:
+   - USB pairs: every product id from step 1. Display name from the product name. Support
+     `untested` until step 8.
+   - Identity source: the USB serial string if `serial_present`, else the identity query
+     the vendor app sends in the connect sequence, else none (`port:` ids).
+   - Codec: the family codec if the captured frames match its layout and the extension-unit
+     GUID matches the family's; otherwise the model's own codec (8.2).
+   - Poll plan: groups and tiers taken from the captured idle poll, never more often than
+     the vendor app polls.
+   - Paths: an existing path where function, unit and frame are the same as on another
+     model (4.2); `values[]` and `writable[]` for other option sets; a new path or enum
+     value for a new function. This is additive and needs no client change (guarantee A).
+   - Each field gets its level in the model's ledger (8.5). A field with neither captured
+     nor measured evidence is not in the description.
+   - `asleep` is `unknown` for every field until step 7 measures it.
+   - `settle_ms`: until measured on this model, the largest `settle_ms` of any tested model
+     (today the Tiny 2 Lite's 3000 ms), marked "not measured on this model" in the ledger.
+5. **Send table** (8.3), each entry with its capture key.
+6. **Tests** without the camera: every encoder against the captured request bytes; every
+   decoder against captured answers; the status decoder against captured blocks with one
+   setting changed per block; the send-table test; the registry test.
+   `descriptions/<key>.json` and the completions are regenerated. CI with the fakes stays
+   green.
+7. **Check on the unit** by the maintainers: `scripts/check-model.sh --device <id>` (9.4).
+   Every passing row becomes `measured` with the date; `settle_ms` and `asleep` are set from
+   the measurements; failing fields leave the description.
+8. **Release** as `tested`, with the firmware versions it was tested on, a README support
+   table row and a release-notes line. The CLI needs no change. The widget and the desktop
+   app show the settings they know at once; a setting new to them needs their own update
+   (guarantee A).
+
+A model built from an owner's captures that completed steps 1–6, but not 7–8 by the
+maintainers, is released as `untested`. M4 is the first model that completes these steps.
+
+### 8.8 The Tiny 2 Lite model (`tiny2lite`)
+
+- USB `3564:fef9`; no USB serial string (measured: two units collide in `/dev/v4l/by-id`).
+  The extension unit is found by GUID; the descriptor recorded in capture 01 places it at
+  unit 2.
+- **Identity:** the serial query `0x18c8` to receiver `0x0d` answers 14 ASCII characters.
+  It is recorded from the vendor app, which sends it at connect. A read from Linux, asleep and right
+  after plug-in, is camera item CAM-1. Firmware and model come from the queries the ledger
+  lists.
+- **Live pose:** query `0x0043` to receiver 3, plus the zoom-factor query. The camera's
+  other pose query arms its switch to static after a zone return (#67) and is not in the
+  send table.
+- **Poll plan.** 1 s: the status block (asleep, tracking mode and the other status values),
+  the on-air probe, and the target while the tracking mode is not `static`. 1 s while a
+  connection subscribes `pose`, else
+  5 s: the live pose. 5 s: the settings readbacks (tracking, framing, gestures, zoom,
+  exposure, image, focus, audio, LED, sleep). 60 s: zone, hand, power-on, views.
+  `touched`: presets (read at plug-in and after `preset.*` and `power_on.use_preset`; the
+  preset read writes to the camera to rewind its list, which the vendor app never does,
+  CAM-19). While asleep only the status block is read.
+- **Apply order** inside a patch: a setting's `requires` paths before the setting
+  (`exposure.mode=manual` before `exposure.time`; `image.white_balance.auto=false` before
+  `image.white_balance.temperature`; `focus.mode=manual` before `focus.position`), and
+  `tracking.mode` before `framing.*`. The order between `exposure.anti_flicker` and
+  `exposure.mode` is CAM-13.
+- **Touched groups:** `tracking.mode` touches tracking and framing; `zoom.field_of_view`
+  and the gesture settings touch zoom; `preset.recall` touches zoom and the live pose;
+  `gimbal.move` and `gimbal.turn`
+  touch tracking and framing when they switched the tracking mode; `gimbal.stop`,
+  `zoom.stop` and `zoom.move` touch nothing.
+- **Asleep:** `zoom.field_of_view` is `ignored` (measured); `power_on.go` is `ignored`
+  (0.13.2 behaviour; CAM-2 checks it). The
+  pose-taking actions of 4.4 are `ignored` until CAM-22. The readbacks of `audio.volume`
+  and `focus.*` do not answer while asleep (0.13.2 behaviour), so a write to them stays
+  pending until the first read after wake. Every other field is `unknown` until CAM-2.
+- **`readback:false`:** `hand.move_gimbal`, `led.blink` (CAM-6).
+- **`settle_ms`:** 3000 for every leaf. This is one model-wide bound taken from the worst
+  measured case (zone tracking follows 1–3 s after the write, #81; the target-lock status
+  about 1 s), labelled as such in the ledger. Per-leaf bounds are CAM-5.
+- **Stops:** `gimbal.stop`, `zoom.stop`. **Continuing:** `gimbal.turn`, stopped by
+  `gimbal.stop`.
+- **Support:** `untested` on `rebuild` until stage W3. The release candidate carries
+  `support: tested`, the claim that stage W4 then verifies on every parity row. If W4 fails
+  a row, the row is fixed or becomes a parity exception, and a new candidate is built.
+
+### 8.9 Tiny 3 and Tiny 3 Lite
+
+- They are two models: two registry entries, two modules. They may share functions where
+  captures show identical bytes.
+- Nothing is built for them before a unit is at hand. Each follows 8.7 from step 0.
+- Every property of either device is **unknown until captures**: USB ids, serial string,
+  extension unit, frame layout, status block, connect sequence, settings, values, asleep
+  behaviour. Section 14 lists the questions.
+- Lite functions are not assumed to carry over. The vendor app treats models differently in
+  many functions (verified), so "common commands" cannot be assumed. One third-party report
+  links repeated identity queries to USB drops on a Tiny 3 (unverified); the cap on identity
+  attempts (5.5) holds for every model.
+- Until a module exists, a unit of either model is an unsupported device (8.4), as long as
+  its vendor id is in the vendor table.
+
+## 9. Parity (1.0 acceptance)
+
+### 9.1 Parity table
+
+Every command and option of 0.13.2 (`src/cli.rs`) maps to a 1.0 command, or is a named
+exception (9.2). 1.0 is released only when every row is verified on the real Tiny 2 Lite
+(stage W4) or is an exception. U-n refers to 9.3, CAM-n to section 14.
+
+| 0.13.2                                                                  | 1.0                                                                  | Note                                                   |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
+| `--json` (global)                                                       | `--json`                                                             | protocol objects; errors as `{"error":{…}}`            |
+| `--direct` (global)                                                     | –                                                                    | PX-3                                                   |
+| `--help`, `--version`                                                   | `--help`, `--version`                                                |                                                        |
+| `daemon`                                                                | `obsbot4linuxd`, started by `obsbot4linux.socket`                    |                                                        |
+| `watch`                                                                 | `watch`                                                              | prints events; request forwarding is PX-4              |
+| `live-pose on\|off`                                                     | `watch --live pose`; a client sends `live:["pose"]`                  |                                                        |
+| `detect`, `detect --json`                                               | `devices`, `devices --json`                                          | PX-5                                                   |
+| `status`, `status --json`                                               | `status`, `status --json`                                            | new layout (4.3)                                       |
+| `sleep`                                                                 | `do sleep`                                                           |                                                        |
+| `wake`                                                                  | `do wake`                                                            | replies on acceptance                                  |
+| `wake zoom F`                                                           | `set sleep.wake_zoom=F`                                              | U-21                                                   |
+| `wake mode M`                                                           | `set power_on.mode=M`                                                |                                                        |
+| `tracking MODE`                                                         | `set tracking.mode=MODE`                                             |                                                        |
+| `speed standard\|sport`                                                 | `set tracking.profile=…`                                             |                                                        |
+| `speed headroom`                                                        | `set tracking.profile=headroom`                                      | U-2                                                    |
+| `speed-mode MODE`                                                       | `set tracking.speed=MODE`                                            | U-1                                                    |
+| `framing auto-zoom on\|off`                                             | `set framing.auto_zoom=…`                                            | U-3                                                    |
+| `framing size S`                                                        | `set framing.size=S`                                                 | U-3                                                    |
+| `framing zoom-speed S`                                                  | `set framing.zoom_speed=S`                                           | U-3                                                    |
+| `framing offset [--x X] [--y Y]`                                        | `set [framing.offset.x=X] [framing.offset.y=Y]`                      | U-4                                                    |
+| `framing part P`                                                        | `set framing.part=P`                                                 | U-3                                                    |
+| `hdr on\|off`                                                           | `set exposure.hdr=…`                                                 |                                                        |
+| `exposure global\|face`                                                 | `set exposure.mode=auto exposure.region=…`                           |                                                        |
+| `exposure manual`                                                       | `set exposure.mode=manual`                                           |                                                        |
+| `exposure manual --time T`                                              | `set exposure.mode=manual exposure.time=<T×100>`                     | time now in µs                                         |
+| `exposure manual --gain G`                                              | `set exposure.mode=manual exposure.gain=G`                           |                                                        |
+| `zoom F`                                                                | `set zoom.factor=F`                                                  |                                                        |
+| `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10/30/50; U-12; other S is PX-6                        |
+| `zoom stop`                                                             | `do zoom.stop`                                                       | U-11                                                   |
+| `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position                      |
+| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | U-9                                                    |
+| `gimbal stop`                                                           | `do gimbal.stop`                                                     | U-10                                                   |
+| `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | the CLI sends `keep:true`                              |
+| `gimbal center X Y` (hidden)                                            | –                                                                    | PX-1                                                   |
+| `fov wide\|medium\|narrow`                                              | `set zoom.field_of_view=…`                                           |                                                        |
+| `led N`                                                                 | `set led.brightness=N`                                               |                                                        |
+| `led blink on\|off`                                                     | `set led.blink=…`                                                    | `readback:false`                                       |
+| `mirror on\|off`                                                        | `set image.mirror=…`                                                 |                                                        |
+| `invert on\|off`                                                        | `set gimbal.invert=…`                                                |                                                        |
+| `auto-sleep off`                                                        | `set sleep.auto.enabled=off`                                         |                                                        |
+| `auto-sleep N` (N ≥ 1)                                                  | `set sleep.auto.enabled=on sleep.auto.seconds=N`                     |                                                        |
+| `auto-sleep 0`                                                          | –                                                                    | PX-7                                                   |
+| `sleep-background black\|image`                                         | `set sleep.background=…`                                             |                                                        |
+| `sleep-background-mirror on\|off`                                       | `set sleep.background_mirror=…`                                      |                                                        |
+| `audio noise L`                                                         | `set audio.noise_reduction=L`                                        |                                                        |
+| `audio gain on\|off`                                                    | `set audio.auto_gain=…`                                              |                                                        |
+| `audio distance near\|standard\|far`                                    | `set audio.volume=10\|50\|100`                                       | the camera's pickup command sets exactly these volumes |
+| `audio volume N`                                                        | `set audio.volume=N`                                                 | U-17                                                   |
+| `audio sleep-mic on\|off`                                               | `set audio.in_sleep=…`                                               |                                                        |
+| `audio mic on\|off`                                                     | `set audio.enabled=…`                                                | the camera restarts on both values; U-23               |
+| `gesture set target-lock\|zoom\|dynamic-zoom\|direction-change on\|off` | `set gestures.<name>=…`                                              | names with `_`                                         |
+| `gesture zoom-ratio R`                                                  | `set gestures.zoom_ratio=R`                                          | precision 0.1                                          |
+| `hand right\|left`                                                      | `set hand.side=…`                                                    |                                                        |
+| `hand return-here`                                                      | `do hand.return_here`                                                | live pose                                              |
+| `hand return-go`                                                        | `do hand.go_return`                                                  |                                                        |
+| `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                        |
+| `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   | U-8                                                    |
+| `hand area-reset`                                                       | `do hand.area_reset`                                                 | U-7                                                    |
+| `hand pan\|tilt on\|off`                                                | `set hand.axes.pan=…` / `set hand.axes.tilt=…`                       | U-5                                                    |
+| `hand return-after S`                                                   | `set hand.return_after=S`                                            | U-6                                                    |
+| `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | `readback:false`                                       |
+| `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                        |
+| `zone follow on\|off`                                                   | `set zone.follow=…`                                                  |                                                        |
+| `zone area --pan MIN MAX --tilt MIN MAX`                                | `set zone.area.pan=MIN,MAX zone.area.tilt=MIN,MAX`                   | U-8                                                    |
+| `zone return-here`                                                      | `do zone.return_here`                                                | live pose                                              |
+| `zone return-go`                                                        | `do zone.go_return`                                                  |                                                        |
+| `zone view list`                                                        | `get views`                                                          | U-14                                                   |
+| `zone view save NAME`                                                   | `do view.save name=NAME`                                             | live pose                                              |
+| `zone view save NAME --pan P --tilt T --zoom Z`                         | `do view.save name=NAME pose=P,T,Z`                                  |                                                        |
+| `zone view rename ID NAME`                                              | `do view.rename id=ID name=NAME`                                     |                                                        |
+| `zone view delete ID`                                                   | `do view.delete id=ID`                                               |                                                        |
+| `zone view go ID`                                                       | `do view.go id=ID`                                                   | U-13                                                   |
+| `focus mode face\|global`                                               | `set focus.region=…`                                                 |                                                        |
+| `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                        |
+| `focus auto off`                                                        | `set focus.mode=manual`, or `single` if CAM-14 shows that            | CAM-14                                                 |
+| `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   | U-15                                                   |
+| `focus point X Y`                                                       | `do focus.point x=X y=Y`                                             | U-16                                                   |
+| `focus set N`                                                           | `set focus.mode=manual focus.position=N`                             | U-22                                                   |
+| `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                        |
+| `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                        |
+| `startup set --current`                                                 | `do power_on.use_current`                                            | live pose                                              |
+| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   | U-18                                                   |
+| `startup set <pose option> --ai M`                                      | the `do` of the pose option, then `set power_on.start.mode=M`        |                                                        |
+| `startup show`                                                          | `get power_on`                                                       | U-19                                                   |
+| `startup go`                                                            | `do power_on.go`                                                     | U-24                                                   |
+| `image brightness\|contrast\|saturation\|hue\|sharpness V`              | `set image.<name>=V`                                                 |                                                        |
+| `image white_balance_auto 0\|1`                                         | `set image.white_balance.auto=off\|on`                               |                                                        |
+| `image white_balance_temperature V`                                     | `set image.white_balance.auto=off image.white_balance.temperature=V` | `requires`; CAM-15                                     |
+| `image gain V`                                                          | `set exposure.gain=V`                                                |                                                        |
+| `image power_line_frequency 0\|1\|2`                                    | `set exposure.anti_flicker=off\|50hz\|60hz`                          |                                                        |
+| `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        | U-20                                                   |
+| `image auto_exposure 1\|3`                                              | `set exposure.mode=manual\|auto`                                     | V4L2 1 = manual, 3 = automatic                         |
+| `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                     |
+| `image focus V`                                                         | `set focus.mode=manual focus.position=V`                             | U-22                                                   |
+| `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`; CAM-14                                |
+| `image gamma V`                                                         | –                                                                    | PX-2                                                   |
+| `preset list`                                                           | `get presets`                                                        |                                                        |
+| `preset save N`                                                         | `do preset.save slot=N`                                              | live pose, name `Preset <N + 1>`                       |
+| `preset save N --name S`                                                | `do preset.save slot=N name=S`                                       |                                                        |
+| `preset save N --pan P --tilt T --zoom Z`                               | `do preset.save slot=N pose=P,T,Z`                                   |                                                        |
+| `preset rename N S`                                                     | `do preset.rename slot=N name=S`                                     |                                                        |
+| `preset delete N`                                                       | `do preset.delete slot=N`                                            | CAM-18                                                 |
+| `preset recall N`                                                       | `do preset.recall slot=N`                                            |                                                        |
+| `factory-reset --yes`                                                   | `do factory_reset confirm=true`                                      | `warning: destructive`                                 |
+| `factory-reset` without `--yes`                                         | `do factory_reset` is refused with `invalid`                         |                                                        |
+
+### 9.2 Parity exceptions
+
+- **PX-1** `gimbal center X Y` (hidden in 0.13): not carried over. It moved the gimbal only
+  toward the left and downward in tests.
+- **PX-2** `image gamma`: the camera has no gamma control (its recorded UVC descriptor does
+  not offer one); 0.13's command always failed. No function is lost.
+- **PX-3** `--direct`: removed. The CLI never talks to the camera; socket activation starts
+  the daemon.
+- **PX-4** request forwarding of `watch` from stdin: removed. The widget speaks protocol 2
+  on the socket; `relay` is the fallback (6.2).
+- **PX-5** `detect` without a daemon and with exit 1: replaced by `devices`, which needs the
+  daemon and exits 0 when it lists a device and 3 when the list is empty. A script that
+  needs a usable camera reads `support` from `devices --json`, or runs `status`, which exits
+  3 without one.
+- **PX-6** `zoom F --speed S` with any integer S: only `slow|medium|fast` (10, 30, 50), the
+  only speeds with a known meaning.
+- **PX-7** `auto-sleep 0`: not offered. The camera cannot store "off" together with 0 s, and
+  "on with 0 s" was never recorded.
+- **PX-U-n**: a row U-n of 9.3 whose check fails becomes the exception PX-U-n, with the
+  0.13.2 rows named in its "Fail" column.
+
+### 9.3 Tiny 2 Lite fields without backing today
+
+These fields and values are 0.13.2 functions whose write and readback (or effect) are
+neither captured nor measured. One rule holds for every row: the description written in
+stage W0 contains the field or value (it is a 0.13.2 function); the check runs on the
+camera in session CS-1 (stage A, camera item CAM-23); a field or value that passes is kept
+with level `measured`; one that fails leaves the description by a contract-change PR before
+the release candidate and becomes the named exception. The release candidate contains no
+row that has not passed. No field stays on a guess, and none disappears silently.
+
+| U    | Field or action                                                                                                                  | Backing today                                                                                                   | Check in CS-1                                                                   | Fail: exception and 0.13.2 rows lost                                                                                   |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| U-1  | `tracking.speed`                                                                                                                 | readback answers; no recorded write                                                                             | set each value, read back                                                       | PX-U-1: `speed-mode`                                                                                                   |
+| U-2  | `tracking.profile=headroom`                                                                                                      | `standard` and `sport` captured; `headroom` never tested                                                        | set, read back, watch the framing with a person in view                         | PX-U-2: `speed headroom` (value stays read-only)                                                                       |
+| U-3  | `framing.auto_zoom`, `.size`, `.zoom_speed`, `.part`                                                                             | readbacks used by 0.13; no recorded write                                                                       | set each value, read back                                                       | PX-U-3: the failing `framing` subcommand                                                                               |
+| U-4  | `framing.offset.x`, `.y`                                                                                                         | readbacks used by 0.13; range −0.16..0.16 not confirmed                                                         | set both bounds and 0, read back                                                | PX-U-4: `framing offset`                                                                                               |
+| U-5  | `hand.axes.pan`, `.tilt`                                                                                                         | no recording; effect not observed                                                                               | set, read back; hand tracking with a person in view                             | PX-U-5: `hand pan`, `hand tilt`                                                                                        |
+| U-6  | `hand.return_after`                                                                                                              | no recorded write                                                                                               | set, read back                                                                  | PX-U-6: `hand return-after`                                                                                            |
+| U-7  | `hand.area_reset`                                                                                                                | no recording                                                                                                    | narrow the area, reset, read back the default area                              | PX-U-7: `hand area-reset`                                                                                              |
+| U-8  | `hand.area`, `zone.area` with a new range wholly beyond the stored one                                                           | frame order unmeasured                                                                                          | write such ranges for pan and tilt, read back                                   | the model sends the bounds in the order the check shows; re-checked                                                    |
+| U-9  | `gimbal.move` with `speed`                                                                                                       | no recording; tilt 86–90° and speeds 178–180 °/s unmeasured; one axis with speed untested                       | moves with speed to tilt 86, 88, 90; speed 178 and 180; pan only                | range narrowed to the measured one; PX-U-9: `gimbal --speed` if no move with speed works                               |
+| U-10 | `gimbal.stop`                                                                                                                    | no recording                                                                                                    | start a turn, stop it, the pose stops changing                                  | PX-U-10: `gimbal stop`, and `gimbal rate` with it (no turn without a stop)                                             |
+| U-11 | `zoom.stop`                                                                                                                      | no recording                                                                                                    | slow zoom move, stop, the factor stops changing                                 | PX-U-11: `zoom stop`                                                                                                   |
+| U-12 | `zoom.move` speeds `slow` (10), `fast` (50)                                                                                      | only 30 captured                                                                                                | a move at each speed, factor reached                                            | the speed leaves `writable`; PX-U-12: `zoom --speed` with that speed                                                   |
+| U-13 | `view.go`                                                                                                                        | never recorded or tested                                                                                        | save a view, move away, go, compare the pose                                    | PX-U-13: `zone view go`                                                                                                |
+| U-14 | `views` (the read)                                                                                                               | the three reads not recorded; 0.13 lists views                                                                  | list after save, rename, delete                                                 | PX-U-14: all `zone view` rows                                                                                          |
+| U-15 | `focus.mode` values `single`, `manual`                                                                                           | only the continuous bit measured                                                                                | set each value, read back, observe the focus                                    | the value leaves `writable`; PX-U-15: `focus af single\|manual`                                                        |
+| U-16 | `focus.point`                                                                                                                    | no recording                                                                                                    | point at an object, observe the focus                                           | PX-U-16: `focus point`                                                                                                 |
+| U-17 | `audio.volume`                                                                                                                   | readback used by 0.13; no recorded write                                                                        | set 10, 50, 100, read back                                                      | PX-U-17: `audio volume`, `audio distance`                                                                              |
+| U-18 | `power_on.start.mode`: writing `static`, `upper_body`, `headless`, `group`; names of read values other than `normal` and `unset` | only `normal` and `unset` recorded from the vendor app                                                          | set each value, read the block, power-cycle, observe the start mode             | the value leaves `writable`; an unconfirmed read value shows as `raw:<n>`; PX-U-18: `startup set --ai` with that value |
+| U-19 | `power_on.settings.*`                                                                                                            | block partly decoded                                                                                            | change each in the vendor app's initial-state dialog (recorded), read the block | the leaf leaves the description; PX-U-19: that part of `startup show`                                                  |
+| U-20 | `exposure.compensation` in EV                                                                                                    | raw range 0–18 and default 9 captured (capture 12); 1/3 EV per step inferred from two clicks                    | compare the vendor app's displayed steps over the whole range                   | stays the raw value (no exception: the raw value is the 0.13 function)                                                 |
+| U-21 | `sleep.wake_zoom`                                                                                                                | readback answers; no effect observed (#102)                                                                     | set, read back                                                                  | PX-U-21: `wake zoom`                                                                                                   |
+| U-22 | `focus.position`                                                                                                                 | no effect observed (#99)                                                                                        | set in manual focus, read back                                                  | PX-U-22: `focus set`, `image focus`                                                                                    |
+| U-23 | `audio.enabled` readback                                                                                                         | the audio interface disappears and returns on toggle (measured); cold plug with the microphone off not measured | cold plug with the microphone off; compare the status-block candidate           | readback from the status block if it follows; else `readback:false`                                                    |
+| U-24 | `power_on.go`                                                                                                                    | the command 0.13 sends is not recorded                                                                          | move away, run it, the camera goes to the start pose                            | PX-U-24: `startup go`                                                                                                  |
+
+### 9.4 Check script
+
+`scripts/check-model.sh --device <id> [--destructive]` checks one device against its own
+description. It replaces 0.13's `check-readback.sh`.
+
+- It requires `--device`. It reads `describe --json` and builds its rows from it: every
+  writable enum value, both values of each bool, minimum and maximum of each number and
+  range.
+- Per row: `set`, wait until a state with `rev` ≥ the reply's rev shows the path outside
+  `pending`, compare with the written value, restore.
+- `readback:false` rows are checked as "accepted"; `no_effect` rows are checked by readback
+  only. The script says so per row.
+- Actions are printed as a checklist with the expected state change and run one by one
+  after a confirmation. Rows that need a person in view are marked.
+- Rows with `warning` (restart, destructive) run only with `--destructive`, last, after
+  presets and views are printed. Such a row passes when the device returns under the same
+  id with the expected state.
+- It snapshots the state first and restores it through a `trap` on EXIT, INT and TERM: the
+  snapshot's tracking mode and pose, never hard-coded values. A field whose snapshot value
+  is `null` is skipped.
+- Output: one line per row and a results file. The ledger update takes `measured` and the
+  date from it.
+- CI runs it against `fake-a` and `fake-b`. In stage W4 the release PR maps its results to
+  every row of 9.1.
+
+## 10. Way of working
+
+### 10.1 Branches and rules
+
+- `main` stays releasable. Until stage G is released it stays at 0.13.x and can ship a patch
+  at any time.
+- Audit fixes that need no camera (tests that pin recorded bytes, docs, CI, logic with unit
+  tests) land on `main` first, in the 0.13 layout, so that the groundwork move carries them.
+  Fixes whose acceptance needs the camera wait for it (section 14).
+- The rewrite happens on a short-lived branch `rebuild`, started from `main` with this spec
+  as its first commit. Before its first PR, `ci.yml` runs on `main` and `rebuild` for push
+  and pull request (the change lands on `rebuild` itself), and a ruleset for
+  `refs/heads/rebuild` requires signed commits and the `required` check and blocks
+  deletion. Both are removed after the final merge.
+- Each stage or track is one or more PRs into `rebuild`, each with the `required` gate and
+  an Opus review.
+- **Contract-change rule.** A change to the `obsbot-proto` types, the description format,
+  `trait Camera`, `trait Transport` or the schema goes first as its own small PR into
+  `rebuild`. Tracks rebase onto it and never change those files inside a track PR.
+- When `main` moves (a 0.13.x or 0.14.x patch), `rebuild` is rebased onto it between PRs,
+  with a note in the tracking issue. Nobody pins a `rebuild` commit hash.
+- At the end `main` fast-forwards to `rebuild` and `v1.0.0` is tagged. Before tagging,
+  `HEAD..origin/main` is empty.
+
+### 10.2 Stage G: groundwork (released as 0.14.0)
+
+- **Content:** the cargo workspace (`[workspace.package]` with version, rust-version and
+  licence; `[workspace.dependencies]`); `crates/obsbot-device` with the carried modules at
+  their final paths as plain modules (`transport`, `family`, `models/tiny2lite`,
+  `registry`); `camera.rs` split into transport and Tiny 2 Lite flows; the 0.13 daemon and
+  CLI unchanged in `crates/obsbot4linux` on top of it; byte tests moved with their code; CI
+  and packaging for the workspace (package metadata in the binary crate); one mutation-test
+  pass over the carried modules, survivors fixed or documented. No behaviour change.
+- **Owner files:** all; one owner.
+- **Depends on:** the camera-free audit fixes on `main`; CI and the ruleset on `rebuild`.
+- **Acceptance without camera:** `cargo test --workspace` passes with every 0.13.2 test
+  present; the diff of the move shows renames and module paths only (reviewed); the CLI's
+  `--help` output equals 0.13.2's; a packaging run produces the eight artifacts of 12.1
+  with the 0.13 binary; the mutation pass is recorded in the PR and kills these mutants: a
+  rejected answer handled as stale, a rejected tracking query failing the whole read, and
+  each sign flip in the angle conversions. The tests that kill them are camera-free audit
+  fixes and land on `main` before stage G (10.1), so stage G itself changes no behaviour.
+- **Acceptance with camera (CS-0, CAM-30):** on the real Tiny 2 Lite: `status`, one setting set and
+  read back, one gimbal move, `preset list`. Then `main` fast-forwards to the last commit of
+  stage G and `v0.14.0` is tagged.
+
+### 10.3 Stages of the rewrite
+
+After stage G is merged into `rebuild` (its release as 0.14.0 may wait for the camera), the
+rewrite runs as W0, then four parallel tracks A–D, then W2, W3 and W4.
+
+**W0: contracts**
+
+- **Content:** the four crates as compiling stubs; the 0.13 daemon, client, protocol, state
+  and CLI modules removed from `rebuild` (they stay on `main` for 0.14.x); in
+  `obsbot-proto` the envelopes, `ErrorCode`, the description types, the validator and the
+  path helpers; `schema/protocol-2.json` with its stale test; in `obsbot-device` the
+  signatures of `trait Camera` and `trait Transport`; the fake models `fake-a` and `fake-b`;
+  the Tiny 2 Lite description as data (every field of 4.3 and 4.4, U-rows included);
+  `descriptions/tiny2lite.json` and `descriptions/fake/*.json`; golden protocol transcripts
+  (`hello`, `state` and `devices` events, every error code, an unsupported entry, a
+  `replaced_by` hand-over); the normative part of `docs/protocol-2.md`.
+- **Owner files:** all; one owner.
+- **Depends on:** stage G merged into `rebuild`.
+- **Acceptance without camera:** the workspace builds and its tests pass; the schema stale
+  test passes; every golden file round-trips byte-equal through the proto types; `fake-a`
+  and `fake-b` pass a trait conformance test (every described leaf readable; every writable
+  leaf shows a valid written value after the touched re-read, or enters `pending`); the
+  `cargo metadata` check of section 3 passes.
+- **Acceptance with camera:** none.
+
+**Track A: device**
+
+- **Content:** the USB transport (extension unit by GUID, named timeouts, per-operation
+  node lock, send-table check), the replay transport, the family code (scripted answer-poll
+  tests: read error, stale sequence, rejected, empty, no answer), `models/tiny2lite` behind
+  the trait (identity, poll plan, read, apply, order, act, touched, stops, continuing, send
+  table), `registry` with the vendor table, `enumeration` (sysfs), and `#[ignore]` live
+  tests that run only with an explicit environment variable and a connected camera and send
+  only the model's send table.
+- **Owner files:** `crates/obsbot-device` (except the trait files), `descriptions/tiny2lite.json`,
+  `docs/field-ledger.md`.
+- **Depends on:** W0.
+- **Acceptance without camera:** every encoder against recorded request bytes; every
+  decoder against recorded answers; the status decoder against recorded blocks; angle
+  conversions as pure functions tested with a recorded answer and one asymmetric case; the
+  send-table test; the registry test; the serial-format test; each audit defect in carried
+  code fixed or named in section 14.
+- **Acceptance with camera (CS-1):** the live tests: CAM-1 to CAM-8, CAM-10, CAM-13 to
+  CAM-20, CAM-22, CAM-23 and CAM-25 (CAM-21 is recorded if it happens and gates nothing).
+  Results go into the ledger and arrive as contract-change PRs (U-rows removed,
+  `settle_ms`, `asleep` values, `focus auto off` mapping).
+
+**Track B: daemon**
+
+- **Content:** `crates/obsbot4linuxd` as specified in section 5, in two PRs. B-1: the
+  daemon core with fake mode (`--fake`, test-control socket), so that tracks C and D can run
+  their acceptance against it. B-2: the real device path (enumeration, registry lookup,
+  workers over `trait Camera` with `tiny2lite`).
+- **Owner files:** `crates/obsbot4linuxd`.
+- **Depends on:** W0 (B-1); track A's registry, enumeration and `tiny2lite` (B-2).
+- **Acceptance without camera:** named integration tests, all with `fake-a`, `fake-b` and
+  `unknown` running together: rev order and event-before-reply; pipelined requests; N
+  pipelined `set`s on one connection cause at most two re-reads; single-leaf coalescing;
+  stops overtake the queue; whole-patch validation, apply order, `applied`/`failed`;
+  `requires` gives `conflict`; `pending` appears and clears (lagging readback of `fake-b`,
+  and the settle bound); `asleep: ignored` refused, `asleep: unknown` written and pending
+  until wake; the 15 s deadline; `busy` at 32; requests of a closed connection dropped;
+  `gimbal.turn` stopped on connection close unless `keep`; hotplug add, unplug, re-plug;
+  `port:` → `sn:` hand-over with `replaced_by`; the unsupported entry receives no frame (the
+  fake transport records none); `hello` waits for the first enumeration; live-topic
+  filtering; a slow subscriber is disconnected; the 64 KiB request limit; the 64-connection
+  limit; the single-instance lock; the panic policy.
+- **Acceptance with camera:** none in this track (W4 covers the real path).
+
+**Track C: client and CLI**
+
+- **Content:** the client module of `obsbot-proto` (6.1); the CLI (6.2): commands, value
+  syntax, human output, `--json`, exit codes, device selection, completions and their stale
+  test, the older-daemon message.
+- **Owner files:** `crates/obsbot-proto/src/client*`, `crates/obsbot4linux`,
+  `packaging/completions/`.
+- **Depends on:** W0; B-1 for the tests against a running fake daemon.
+- **Acceptance without camera:** value parsing per setting type; rendering snapshots from
+  the golden states; one test per error code for its exit code; the `--json` error shape for
+  a usage error; a non-protocol-2 `hello` reply gives exit 4 and the restart message; no
+  socket gives exit 4 and the `systemctl` line; end-to-end snapshots against an in-process
+  `obsbot4linuxd --fake fake-a,fake-b,unknown`; every row of 9.1 turned into its request
+  against `fake-a`; the completions stale test.
+- **Acceptance with camera:** none in this track.
+
+**Track D: widget (repository `obsbot4linux-dux`)**
+
+- **Content:** first, a check that the widget can open the Unix socket from its shell; if
+  it cannot, track C adds `relay` (6.2) and the widget uses it. Then the widget on protocol
+  2: `hello`, device picker, every control gated on a path or action of the description,
+  `pending` values shown, live topics only while the popup is open, markers for `untested`
+  and `unsupported`, the exit-4 hint, and the defaults reset built from `default` values (a
+  `set` patch; which controls it covers is the widget's product choice). Also widget 0.28.0,
+  the last 0.x release, which refuses obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >=
+0.7.3, < 1.0`).
+- **Owner files:** the widget repository.
+- **Depends on:** W0 (golden transcripts); B-1 for live tests.
+- **Acceptance without camera:** against `obsbot4linuxd --fake fake-a,fake-b,unknown`:
+  `fake-b`'s unknown setting does not break the widget; its missing groups hide their
+  controls; the unsupported device shows as not supported; a value set with the CLI appears
+  in the widget at once (`pending`); widget 0.28.0 is released before the 1.0 release
+  candidate.
+- **Acceptance with camera:** in W4.
+
+**W2: hook-up**
+
+- **Content:** daemon and `tiny2lite` end to end in a dev build; `scripts/check-model.sh`
+  (9.4); `docs/protocol-2.md` completed with worked transcripts; the migration notes drafted
+  (12.2).
+- **Owner files:** `scripts/`, `docs/`; glue in crates only by contract-change PRs.
+- **Depends on:** A, B, C.
+- **Acceptance without camera:** the check script passes against `fake-a` and `fake-b` in
+  CI; the CLI end-to-end tests pass; descriptions and completions are regenerated and their
+  stale tests pass; no U-row that CS-1 failed is left in `descriptions/tiny2lite.json`.
+- **Acceptance with camera:** none.
+
+**W3: packaging and release candidate**
+
+- **Content:** two-binary packages (12.1) with units (`ExecStart` = `obsbot4linuxd`,
+  `NoNewPrivileges=yes`), completions and the schema; the release workflow publishes a tag
+  `v1.0.0-rc.N` as a pre-release; the Tiny 2 Lite set to `support: tested` (8.8); CHANGELOG
+  with the migration notes; README support table.
+- **Owner files:** `.github/`, `packaging/` (except completions), `CHANGELOG.md`,
+  `README.md`, and the support level in the `tiny2lite` registry entry.
+- **Depends on:** W2.
+- **Acceptance without camera:** a workflow run produces the eight artifacts, and a listing
+  of each shows both binaries, the units, the completions and the schema; `makepkg` with its
+  `check()` passes without `XDG_RUNTIME_DIR` (the tests use a fake daemon on a temporary
+  socket); the evidence-level test of 8.5 passes for `tiny2lite`; the release candidate is
+  published.
+- **Acceptance with camera:** none (W4 runs on this candidate).
+
+**W4: live parity and release**
+
+- **Content (CS-2, Thomas present):** install the release candidate on the Arch desktop,
+  starting from the 0.13 state (socket disabled, the 0.13 daemon a child of the widget's
+  `watch`) and following the migration notes; run `check-model.sh` on the Tiny 2 Lite, with
+  `--destructive` last; map its results to every row of 9.1; widget 1.0 against the
+  candidate; the hardened unit starts, sees the camera, and handles hotplug.
+- **Owner files:** release PR (tracking table of 9.1 results), CHANGELOG.
+- **Depends on:** W3; D.
+- **Acceptance without camera:** none; this stage is the camera session.
+- **Acceptance with camera:** CAM-9, CAM-24, CAM-27, CAM-28 (and CAM-26 if a second unit is
+  at hand); every row of 9.1 verified or an exception of 9.2. A failing row is fixed or
+  becomes an exception, and a new candidate is built. Then the release follows 10.6.
+
+### 10.4 Critical path and camera sessions
+
+Critical path: G → W0 → A → CS-1 → W2 → W3 → W4 (CS-2). B, C and D run beside A; at most
+four tracks run in parallel. The camera is needed three times: CS-0 (end of G), CS-1 (track
+A) and CS-2 (W4). The Tiny 2 Lite is not available for tests at the moment; stages that need
+it wait for it, and everything else goes ahead.
+
+### 10.5 Milestones (proposal)
+
+This is a proposal only. No milestone is edited on GitHub before Thomas has seen this
+spec, and the plan is first reconciled with the audit's fix plan.
+
+- **0.14.0, groundwork:** stage G, with #47 and #61 (both in carried code; they land on
+  `main` before the move, as 10.1 requires, and ship with 0.14.0 unless a 0.13.x patch
+  ships them first).
+- **1.0.0, rebuild:** W0 to W4; #73 (target-box events, by the live topic `target`) and #89
+  (start pose, start settings and preset names in the state) move into it.
+- **0.15.0 (camera research) and 0.16.0 (other apps):** after 1.0, when a camera is at hand.
+- A second camera model never blocks 1.0; it is M4.
+
+### 10.6 Release day and "done"
+
+Release day, in this order:
+
+1. Widget 0.28.0 (the last 0.x release, with its upper bound) is out.
+2. The release candidate `v1.0.0-rc.N` is published and W4 has passed on it.
+3. `main` fast-forwards to `rebuild`; tag `v1.0.0`; the release workflow publishes the
+   packages; the mirror follows.
+4. Widget 1.0 is released after the tool, the same day. Its `plugin.json` requires
+   obsbot4linux ≥ 1.0. The plugin registry entry is updated.
+5. The 0.13.2 packages and widget 0.28.0 stay downloadable for rollback. The release notes
+   name them. Rollback beyond that is a fix forward.
+
+1.0 is done when:
+
+- every row of 9.1 is verified on the real Tiny 2 Lite or is an exception of 9.2;
+- CI is green with `fake-a`, `fake-b` and `unknown` running together;
+- the packages are proven by the release candidate (W3);
+- widget 1.0 is tested against the release candidate;
+- the migration notes are written;
+- both walk-throughs (8.4, 8.7) pass on this spec, and walk-through 2 runs in CI with the
+  `unknown` fake.
+
+## 11. Testing
+
+| Level              | What                                                                                                                                          | Where                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Camera bytes       | encoders and decoders against recorded exchanges on the replay transport; scripted answer-poll tests; angle conversions; send table; registry | `obsbot-device`, CI                   |
+| Descriptions       | trait conformance of every model and fake; stale test of `descriptions/`; the evidence-level test (8.5)                                       | `obsbot-device`, CI                   |
+| Protocol           | golden transcripts round-trip byte-equal; stale test of `schema/protocol-2.json`                                                              | `obsbot-proto`, CI, `makepkg check()` |
+| Daemon             | the named integration tests of track B, with `fake-a`, `fake-b` and `unknown` together                                                        | `obsbot4linuxd`, CI                   |
+| Client and CLI     | parsing, rendering snapshots, exit codes, end-to-end against an in-process fake daemon, the 9.1 rows against `fake-a`, completions stale test | `obsbot-proto`, `obsbot4linux`, CI    |
+| Live, device crate | `#[ignore]` tests behind an environment variable, sending only the send table                                                                 | `obsbot-device`, CS-1                 |
+| Real camera        | `scripts/check-model.sh` on the Tiny 2 Lite; every row of 9.1                                                                                 | W4 (CS-2)                             |
+| Mutation           | one pass over the carried modules                                                                                                             | stage G, recorded in its PR           |
+
+- Without `LISTEN_FDS` the daemon binds `OBSBOT4LINUX_SOCKET` or the default path. Tests run
+  `obsbot4linuxd::run(Config)` in-process on a temporary socket, in parallel, without
+  systemd and without `XDG_RUNTIME_DIR`. The fakes are deterministic.
+- Golden files cover protocol 2 and the descriptions. An intentional change updates them in
+  the same PR.
+- Mutation tests are not a 1.0 gate.
+
+## 12. Release and clients
+
+### 12.1 Packages
+
+- One package `obsbot4linux` with both binaries, the systemd user units, the bash and zsh
+  completions (installed to the standard completion directories) and
+  `/usr/share/obsbot4linux/protocol-2.json`.
+- Formats as today: Arch, deb, rpm and tarball, each for x86_64 and aarch64: eight
+  artifacts. aarch64 builds natively. There is no libudev dependency.
+- Packages do not enable the socket unit. The existing mirror stays.
+
+### 12.2 Migration notes
+
+The CHANGELOG of 1.0 carries the migration notes:
+
+- the command map (9.1) and the exceptions (9.2);
+- the upgrade steps: `systemctl --user daemon-reload`; end the old daemon
+  (`systemctl --user stop obsbot4linux.service`, or end the `obsbot4linux daemon` process
+  that `obsbot4linux watch` started, or log out); remove drop-ins whose `ExecStart` runs
+  `obsbot4linux daemon`; `systemctl --user enable --now obsbot4linux.socket`; update the
+  widget together with the tool and reload the shell that hosts it. Setups that never
+  enabled the socket (the default for widget users) have no daemon otherwise, because 1.0
+  clients no longer start one;
+- `$XDG_STATE_HOME/obsbot4linux/` (it held `state.json` and `daemon.log`) is no longer used
+  and can be deleted. Nothing is imported, and nothing set on the camera is lost: the camera
+  stores it.
+
+### 12.3 Widget
+
+Track D (section 10.3) defines widget 1.0 and the last 0.x release. Widget 1.0 settles
+values by `pending` and `rev`; this replaces its own hold of up to 3 s
+(obsbot4linux-dux#89). Its `plugin.json` requires obsbot4linux ≥ 1.0.
+
+### 12.4 Desktop app
+
+The desktop app (`obsbot4linux-desktop`, own repository, own spec) uses `obsbot-proto` (types
+and client). Before `v1.0.0` it builds against a local checkout; from then on it depends on
+a git tag ≥ `v1.0.0`. Like the widget, it gates every control on the description and shows
+the support markers.
+
+### 12.5 Versions
+
+All crates carry the workspace version. It follows SemVer for the `obsbot-proto` library API
+and for protocol 2: an additive change raises the minor version; a breaking change raises
+the protocol number and the major version.
+
+## 13. Later (not 1.0)
+
+- **M4:** the first captured second model (Tiny 3 or Tiny 3 Lite, whichever arrives),
+  through 8.7, plus what it shows the seam lacks.
+- **M5:** the device lease for the firmware updater (`busy` is reserved for it); whether the
+  updater joins the workspace, and the packaging of its udev rule.
+- A command catalogue, only once two real models show duplicated tables.
+- Models derived only from the vendor app's code are off the roadmap.
+- A generated UI (presentation metadata in the description), only with a consumer.
+- Live lists per device (1.0 has one list per connection).
+- User-given device names, additive, if two identical cameras ever meet.
+- More unit hardening (`ProtectSystem`, `PrivateUsers`, `DeviceAllow`), Arch first, each line
+  accepted only on the real unit.
+- Functions 1.0 does not offer: flipping the image, resetting the start pose, resetting the
+  zone area (each only after CAM-11 or CAM-12 shows that it works), uploading a sleep image.
+- Network cameras: a possibility only. An async client, if a client needs it.
+
+## 14. What only the camera can settle
+
+Nothing in this list is guessed in the meantime. Each item names the stage that needs it:
+G (CS-0), A (CS-1), W4 (CS-2), or M4 onboarding. A stage whose acceptance needs an item
+waits for the camera; work that does not need it goes ahead. Every item is answered
+without a frame outside the model's send table, with two exceptions: CAM-11 and CAM-12 need
+frames that are neither recorded nor sent by 0.13.2, so they wait for a recording of the
+vendor app sending them, or for Thomas' decision to try them; they gate nothing. CAM-21 and
+CAM-29 are recorded only if they happen and gate nothing.
+
+**Tiny 2 Lite**
+
+| CAM    | Question                                                                                                                                                                        | Stage                          | What the answer decides                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| CAM-1  | Does the serial query answer from Linux with 14 characters: awake, asleep, right after plug-in, after the microphone restart, after a factory reset? How long until it answers? | A                              | identity attempts (5.5) in practice                            |
+| CAM-2  | The `asleep` value of each setting and action; are writes to `audio.volume` and `focus.*` while asleep accepted and kept after wake?                                            | A                              | `asleep` fields                                                |
+| CAM-3  | Is `zoom.factor` ignored while asleep? Is the camera awake at plug-in? How long from wake (or stream start) until the status reports awake?                                     | A                              | `asleep` of `zoom.factor`; documentation                       |
+| CAM-4  | During a speed-limited `zoom.move`, does the zoom readback report the target or the current factor?                                                                             | A                              | text of `docs/protocol-2.md`                                   |
+| CAM-5  | `settle_ms` per leaf (measured so far: zone tracking 1–3 s, target lock about 1 s)                                                                                              | A                              | `settle_ms` per leaf                                           |
+| CAM-6  | Do `hand.move_gimbal` and `led.blink` survive sleep and wake, re-plug, factory reset?                                                                                           | A                              | the `readback:false` lifetime (wake added if they are dropped) |
+| CAM-7  | Does a running `gimbal.turn` stop when the camera falls asleep? Does it resume after wake?                                                                                      | A                              | documentation; the daemon's stop on sleep stays                |
+| CAM-8  | Is the USB audio interface absent on a cold plug with the microphone off? Does the status-block candidate follow the microphone?                                                | A                              | U-23                                                           |
+| CAM-9  | `factory_reset` while asleep; does the device return under the same `sn:` id?                                                                                                   | W4                             | `asleep` of `factory_reset`; parity row                        |
+| CAM-10 | How long do a cold read of all groups and a read of the 5 s tier take?                                                                                                          | A                              | documented `hello` latency; margin to `CLIENT_REPLY_TIMEOUT`   |
+| CAM-11 | Does the candidate command flip the image?                                                                                                                                      | none in 1.0 (see above)        | `image.flip` (additive, after 1.0)                             |
+| CAM-12 | Do the candidate commands reset the start pose and the zone area?                                                                                                               | none in 1.0 (see above)        | `power_on.reset`, a zone-area reset (additive, after 1.0)      |
+| CAM-13 | Order of `exposure.anti_flicker` and `exposure.mode` writes, in both directions                                                                                                 | A                              | apply order (8.8)                                              |
+| CAM-14 | After UVC autofocus off, is `focus.mode` `single` or `manual`?                                                                                                                  | A                              | rows `focus auto off`, `image autofocus 0`                     |
+| CAM-15 | Are the white-balance temperature and the absolute focus refused while their automatic control is on?                                                                           | A                              | confirms the `requires` rules (kept either way: a kernel rule) |
+| CAM-16 | Hand and zone area: a new range wholly beyond the stored one                                                                                                                    | A                              | U-8                                                            |
+| CAM-17 | `gimbal.move` with speed near the tilt limit and the speed ceiling; one axis with speed                                                                                         | A                              | U-9                                                            |
+| CAM-18 | `preset.delete`: which preset does its second (clearing) frame address? Does preset 0 change? (needs the vendor app as a second writer)                                         | A                              | the frames of `preset.delete`                                  |
+| CAM-19 | Preset read: does the list-rewind write have any effect? Can the vendor app's read path (slot list plus one pose query per slot) replace it?                                    | A                              | the preset read; the `touched` tier stays                      |
+| CAM-20 | While the camera boots, does the first field of the status block read 0 until it is ready?                                                                                      | A                              | if yes, a not-ready block counts as no read                    |
+| CAM-21 | Can the query channel go silent while the status block still reads? Observed only if it happens; nothing is sent to provoke it.                                                 | A, W4                          | a rule that ends a whole read early                            |
+| CAM-22 | What does the live-pose query answer while asleep? Do the go-return actions and the pose-taking actions act while asleep?                                                       | A                              | `asleep` of those actions                                      |
+| CAM-23 | Every row of 9.3                                                                                                                                                                | A                              | 9.3                                                            |
+| CAM-24 | Every row of 9.1 on the real unit: destructive rows last, tracking rows with a person in view                                                                                   | W4                             | release                                                        |
+| CAM-25 | The sysfs attributes of the camera's USB device and video nodes while plugged (read only: ids, descriptors, interface classes, node index)                                      | A                              | `enumeration`                                                  |
+| CAM-26 | Two cameras at once with stable USB paths                                                                                                                                       | W4 if a second unit is at hand | otherwise the fakes cover it                                   |
+| CAM-27 | The 1.0 user unit with `NoNewPrivileges=yes` on Arch: starts, sees the camera, handles hotplug                                                                                  | W4                             | release                                                        |
+| CAM-28 | Upgrade rehearsal from the 0.13 desktop state (socket disabled, daemon a child of the widget's `watch`) to 1.0 and widget 1.0, following 12.2                                   | W4                             | migration notes                                                |
+| CAM-29 | The kernel's UVC control timeout with an unresponsive camera. Never provoked; recorded if it happens.                                                                           | any session                    | `ANSWER_POLL` margin                                           |
+| CAM-30 | Smoke test of stage G: `status`, one setting set and read back, one gimbal move, `preset list`                                                                                  | G                              | release of 0.14.0                                              |
+| CAM-31 | Does the camera keep its USB product id when it renames itself or changes mode (#90)?                                                                                           | after 1.0                      | registry entries                                               |
+| CAM-32 | The status block of a real Tiny 2: do Tiny 2 and Tiny 2 Lite share the layout? (an unverified hypothesis today)                                                                 | when a Tiny 2 is at hand       | onboarding of the Tiny 2                                       |
+
+**Tiny 3 and Tiny 3 Lite** (stage M4, onboarding steps 0–2 and 7 on the unit in hand;
+everything here is unknown until captures)
+
+| CAM     | Question                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------- |
+| CAM-T1  | USB vendor and product ids of the unit, in every mode it shows; does one model show more than one product id? |
+| CAM-T2  | Is there a USB serial string? The serial format.                                                              |
+| CAM-T3  | Extension unit id and GUID, control count, buffer size per selector, video nodes, bcdDevice                   |
+| CAM-T4  | Interface classes (audio, serial, MTP); what a serial interface carries                                       |
+| CAM-T5  | Frame layout of requests and answers                                                                          |
+| CAM-T6  | The vendor app's connect sequence and idle poll (they define the identity source and the poll plan)           |
+| CAM-T7  | Status block: its length and the meaning of each field (one setting changed per step)                         |
+| CAM-T8  | Tracking readback layout; tracking-mode and tracking-speed values                                             |
+| CAM-T9  | The settings and actions the vendor app offers for the model, one recording each                              |
+| CAM-T10 | Does the identity query answer, also asleep and right after enumeration?                                      |
+| CAM-T11 | Which writes does the camera accept and ignore (readback or visible effect per field)?                        |
+| CAM-T12 | The auto-sleep "off" encoding; does a timer write disconnect USB? (one third-party report, unverified)        |
+| CAM-T13 | `settle_ms` and `asleep` behaviour per field (step 7)                                                         |
+
+## 15. Changes from revision 1
+
+One row per changed decision. **REVERSAL** marks a change to something Thomas approved on
+2026-11-01. "Source" names the decision of 2026-11-12 (a letter and number), or "writer"
+for a choice made while writing this revision from the review or the audit; each row can be
+overruled on its own. Decisions A1–A3 (`audio.pickup` merged into `audio.volume`, the hidden
+`gimbal center` not carried, `gimbal.turn` with `keep`) were confirmed as revision 1 proposed
+them and are not listed.
+
+| #   | Topic                             | Revision 1                                                                         | Revision 2                                                                                                                                                                                          | Why                                                                                        | Evidence (status)                                                                                                                                                | Source                                        |
+| --- | --------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 1   | **REVERSAL** Protocol typing      | typed `State`, `Patch`, `Action` with per-setting builders                         | typed envelopes and descriptions; state, patch and parameters are path → JSON value, checked at run time (4.1, 6.1)                                                                                 | typed builders need a proto release for every new setting                                  | the widget hard-codes 53 request sites (verified); new models bring settings the Lite lacks (unknown in detail until captures)                                   | C1                                            |
+| 2   | "No client change"                | literal, for all clients                                                           | guarantee A: no change to proto, client library or CLI; hand-made UIs update only to show new settings (1)                                                                                          | a hand-made UI cannot show a setting it does not know                                      | widget code (verified)                                                                                                                                           | C2                                            |
+| 3   | **REVERSAL** Crates               | five: proto, client, device, daemon, CLI                                           | four: the client is a module of `obsbot-proto` (3)                                                                                                                                                  | proto and client are always released together                                              | revision 1 dependency graph (verified)                                                                                                                           | C3                                            |
+| 4   | Schema artefacts                  | `schema/protocol-2.json` only; completions "from the schema"                       | protocol schema plus `descriptions/<model>.json`; the CLI embeds the real models' files for completion (3, 6.2)                                                                                     | path completion needs model data and the CLI must not depend on device code                | revision 1 contradiction (verified)                                                                                                                              | C4                                            |
+| 5   | `--device` completion             | completed live while the daemon runs                                               | not completed; Tab never contacts the daemon (6.2)                                                                                                                                                  | lean; no daemon contact from the shell                                                     | none: design choice                                                                                                                                              | writer                                        |
+| 6   | Device entry                      | `id, name, serial, model, firmware, video_node, available, limits{presets,views}`  | adds `support`, `usb` with the descriptor facts, `limits` per list path (4.2)                                                                                                                       | walk-through 2 and onboarding step 1 need them; `devices --report` prints `usb`            | walk-throughs 8.4, 8.7 (verified on paper)                                                                                                                       | C5; `usb` facts writer                        |
+| 7   | Description fields                | type, ranges, `readback`, `asleep`, `no_effect`                                    | adds `requires`, `warning`, `default`, `live`, `settle_ms`, `optional`; bounds per type; closed unit list (4.2)                                                                                     | dependencies, restarts, camera defaults and lag must be visible to generic clients         | 0.13 refuses exposure time unless manual (verified); the widget resets to UVC defaults (verified)                                                                | C6; `warning` on settings writer              |
+| 8   | Error codes                       | unknown path = `invalid`; `busy` also during restarts                              | adds `conflict`; a path not in the description = `unsupported`; `busy` = queue full only (4.1)                                                                                                      | a request the current state forbids had no code                                            | 0.13 refuses an empty preset slot (verified)                                                                                                                     | C7                                            |
+| 9   | **REVERSAL** `epoch`              | random `epoch` in the `hello` reply                                                | none; after any reconnect a client rebuilds from `hello` (4.1)                                                                                                                                      | it had no correct use                                                                      | none: design choice (a reconnect always rebuilds from `hello`)                                                                                                   | C8                                            |
+| 10  | Live list                         | `live:["pose"]`, pose only                                                         | live topics named in the description (`pose`, `target`, `auto`); volatile-only changes go only to subscribers (4.1 rule 8)                                                                          | auto-adjusted values would send an event every second                                      | 0.13 already suppresses them (verified)                                                                                                                          | C9                                            |
+| 11  | Serial in output                  | `--json` shortens the id; `devices --show-serial`                                  | `--json` and `watch` carry the full id; human output and logs shorten; `--show-serial` dropped (4.2, 6.2)                                                                                           | a shortened id cannot be passed back; one contract                                         | revision 1 contradiction (verified)                                                                                                                              | C10; `--show-serial` writer                   |
+| 12  | `--device` matching               | name first, then id                                                                | full id, a unique serial suffix of ≥ 4 characters, or a unique model key (6.2)                                                                                                                      | names are gone                                                                             | none: follows from row 15                                                                                                                                        | C10                                           |
+| 13  | **REVERSAL** Start mode "not set" | `power_on.start.mode` nullable, `none` = null                                      | the enum value `unset` (4.3)                                                                                                                                                                        | null now means "not read"                                                                  | the widget shows "Not set" for an unread start mode (verified)                                                                                                   | C11                                           |
+| 14  | **REVERSAL** `gimbal.step`        | an action for widget parity                                                        | dropped; the widget computes the target and sends `gimbal.move` (4.4)                                                                                                                               | the camera has no relative move; the base pose was undefined                               | the widget steps from its last target (verified)                                                                                                                 | C11                                           |
+| 15  | **REVERSAL** Names                | `device.rename`, `names.json`                                                      | none; the daemon keeps no file (2, 5.10)                                                                                                                                                            | serves two identical cameras nobody has                                                    | none: design choice                                                                                                                                              | C12                                           |
+| 16  | `image.reset`                     | an action for the widget's reset                                                   | dropped; the widget sends a patch of `default` values (4.4, 10.3 D)                                                                                                                                 | no camera command; which controls to reset is a product choice                             | the vendor app resets other controls than the widget (captured, capture 12)                                                                                      | writer                                        |
+| 17  | **REVERSAL** Hold timers          | "there are no hold timers"                                                         | `pending` (path → written value) with a per-leaf `settle_ms`, checked at poll ticks (4.1 rule 4)                                                                                                    | without it the old value flickers back after writes; the wait moves into one place         | readbacks lag 1–3 s (measured, #81); target lock about 1 s (measured)                                                                                            | D2, J2                                        |
+| 18  | Write path                        | read back "the affected group"; full read after each command                       | re-read only the touched groups; a batch shares one re-read; single-leaf coalescing (4.1 rule 9, 5.6)                                                                                               | a slider drag queued behind a full read per step                                           | 0.13.2 reads everything (about 1.4 s) after every command (verified)                                                                                             | D1                                            |
+| 19  | Stops                             | no rule; replies strictly in order                                                 | stops jump the queue and end a running group read (4.1 rule 2)                                                                                                                                      | a stop waited behind a long read                                                           | 0.13.2 behaviour (verified)                                                                                                                                      | D8                                            |
+| 20  | Deadlines                         | "the transport timeout carried over"                                               | named timeouts; 15 s request deadline; bounded outbound queue; at most 64 connections (5.8, 4.1)                                                                                                    | unbounded waits; a slow subscriber stalled replies                                         | 0.13.2 timeouts (verified)                                                                                                                                       | D9; 64 connections writer                     |
+| 21  | Asleep writes                     | `unknown` passed through                                                           | `unknown` written; a path whose readback cannot run asleep stays pending until wake (5.7)                                                                                                           | the write could never be confirmed                                                         | volume and focus readbacks do not answer asleep (0.13.2 behaviour, verified)                                                                                     | D3                                            |
+| 22  | Identity                          | 3 tries over about 10 s, also after wake; `port:` entries kept                     | sent at plug-in also asleep; 3 attempts with plug-in and the next two 5 s reads; one series after the first wake; serial format check; duplicate → `port:`; `port:` entries removed on unplug (5.5) | bounded, tied to existing reads; an id changes at most once                                | serial query asleep: unknown (CAM-1)                                                                                                                             | D4, J4; duplicates and `port:` removal writer |
+| 23  | Unknown devices                   | undefined; "read model and serial" for every device                                | listed `unsupported`, nothing sent, `devices --report` (5.4, 8.4)                                                                                                                                   | any frame to an unknown device is a probe                                                  | a blind query scan broke the query channel once (measured)                                                                                                       | D5                                            |
+| 24  | **REVERSAL** Hotplug              | a udev monitor                                                                     | a sysfs scan once a second, no libudev, no netlink (5.3)                                                                                                                                            | no C dependency; 0.13 already rescans every second                                         | 0.13.2 daemon (verified)                                                                                                                                         | D6                                            |
+| 25  | Start-up                          | undefined                                                                          | `hello` answered after the first enumeration; a device announced after its first read (5.2)                                                                                                         | a socket-activated `status` saw no camera                                                  | revision 1 gap (verified)                                                                                                                                        | D7                                            |
+| 26  | Single instance                   | lock at `$XDG_RUNTIME_DIR/obsbot4linux.lock`; turn stops on shutdown               | lock at `<socket path>.lock` for every daemon; a clean shutdown stops a turn best effort; a crash leaves the camera (5.9)                                                                           | test daemons collided; the 0.13 daemon uses the same lock name                             | 0.13.2 lock (verified)                                                                                                                                           | D10                                           |
+| 27  | **REVERSAL** Hardening            | `NoNewPrivileges`, `ProtectSystem`, `DeviceAllow`, tested on Arch and Ubuntu 24.04 | `NoNewPrivileges=yes` only; the rest after 1.0 (5.10)                                                                                                                                               | independent of the rebuild and costly to accept                                            | in user units these lines imply `PrivateUsers` (verified, systemd documentation); no run on the real unit yet (verified)                                         | D11                                           |
+| 28  | **REVERSAL** Mutation tests       | a stage-5 gate on device and proto                                                 | one pass over the carried code in stage G; no 1.0 gate (10.2, 11)                                                                                                                                   | they test carried code, which moves first                                                  | seven sign-flip mutants survive in the carried code (verified)                                                                                                   | D11                                           |
+| 29  | Daemon start                      | "nothing needs re-enabling"                                                        | socket only; packages enable nothing; exit 4 prints the enable line; an older daemon is detected (5.10, 12.2)                                                                                       | default widget setups run the daemon as a child of `watch` with the socket disabled        | the owner's desktop (verified)                                                                                                                                   | D12                                           |
+| 30  | 0.13 state files                  | the daemon deletes `state.json`; the guide promised an import                      | the daemon touches no file; the migration notes say the directory can be deleted (12.2)                                                                                                             | "keeps no file at all"; no import exists                                                   | revision 1 contradiction (verified)                                                                                                                              | writer (C12)                                  |
+| 31  | Never-send                        | a deny-list of two ids                                                             | a per-model send table checked in the transport, plus refused classes; no raw path (8.3)                                                                                                            | a deny-list protects only against the ids it names                                         | verified                                                                                                                                                         | E1                                            |
+| 32  | Public text                       | text that 8.5 does not allow                                                       | only what 8.5 allows; evidence by level and opaque key                                                                                                                                              | the repository is public                                                                   | verified                                                                                                                                                         | E2, J8                                        |
+| 33  | **REVERSAL** Fakes                | `--fake N`: N identical Tiny 2 Lites with test-only actions                        | `fake-a`, `fake-b` (deliberately different), `unknown`; test control on a second socket (5.12)                                                                                                      | mixed models and unknown devices were never tested                                         | revision 1's fakes cannot exercise mixed models or an unknown device (verified)                                                                                  | F1–F3                                         |
+| 34  | **REVERSAL** M4 and the catalogue | M4 = TOML catalogue plus a model derived from the vendor app                       | no catalogue; models only with a unit and captures; M4 = the first captured second model (8.7, 13)                                                                                                  | "common commands" cannot be assumed                                                        | the vendor app treats models differently in many functions (verified); identity-query loops linked to USB drops on a Tiny 3 (one third-party report, unverified) | B3, B4, B5, J7                                |
+| 35  | Tiny 3 family                     | –                                                                                  | two models, two modules; nothing built before a unit is at hand; every device fact unknown until captures (8.9)                                                                                     | the two differ in the vendor app                                                           | verified for the vendor app; unknown for the devices                                                                                                             | B5, J1                                        |
+| 36  | Registry key                      | "its USB id"                                                                       | USB (vendor id, product id) pairs, several per model; a vendor table of measured ids only (8.1)                                                                                                     | a model may have several product ids                                                       | none: design choice                                                                                                                                              | B6                                            |
+| 37  | Extension unit                    | unit 2 hard-coded                                                                  | found by GUID in the USB descriptor, read-only (8.3)                                                                                                                                                | no per-model constant, no request                                                          | the descriptor holds unit and GUID (captured, capture 01)                                                                                                        | B7                                            |
+| 38  | Model seam                        | one sentence; the daemon section named Lite ids and tiers                          | three layers in `obsbot-device`; a path-keyed `trait Camera`; the daemon names no id (3.1, 5, 8.2)                                                                                                  | per-model data plus per-model flows; a daemon that knows the Lite cannot run another model | about 83 family-generic and 64 Lite-specific knowledge items in the carried code (verified count)                                                                | B1, B2                                        |
+| 39  | Live pose query                   | the poll tier named the query that arms the zone switch                            | the model uses `0x0043`; the daemon names no query (8.8)                                                                                                                                            | that query arms the switch to static after a zone return                                   | #67 (measured)                                                                                                                                                   | B2 (writer)                                   |
+| 40  | **REVERSAL** (partial) Delivery   | a long-lived `rebuild` branch, five serial stages                                  | stage G first (released as 0.14.0 from `main`); W0, four parallel tracks, W2, W3, W4 (10)                                                                                                           | 64 % of the lines are carried; fixes would land twice; packaging first ran on the tag      | line count (verified)                                                                                                                                            | H1, H2, J5                                    |
+| 41  | CI on `rebuild`                   | assumed                                                                            | `ci.yml` and a ruleset for `rebuild` before its first PR (10.1)                                                                                                                                     | PRs into `rebuild` ran no CI                                                               | GitHub settings (verified)                                                                                                                                       | J5                                            |
+| 42  | Widget channel                    | undefined; `watch` relayed requests in 0.13                                        | the widget speaks protocol 2 on the socket; `watch` prints events; `relay` as fallback (6.2, 10.3 D)                                                                                                | one contract; no protocol-1 adapter                                                        | a socket type in the shell's runtime: unknown                                                                                                                    | H3                                            |
+| 43  | Release day                       | widget and tool the same day                                                       | widget 0.28.0 with an upper bound first; a release candidate; a "done" list (10.6)                                                                                                                  | widget 0.27 would accept 1.0 and fail at run time                                          | widget start-up check (verified)                                                                                                                                 | H4                                            |
+| 44  | Milestones                        | 0.14.0–0.16.0 on `main` as planned on 2026-10-31                                   | a proposal: 0.14.0 = groundwork, #73 and #89 into 1.0, 0.15.0 and 0.16.0 after 1.0 (10.5)                                                                                                           | the groundwork release carries the carried-code fixes                                      | none: planning choice                                                                                                                                            | H5, J6                                        |
+| 45  | Desktop app dependency            | git tag; shell starts after stage 1                                                | a local checkout before `v1.0.0`, a git tag ≥ `v1.0.0` after; SemVer rules (12.4, 12.5)                                                                                                             | no tag exists before 1.0                                                                   | no tag exists before `v1.0.0` (verified)                                                                                                                         | H6; checkout writer                           |
+| 46  | Evidence rule                     | "every function of 0.13 stays"                                                     | only backed fields are offered; unbacked Lite fields are checked or become named exceptions (9.3)                                                                                                   | the two rules collided for fields without backing                                          | ledger levels (verified)                                                                                                                                         | J3                                            |
+| 47  | Parity script                     | `check-parity.sh`, set → read back → restore for every row                         | `check-model.sh` from the description, `--device`, destructive rows last, restore by trap (9.4)                                                                                                     | not every row can be restored; a second model has no 0.13 rows                             | 0.13's readback script restores incompletely (verified)                                                                                                          | writer                                        |
+| 48  | `image.gamma`                     | a path, "incl. gamma"                                                              | removed; PX-2                                                                                                                                                                                       | the camera has no gamma control                                                            | the recorded UVC descriptor (captured)                                                                                                                           | writer                                        |
+| 49  | Exposure compensation             | `image.backlight_compensation`; "a guess"                                          | `exposure.compensation`, the raw value 0–18, default 9; EV only after U-20                                                                                                                          | the vendor app's exposure compensation writes this control; its scale is inferred          | captured, capture 12; the 1/3 EV step unverified                                                                                                                 | writer                                        |
+| 50  | Anti-flicker                      | `auto` writable                                                                    | `auto` read-only; no `default` (4.3)                                                                                                                                                                | the kernel driver offers 0–2 on this camera                                                | kernel driver (verified); the camera reports `auto` (measured)                                                                                                   | writer                                        |
+| 51  | Sleep background                  | `black\|image`                                                                     | values add `own_image` (read-only)                                                                                                                                                                  | the camera reports it after an upload                                                      | measured                                                                                                                                                         | writer                                        |
+| 52  | `gimbal.move`                     | `pan` and `tilt` required                                                          | either may be missing; the camera keeps that axis (4.4)                                                                                                                                             | a pan-only move pulled a stale tilt                                                        | 0.13.2 behaviour (verified); the keep value (captured)                                                                                                           | writer                                        |
+| 53  | Current pose                      | only `preset.save` and `view.save` named the live pose                             | every pose-taking action uses the live pose and is refused while asleep until CAM-22 (4.4)                                                                                                          | 0.13 used a remembered or V4L2 pose                                                        | 0.13.2 code (verified)                                                                                                                                           | writer                                        |
+| 54  | Target box                        | layout an open point; read every second                                            | layout settled; box changes go to the live topic `target` (4.3)                                                                                                                                     | the layout was checked over the preview                                                    | #71 (measured)                                                                                                                                                   | writer, C9                                    |
+| 55  | Preset read                       | in the 60 s tier                                                                   | at plug-in and after the actions that change presets (`touched`, 8.8)                                                                                                                               | the read writes to the camera; the vendor app never does                                   | captured (no such write in any recording)                                                                                                                        | writer                                        |
+| 56  | `do wake`                         | replies once the status reports awake                                              | replies on acceptance; the state shows `asleep` (4.4)                                                                                                                                               | an unbounded wait in the worker                                                            | wake time unknown (CAM-3)                                                                                                                                        | writer                                        |
+| 57  | Null and unread                   | `null` only for `nullable`                                                         | `unread` leaf paths, `raw:<n>` values, `readback:false` lifetime per availability (4.2)                                                                                                             | "not set" and "not read" were indistinguishable                                            | 0.13 widget shows "Not set" for unread values (verified)                                                                                                         | writer                                        |
+| 58  | `audio.enabled`                   | no readback; `busy` during the restart after "off"                                 | readback from the USB audio interface; restart on both values; reply on acceptance (4.3, 4.4)                                                                                                       | the restart is hotplug; a sysfs fact is camera state                                       | the interface follows the toggle (measured); restart on both values (measured)                                                                                   | writer, C7                                    |
+| 59  | Value details                     | zoom-move speed a raw integer; exposure time "steps in 100 µs"                     | zoom-move speed `slow\|medium\|fast`; no step promise for exposure time; zoom ratio precision 0.1; `sleep.auto.seconds` 1–32767; values rounded at the source                                       | only known values are offered; the readback limits precision                               | 0.13.2 code (verified)                                                                                                                                           | writer                                        |
+| 60  | Write order                       | anti-flicker before manual, citing a 0.13 function                                 | `requires` paths first; tracking mode before framing; the anti-flicker order is CAM-13 (8.8)                                                                                                        | the cited function has no such step                                                        | 0.13.2 code (verified)                                                                                                                                           | writer                                        |
+| 61  | On air                            | `{active, apps[]}`                                                                 | one sample; a client's own preview counts; kernel note (4.3)                                                                                                                                        | 0.13 read the two at different moments                                                     | 0.13.2 code and kernel source (verified)                                                                                                                         | writer                                        |
+| 62  | `available`                       | from hotplug                                                                       | only from enumeration; a failed read never flips it (5.3)                                                                                                                                           | 0.13 reported "camera gone" for one failed tick                                            | 0.13.2 daemon (verified)                                                                                                                                         | writer                                        |
+| 63  | Poll intervals                    | carried from 0.13                                                                  | counted from the end of the previous read (5.7)                                                                                                                                                     | a slow read starved the 1 s tier                                                           | 0.13.2 daemon (verified)                                                                                                                                         | writer                                        |
+| 64  | `view.save` name                  | optional                                                                           | required, as in 0.13 (4.4)                                                                                                                                                                          | 0.13 requires it; the camera's default is not recorded                                     | 0.13.2 code (verified)                                                                                                                                           | writer                                        |
+| 65  | Untested models                   | marked UNTESTED in docs                                                            | a `support` field; no destructive actions; never called supported (8.6)                                                                                                                             | a field was missing                                                                        | none: design choice                                                                                                                                              | C5, writer                                    |
+| 66  | `--json` errors                   | not defined for usage errors                                                       | `{"error":{"code","message"}}` on stdout, exit 2 (6.2)                                                                                                                                              | clap printed text                                                                          | 0.13.2 CLI (verified)                                                                                                                                            | writer                                        |
+| 67  | Licence note                      | names the project the code came from                                               | a general rule: the EUPL note follows the code into every file (3.3)                                                                                                                                | split and copied code must keep it                                                         | none: licence obligation                                                                                                                                         | writer                                        |
