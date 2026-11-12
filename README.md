@@ -441,13 +441,15 @@ units, `obsbot4linux watch` starts a daemon itself.
 
 If the DMS widget already runs, it has started such a daemon, and it holds the socket path.
 `enable --now` then lets systemd bind its own socket at that path, and the old daemon keeps
-running next to it. Enable the socket before the widget starts, or end the widget's daemon right
-after `enable --now`: `systemctl --user restart dms.service` when DMS runs as a user unit,
-otherwise log out and in.
+running next to it. Enable the socket before the widget starts. With the widget already running,
+end its daemon right after `enable --now`: `systemctl --user restart dms.service` when DMS runs
+as a user unit, otherwise end that daemon by hand.
 
-A daemon keeps running the binary it started from, so after upgrading the package restart it:
-`systemctl --user restart obsbot4linux.service`. A daemon started by `watch` ends with the
-shell's unit (`systemctl --user restart dms.service`) or at logout, not when the widget reloads.
+A daemon keeps running the binary it started from, so after upgrading the package restart it.
+With the socket enabled: `systemctl --user restart obsbot4linux.service`. A daemon started by
+`watch` is not part of that unit; it ends with the shell's unit
+(`systemctl --user restart dms.service`) or when your system kills the user's processes at
+logout, not when the widget reloads.
 
 From the tarball, put the binary on your `PATH` and copy `systemd/*` to `~/.config/systemd/user/`. The service runs
 `/usr/bin/obsbot4linux`; for a binary elsewhere, `systemctl --user edit obsbot4linux.service`
