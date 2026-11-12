@@ -18,6 +18,15 @@
       "matchStrings": ["arch_image:\\s*(?<depName>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"],
       "datasourceTemplate": "docker",
       "currentValueTemplate": "latest"
+    },
+    {
+      "customType": "regex",
+      "description": "Tools installed with cargo install --locked in the release workflow",
+      "managerFilePatterns": ["/^\\.github/workflows/release\\.yml$/"],
+      "matchStrings": [
+        "cargo install --locked (?<depName>[a-z0-9_-]+)@(?<currentValue>[0-9][0-9.]*)"
+      ],
+      "datasourceTemplate": "crate"
     }
   ],
   "packageRules": [
@@ -38,6 +47,12 @@
       "matchDatasources": ["docker"],
       "groupName": "container images",
       "groupSlug": "container-images"
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["crate"],
+      "groupName": "release tooling",
+      "groupSlug": "release-tooling"
     },
     {
       "matchUpdateTypes": ["major"],

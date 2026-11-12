@@ -22,12 +22,6 @@ else
   source=("$pkgname::git+file://$(realpath "$startdir/../..")")
   sha256sums=('SKIP')
   _src="$pkgname"
-
-  pkgver() {
-    cd "$_src"
-    printf '%s.r%s.g%s' "$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" \
-      "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-  }
 fi
 
 prepare() {
