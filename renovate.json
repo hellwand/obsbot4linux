@@ -3,7 +3,7 @@
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "timezone": "Europe/Berlin",
   "schedule": ["* 0-5 * * 1"],
-  "dependencyDashboard": true,
+  "dependencyDashboard": { "enabled": true },
   "automerge": false,
   "enabledManagers": ["cargo", "github-actions", "custom.regex"],
   "lockFileMaintenance": {
@@ -26,7 +26,8 @@
       "matchStrings": [
         "cargo install --locked (?<depName>[a-z0-9_-]+)@(?<currentValue>[0-9][0-9.]*)"
       ],
-      "datasourceTemplate": "crate"
+      "datasourceTemplate": "crate",
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [

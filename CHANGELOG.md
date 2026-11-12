@@ -8,7 +8,7 @@ All notable changes to OBSBot4Linux. The format follows
 ### Fixed
 
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
-  leaves the repository clean; a local build is labelled with the release version.
+  leaves the repository clean; a local build is labelled with the release version (#120).
 
 ## [0.13.2] - 2026-10-31
 
