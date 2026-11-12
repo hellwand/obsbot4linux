@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>obsbot4linux: control OBSBOT webcams on Linux</title>
+    <meta
+      name="description"
+      content="Unofficial open-source tools to control the OBSBOT Tiny 2 Lite webcam on Linux: AI tracking, gimbal, zoom, presets, picture, audio and sleep, from the command line and from a desktop widget. Packages for Debian, Ubuntu, Fedora, openSUSE and Arch."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="canonical" href="https://hellwand.github.io/obsbot4linux/" />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:title"
+      content="obsbot4linux: control OBSBOT webcams on Linux"
+    />
+    <meta
+      property="og:description"
+      content="Unofficial open-source tools for the OBSBOT Tiny 2 Lite on Linux: a command-line tool with a background service, and a desktop widget."
+    />
+    <meta
+      property="og:url"
+      content="https://hellwand.github.io/obsbot4linux/"
+    />
+    <meta
+      property="og:image"
+      content="https://hellwand.github.io/obsbot4linux/assets/widget-popout.png"
+    />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="assets/geist-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <div class="wrap bar">
+        <a class="brand" href="./">
+          <img src="assets/favicon.svg" alt="" width="28" height="28" />
+          <span>obsbot4linux</span>
+        </a>
+        <nav aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#cameras">Cameras</a>
+          <a href="#install">Install</a>
+          <a href="#widget">Widget</a>
+          <a href="#links">Links</a>
+          <a href="https://github.com/hellwand/obsbot4linux">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-h">
+        <div class="wrap">
+          <p class="eyebrow">Unofficial, open source, for Linux</p>
+          <h1 id="hero-h">Control your OBSBOT webcam on Linux.</h1>
+          <p class="lead">
+            Switch AI tracking, move the gimbal, zoom, save presets and adjust
+            picture, sound and sleep, from the terminal or from your desktop
+            bar. Video calls and other apps keep streaming while you change
+            settings.
+          </p>
+          <p class="cta">
+            <a class="btn primary" href="#install">Install</a>
+            <a class="btn" href="#cameras">Supported cameras</a>
+          </p>
+          <p class="note">
+            Tested with the OBSBOT Tiny 2 Lite. Not affiliated with OBSBOT.
+          </p>
+
+          <ul class="pair" aria-label="What you get">
+            <li>
+              <h2 class="h3">Command-line tool and service</h2>
+              <p>
+                <code>obsbot4linux</code> changes every setting from the
+                terminal, with JSON output for scripts. A small background
+                service keeps the camera's state and shares it with every app
+                that asks. Works on any Linux desktop.
+              </p>
+            </li>
+            <li>
+              <h2 class="h3">
+                Desktop widget <span class="name">OBSBOT Control</span>
+              </h2>
+              <p>
+                A bar widget, desktop widget and Control Center tile for the Dux
+                (DankMaterialShell) desktop shell, with a live preview. It uses
+                <code>obsbot4linux</code> underneath.
+                <a href="#widget">About the widget</a>
+              </p>
+            </li>
+          </ul>
+
+          <figure class="shot hero-shot">
+            <img
+              src="assets/widget-popout.png"
+              width="920"
+              height="718"
+              alt="The OBSBOT Control widget's popout in a dark theme: the header shows Tiny 2 Lite, Awake, Normal Tracking; on the left a preview area with a Start preview button and framing controls with arrows and a zoom slider; on the right the Tracking tab with tracking mode buttons, the speed choice and a Follow new targets switch."
+            />
+            <figcaption>
+              The widget's popout with the preview off. Screenshot by the
+              maintainer.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="features" aria-labelledby="features-h">
+        <div class="wrap">
+          <h2 id="features-h">What you can do</h2>
+          <p class="sub">
+            Everything below works from the command line; the widget offers it
+            with buttons and sliders.
+          </p>
+          <ul class="cards">
+            <li>
+              <h3>Tracking modes</h3>
+              <p>
+                Static, normal tracking, upper body, close-up, headless, lower
+                body, hand and group. Choose the tracking speed, which hand to
+                follow, and the area hand tracking works in.
+              </p>
+            </li>
+            <li>
+              <h3>Framing and zoom</h3>
+              <p>
+                Zoom from 1&times; to 4&times;, at once or smoothly. Set the
+                field of view and how the automatic framing follows you: shot
+                size, zoom speed, offset and which part of the body stays in
+                frame.
+              </p>
+            </li>
+            <li>
+              <h3>Gimbal and presets</h3>
+              <p>
+                Point the camera with pan and tilt, optionally at a set speed.
+                Save, rename, recall and delete the three presets stored in the
+                camera, plus named views. Choose the pose and tracking mode the
+                camera starts with.
+              </p>
+            </li>
+            <li>
+              <h3>Zone tracking</h3>
+              <p>
+                Limit tracking to an area, set the position the camera returns
+                to when you leave it, and decide whether it then follows the
+                next person.
+              </p>
+            </li>
+            <li>
+              <h3>Picture and exposure</h3>
+              <p>
+                HDR, automatic exposure for the whole picture or for faces, or
+                manual shutter time and gain. Brightness, contrast, saturation,
+                sharpness and backlight compensation, mirror and invert.
+              </p>
+            </li>
+            <li>
+              <h3>Audio</h3>
+              <p>
+                Microphone volume, noise reduction, pickup distance, automatic
+                gain, and whether the microphone stays on while the camera
+                sleeps.
+              </p>
+            </li>
+            <li>
+              <h3>Sleep and device</h3>
+              <p>
+                Sleep and wake, an automatic sleep timer and the picture shown
+                while asleep. Status LED brightness and blinking, gesture
+                control and its zoom ratio, and a factory reset.
+              </p>
+            </li>
+            <li>
+              <h3>On-air indicator</h3>
+              <p>
+                See whether an app is streaming from the camera and, where it can
+                tell, which one: a browser, OBS or ffmpeg. The widget shows a red
+                dot in the bar.
+              </p>
+            </li>
+            <li>
+              <h3>Made for scripts</h3>
+              <p>
+                Every command prints JSON with <code>--json</code>.
+                <code>obsbot4linux watch</code> streams every state change as
+                JSON lines, and <code>obsbot4linux detect</code> tells whether a
+                supported camera is plugged in.
+              </p>
+            </li>
+          </ul>
+          <p class="sub">
+            No account and no cloud: the tools talk to the camera and to apps on
+            your own computer, nothing else.
+          </p>
+        </div>
+      </section>
+
+      <section id="cameras" aria-labelledby="cameras-h">
+        <div class="wrap">
+          <h2 id="cameras-h">Supported cameras</h2>
+          <p class="sub">
+            One model is supported today. A model is listed here only once
+            someone has tested it on a real camera.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Camera</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Tiny 2 Lite</th>
+                  <td><span class="status ok">Tested</span></td>
+                  <td>Firmware 6.2.8.1</td>
+                </tr>
+                <tr>
+                  <th scope="row">Other models</th>
+                  <td><span class="status no">Not supported yet</span></td>
+                  <td>Needs an owner to test</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card ask">
+            <h3>Tell us which camera you have</h3>
+            <p>
+              If you own another OBSBOT model and can help test it,
+              <a
+                href="https://github.com/hellwand/obsbot4linux/issues/new?title=Camera%20support%3A%20%3Cmodel%3E&amp;body=Model%3A%20%0A%0AThe%20camera%27s%20line%20from%20%60lsusb%60%3A%20%0A%0ADistribution%3A%20%0A"
+                >open an issue</a
+              >
+              with the model name and the camera's line from <code>lsusb</code>.
+              Please do not attach logs or recordings to a public issue: they
+              can contain your camera's serial number.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" aria-labelledby="install-h">
+        <div class="wrap">
+          <h2 id="install-h">Install</h2>
+          <p class="sub">
+            Packages for x86_64 and ARM64 are attached to every
+            <a href="https://github.com/hellwand/obsbot4linux/releases/latest"
+              >release</a
+            >, together with <code>SHA256SUMS</code>. Set <code>VER</code> once,
+            then use the lines for your system:
+          </p>
+          <pre
+            class="ver"
+          ><code>VER=0.13.2   # latest release, 2026-10-31
+DL=https://github.com/hellwand/obsbot4linux/releases/download/v$VER</code></pre>
+          <div class="grid2 install">
+            <article class="card">
+              <h3>Debian, Ubuntu</h3>
+              <pre><code>curl -LO $DL/obsbot4linux_${VER}_amd64.deb
+sudo apt install ./obsbot4linux_${VER}_amd64.deb</code></pre>
+              <p>
+                On ARM64 the file is <code>obsbot4linux_${VER}_arm64.deb</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Fedora, openSUSE</h3>
+              <pre><code>curl -LO $DL/obsbot4linux-$VER-1.x86_64.rpm
+sudo dnf install ./obsbot4linux-$VER-1.x86_64.rpm</code></pre>
+              <p>
+                On openSUSE use <code>sudo zypper install</code>. On ARM64 the
+                file is <code>obsbot4linux-$VER-1.aarch64.rpm</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Arch Linux, Arch Linux ARM</h3>
+              <pre><code>curl -LO $DL/obsbot4linux-$VER-1-x86_64.pkg.tar.zst
+sudo pacman -U obsbot4linux-$VER-1-x86_64.pkg.tar.zst</code></pre>
+              <p>
+                On ARM64 the file is
+                <code>obsbot4linux-$VER-1-aarch64.pkg.tar.zst</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Other distributions</h3>
+              <pre><code>curl -LO $DL/obsbot4linux-$VER-x86_64-linux.tar.gz
+tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz</code></pre>
+              <p>
+                The tarball (<code>aarch64</code> for ARM64) holds the binary
+                and the systemd user units. Put the binary on your
+                <code>PATH</code> and copy <code>systemd/*</code> to
+                <code>~/.config/systemd/user/</code>. If the binary is not in
+                <code>/usr/bin</code>, point the service at it as the
+                <a href="https://github.com/hellwand/obsbot4linux#install"
+                  >README</a
+                >
+                shows.
+              </p>
+            </article>
+          </div>
+          <div class="card enable">
+            <h3>Then, once: switch on the background service</h3>
+            <pre><code>systemctl --user enable --now obsbot4linux.socket</code></pre>
+            <p>
+              The packages install the program and the user units but do not
+              enable anything. The socket starts the service when the first app
+              connects. Try it with <code>obsbot4linux status</code>.
+            </p>
+          </div>
+          <p class="sub">
+            There is no package repository yet: to update, install the package
+            of the next release. To build from source you need Rust 1.88 or
+            newer; see the
+            <a href="https://github.com/hellwand/obsbot4linux#install">README</a
+            >.
+          </p>
+        </div>
+      </section>
+
+      <section id="widget" aria-labelledby="widget-h">
+        <div class="wrap">
+          <h2 id="widget-h">The desktop widget: OBSBOT Control</h2>
+          <p class="sub">
+            A plugin for the Dux (DankMaterialShell) desktop shell. It shows
+            only the controls your camera supports, and changes made from the
+            terminal show up in the widget at once.
+          </p>
+          <div class="grid2">
+            <article class="card">
+              <h3>What it adds</h3>
+              <ul class="plain">
+                <li>
+                  A bar icon: click to open the controls, right-click to sleep
+                  or wake, middle-click to switch tracking, scroll to zoom. A
+                  red dot shows when an app is streaming.
+                </li>
+                <li>
+                  A popout with a live preview, framing arrows and tabs for
+                  tracking, picture and device settings. You can rearrange its
+                  cards.
+                </li>
+                <li>
+                  A desktop widget with the preview, tracking modes, zoom,
+                  presets and sleep.
+                </li>
+                <li>
+                  A Control Center tile for sleep, wake and tracking mode.
+                </li>
+              </ul>
+            </article>
+            <article class="card">
+              <h3>What it needs</h3>
+              <ul class="plain">
+                <li>Dux (DankMaterialShell) 2.0 or newer.</li>
+                <li>
+                  <code>obsbot4linux</code> 0.7.3 or newer on your
+                  <code>PATH</code>, installed as above. The widget checks this
+                  when you enable it.
+                </li>
+                <li>
+                  <code>qt6-multimedia</code> for the live preview. Without it
+                  every other control still works.
+                </li>
+              </ul>
+            </article>
+          </div>
+          <div class="card enable">
+            <h3>Install the widget</h3>
+            <p>
+              Install <strong>OBSBOT Control</strong> from the DMS plugin
+              browser, or by hand:
+            </p>
+            <pre><code>git clone https://github.com/hellwand/obsbot4linux-dux.git \
+    ~/.config/dms/plugins/obsbot4linuxDux
+dms ipc call plugins enable obsbot4linuxDux</code></pre>
+            <p>
+              Then add the <code>obsbot4linuxDux</code> widget to a bar in the
+              DMS settings. Update it with
+              <code>dms plugins update obsbot4linuxDux</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="links" aria-labelledby="links-h">
+        <div class="wrap">
+          <h2 id="links-h">Status and links</h2>
+          <p class="sub">
+            <strong>Pre-1.0, single maintainer.</strong> Read the changelog
+            before updating. Version 1.0 is being designed in the
+            <a href="https://github.com/hellwand/obsbot4linux">repository</a>.
+          </p>
+          <ul class="links">
+            <li>
+              <a href="https://github.com/hellwand/obsbot4linux"
+                >obsbot4linux repository</a
+              ><span>source and full command reference</span>
+            </li>
+            <li>
+              <a href="https://github.com/hellwand/obsbot4linux/releases"
+                >obsbot4linux releases</a
+              ><span>packages and release notes</span>
+            </li>
+            <li>
+              <a
+                href="https://github.com/hellwand/obsbot4linux/blob/main/CHANGELOG.md"
+                >obsbot4linux changelog</a
+              ><span>every change, release by release</span>
+            </li>
+            <li>
+              <a href="https://github.com/hellwand/obsbot4linux-dux"
+                >Widget repository</a
+              ><span>OBSBOT Control for Dux</span>
+            </li>
+            <li>
+              <a href="https://github.com/hellwand/obsbot4linux-dux/releases"
+                >Widget releases</a
+              ><span>release notes</span>
+            </li>
+            <li>
+              <a
+                href="https://github.com/hellwand/obsbot4linux-dux/blob/main/CHANGELOG.md"
+                >Widget changelog</a
+              ><span>every change, release by release</span>
+            </li>
+            <li>
+              <a href="https://github.com/hellwand/obsbot4linux/issues"
+                >Issues</a
+              ><span>bugs, ideas and camera requests</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>
+          OBSBOT is a trademark of its owner. obsbot4linux and OBSBOT Control
+          are independent, unofficial community tools and are not affiliated
+          with, endorsed by or sponsored by OBSBOT. The name is used only to say
+          which cameras the tools work with.
+        </p>
+        <p>
+          Both are licensed under the
+          <a href="https://github.com/hellwand/obsbot4linux/blob/main/LICENSE"
+            >GNU General Public License v3.0 or later</a
+          >. The Tiny 2 Lite support builds on work from
+          <a href="https://github.com/OpenFoxes/Tiny4Linux">Tiny4Linux</a>.
+        </p>
+        <p>
+          Built with <a href="https://claude.com/claude-code">Claude Code</a>;
+          the maintainer sets direction, reviews and tests on a real Tiny 2
+          Lite. Font: Geist, <a href="assets/geist-OFL.txt">SIL OFL 1.1</a>.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

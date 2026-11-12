@@ -1,0 +1,492 @@
+/* obsbot4linux project page. Same layout and type as the TasmoFleet page (hellwand.github.io/tasmofleet/),
+   with its own accent: the amber of the OBSBOT Control widget. Light and dark by prefers-color-scheme.
+   Contrast of every text colour against its backgrounds is at least 4.5:1 in both modes. */
+@font-face {
+  font-family: "Geist";
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("assets/geist-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("assets/geist-mono-latin.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f8;
+  --surface: #fff;
+  --surface-2: #eceef3;
+  --border: #d9dde6;
+  --text: #151924;
+  --text-2: #4a5266;
+  --accent: #b85200;
+  --accent-hover: #8f4000;
+  --accent-fg: #a64a00;
+  --on-accent: #fff;
+  --ok-bg: #e3f3e8;
+  --ok-fg: #1d6b3a;
+  --no-bg: #fbf0d9;
+  --no-fg: #7a4b00;
+  --shadow:
+    0 14px 44px rgba(20, 26, 44, 0.14), 0 2px 6px rgba(20, 26, 44, 0.06);
+  --font: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1220;
+    --surface: #171b2b;
+    --surface-2: #1f2438;
+    --border: #2b3149;
+    --text: #e7e9f0;
+    --text-2: #a9b0c4;
+    --accent: #ff9c3d;
+    --accent-hover: #ffb870;
+    --accent-fg: #ffad5c;
+    --on-accent: #1b1306;
+    --ok-bg: #173325;
+    --ok-fg: #8ddba6;
+    --no-bg: #33290f;
+    --no-fg: #f3c77a;
+    --shadow: 0 14px 44px rgba(0, 0, 0, 0.6);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 72px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 var(--font);
+  overflow-wrap: break-word;
+}
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+a {
+  color: var(--accent-fg);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--accent-hover);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+code,
+pre {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+.skip {
+  position: absolute;
+  left: -999px;
+  top: 8px;
+  background: var(--surface);
+  padding: 8px 12px;
+  z-index: 100;
+}
+.skip:focus {
+  left: 8px;
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand:hover {
+  color: var(--text);
+}
+.brand img {
+  width: 28px;
+  height: 28px;
+}
+nav {
+  display: flex;
+  gap: 4px 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+nav a {
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 6px 0;
+}
+nav a:hover {
+  color: var(--text);
+}
+
+section {
+  padding: 56px 0;
+}
+.hero {
+  padding: 64px 0 40px;
+  text-align: center;
+}
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent-fg);
+}
+h1 {
+  margin: 0 auto 16px;
+  max-width: 18ch;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+h2 {
+  margin: 0 0 8px;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+h3,
+h2.h3 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.lead {
+  margin: 0 auto 24px;
+  max-width: 60ch;
+  font-size: 1.15rem;
+  color: var(--text-2);
+}
+.sub {
+  margin: 0 0 24px;
+  max-width: 70ch;
+  color: var(--text-2);
+}
+.cards + .sub,
+.install + .sub,
+.enable + .sub {
+  margin: 24px 0 0;
+}
+.cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.note {
+  margin: 0 0 32px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.btn {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+}
+.btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--on-accent);
+}
+
+/* The two things you get, side by side under the hero text. */
+.pair {
+  list-style: none;
+  margin: 0 auto 40px;
+  padding: 0;
+  max-width: 920px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  text-align: left;
+}
+.pair li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.pair p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+.name {
+  display: block;
+  font-weight: 500;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+
+.shot {
+  margin: 0;
+}
+.shot img {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  background: var(--surface);
+}
+.shot figcaption {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.hero-shot {
+  max-width: 920px;
+  margin: 0 auto;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+}
+.cards li,
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.cards p,
+.card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+.card p + p,
+.card pre + p,
+.card p + pre {
+  margin-top: 10px;
+}
+.card pre {
+  margin: 0;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.card pre code,
+pre.ver code {
+  background: none;
+  padding: 0;
+}
+.table-wrap + .card,
+.grid2 + .card {
+  margin-top: 24px;
+}
+.plain {
+  margin: 0;
+  padding-left: 1.1em;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+.plain li + li {
+  margin-top: 6px;
+}
+
+/* The one line the release stamp rewrites. */
+pre.ver {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 14px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+thead th {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+tbody tr:last-child > * {
+  border-bottom: 0;
+}
+tbody th {
+  font-weight: 600;
+}
+tbody td {
+  color: var(--text-2);
+}
+.status {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.status.ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.status.no {
+  background: var(--no-bg);
+  color: var(--no-fg);
+}
+
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.links li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+}
+.links a {
+  font-weight: 600;
+}
+.links span {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 0 48px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+footer p {
+  margin: 0 0 8px;
+  max-width: 80ch;
+}
+
+@media (max-width: 760px) {
+  /* The nav wraps to a second row here; a sticky two-row header would cover the headings. */
+  .top {
+    position: static;
+  }
+  html {
+    scroll-padding-top: 0;
+  }
+  /* Wrap long commands instead of hiding them; copying gives the same text. */
+  .card pre,
+  pre.ver {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .grid2,
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  section {
+    padding: 40px 0;
+  }
+  .hero {
+    padding: 40px 0 24px;
+  }
+  th,
+  td {
+    padding: 10px 12px;
+  }
+}

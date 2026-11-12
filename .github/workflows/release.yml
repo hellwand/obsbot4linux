@@ -215,3 +215,13 @@ jobs:
           scripts/changelog-section.sh "$GITHUB_REF_NAME" > notes.md
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
             --notes-file notes.md dist/*
+
+  # The project page with the new version (pages.yml, also run by hand). Needs GitHub Pages
+  # switched on (source: GitHub Actions) and the github-pages environment allowing v* tags.
+  pages:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
