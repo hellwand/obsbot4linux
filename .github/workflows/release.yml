@@ -1,7 +1,8 @@
 name: Release
 
 # A tag push builds and publishes the release. A pull request that touches the release path
-# runs the same build jobs as a dry run: nothing is published, verify and release are skipped.
+# runs the same build jobs as a dry run: nothing is published, release is skipped and verify
+# runs only its toolchain check.
 on:
   push:
     tags: ['v*.*.*']
