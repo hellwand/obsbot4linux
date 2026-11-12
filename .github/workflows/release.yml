@@ -1,22 +1,59 @@
 name: Release
 
+# A tag push builds and publishes the release. A pull request that touches the release path
+# runs the same build jobs as a dry run: nothing is published, verify and release are skipped.
 on:
   push:
     tags: ['v*.*.*']
+  pull_request:
+    branches: [main, rebuild]
+    paths:
+      - .github/workflows/release.yml
+      - packaging/**
+      - scripts/**
+      - Cargo.toml
+      - Cargo.lock
+      - README.md
+      - CHANGELOG.md
+      - LICENSE
+      - renovate.json
 
 permissions:
   contents: read
 
 env:
   CARGO_TERM_COLOR: always
-  # Every job's toolchain; verify fails unless ci.yml pins the same.
+  # Toolchain of the test, binary, deb and rpm jobs (the arch jobs build with the Rust of the
+  # Arch container); verify fails unless ci.yml pins the same.
   RUSTUP_TOOLCHAIN: '1.99.1'
 
 jobs:
-  # Fails at once unless the tagged commit is on main, Cargo.toml, PKGBUILD and CHANGELOG.md
-  # match the tag and ci.yml tests with the same toolchain.
-  verify:
+  # The version without "v": from the tag, on a pull request from Cargo.toml.
+  version:
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      ver: ${{ steps.ver.outputs.ver }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: ver
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            ver=${GITHUB_REF_NAME#v}
+          else
+            ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          fi
+          test -n "$ver"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+  # Tags only. Fails at once unless the tagged commit is on main, Cargo.toml, PKGBUILD and
+  # CHANGELOG.md match the tag and ci.yml tests with the same toolchain.
+  verify:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,10 +64,12 @@ jobs:
       - run: |
           grep -qx "  RUSTUP_TOOLCHAIN: '$RUSTUP_TOOLCHAIN'" .github/workflows/ci.yml
 
-  # The fmt, clippy and test steps of ci.yml.
+  # The fmt, clippy, test and msrv steps of ci.yml. On a pull request verify is skipped.
   test:
     needs: verify
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,10 +80,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+      - run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          test -n "$msrv"
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
+          cargo "+$msrv" test --locked
 
   # One job per package format and architecture: a failure reruns only that job.
   binary:
-    needs: test
+    needs: [version, test]
     strategy:
       fail-fast: false
       matrix:
@@ -54,6 +98,7 @@ jobs:
           - runner: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,8 +108,9 @@ jobs:
       - name: Build tarball
         env:
           ARCH: ${{ matrix.arch }}
+          VER: ${{ needs.version.outputs.ver }}
         run: |
-          ver=${GITHUB_REF_NAME#v}
+          ver=$VER
           mkdir dist
           dir=obsbot4linux-$ver-$ARCH-linux
           mkdir -p "$dir/systemd"
@@ -84,7 +130,7 @@ jobs:
           if-no-files-found: error
 
   deb:
-    needs: binary
+    needs: [version, binary]
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +142,7 @@ jobs:
             arch: aarch64
             deb: arm64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -110,8 +157,9 @@ jobs:
       - name: Build deb
         env:
           DEB: ${{ matrix.deb }}
+          VER: ${{ needs.version.outputs.ver }}
         run: |
-          ver=${GITHUB_REF_NAME#v}
+          ver=$VER
           mkdir dist
           # no rebuild: package the binary from the binary job (artifacts drop the mode)
           chmod +x target/release/obsbot4linux
@@ -123,7 +171,7 @@ jobs:
           if-no-files-found: error
 
   rpm:
-    needs: binary
+    needs: [version, binary]
     strategy:
       fail-fast: false
       matrix:
@@ -133,6 +181,7 @@ jobs:
           - runner: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,8 +195,9 @@ jobs:
       - name: Build rpm
         env:
           ARCH: ${{ matrix.arch }}
+          VER: ${{ needs.version.outputs.ver }}
         run: |
-          ver=${GITHUB_REF_NAME#v}
+          ver=$VER
           mkdir dist
           chmod +x target/release/obsbot4linux
           cargo generate-rpm -o "dist/obsbot4linux-$ver-1.$ARCH.rpm"
@@ -159,7 +209,7 @@ jobs:
 
   # Builds from the source tarball in an Arch container; independent of `binary`.
   arch:
-    needs: test
+    needs: [version, test]
     strategy:
       fail-fast: false
       matrix:
@@ -173,6 +223,7 @@ jobs:
             # Arch Linux ARM (menci/archlinuxarm, daily multi-arch), pinned by digest
             arch_image: menci/archlinuxarm@sha256:0a4663459ee538d31c7f2fc496f32dfc3f87d1c134141ecded15f2e1d04b00ce
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -180,16 +231,20 @@ jobs:
       - name: Build Arch package
         env:
           ARCH_IMAGE: ${{ matrix.arch_image }}
-        run: scripts/build-arch.sh "$ARCH_IMAGE" "${GITHUB_REF_NAME#v}" dist
+          VER: ${{ needs.version.outputs.ver }}
+        run: scripts/build-arch.sh "$ARCH_IMAGE" "$VER" dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-arch-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
 
+  # Tags only: a pull request builds the packages above and publishes nothing.
   release:
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [binary, deb, rpm, arch]
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     permissions:
       contents: write
       # build provenance attestation: OIDC token and the attestations API
