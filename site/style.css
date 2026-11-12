@@ -364,7 +364,7 @@ pre.ver code {
   margin-top: 6px;
 }
 
-/* The one line the release stamp rewrites. */
+/* The VER line; the release stamp rewrites it (and the latest-release text above it). */
 pre.ver {
   margin: 0 0 24px;
   padding: 12px 16px;
@@ -469,7 +469,7 @@ footer p {
   html {
     scroll-padding-top: 0;
   }
-  /* Long commands scroll inside their block (focusable for the keyboard), not the page. */
+  /* Six nav links on one row at 375 px. Long commands keep scrolling inside their block. */
   nav {
     gap: 4px 12px;
   }
