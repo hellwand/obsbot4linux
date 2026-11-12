@@ -1550,12 +1550,8 @@ mod angle_conversion_tests {
     }
 
     #[test]
-    fn a_zero_tilt_limit_keeps_the_sign_it_has_today() {
-        // The frame for `--tilt -30 0` carries -0.0 as pitch min (bits 0x80000000), the readback
-        // shows +0.0. 0.13.3 changes no byte sent to the camera, so this stays until a camera
-        // check says otherwise.
-        let (pitch_min, _) = tilt_to_pitch_range((-30.0, 0.0));
-        assert_eq!(pitch_min.to_bits(), 0x8000_0000);
+    fn a_zero_pitch_limit_reads_as_positive_zero() {
+        // no "-0" in the status output: pitch max 0 is tilt min 0 (bits 0), not -0.0
         let (tilt_min, _) = pitch_to_tilt_range((-30.0, 0.0));
         assert_eq!(tilt_min.to_bits(), 0);
     }
