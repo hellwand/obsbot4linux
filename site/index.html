@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>obsbot4linux: control OBSBOT webcams on Linux</title>
+    <title>obsbot4linux: control OBSBOT webcams on Linux (Tiny 2 Lite)</title>
     <meta
       name="description"
       content="Unofficial open-source tools to control the OBSBOT Tiny 2 Lite webcam on Linux: AI tracking, gimbal, zoom, presets, picture, audio and sleep, from the command line and from a desktop widget. Packages for Debian, Ubuntu, Fedora, openSUSE and Arch."
@@ -13,7 +13,7 @@
     <meta property="og:type" content="website" />
     <meta
       property="og:title"
-      content="obsbot4linux: control OBSBOT webcams on Linux"
+      content="obsbot4linux: control OBSBOT webcams on Linux (Tiny 2 Lite)"
     />
     <meta
       property="og:description"
@@ -61,7 +61,7 @@
       <section class="hero" aria-labelledby="hero-h">
         <div class="wrap">
           <p class="eyebrow">Unofficial, open source, for Linux</p>
-          <h1 id="hero-h">Control your OBSBOT webcam on Linux.</h1>
+          <h1 id="hero-h">Control your OBSBOT Tiny&nbsp;2&nbsp;Lite on Linux.</h1>
           <p class="lead">
             Switch AI tracking, move the gimbal, zoom, save presets and adjust
             picture, sound and sleep, from the terminal or from your desktop
@@ -118,8 +118,8 @@
         <div class="wrap">
           <h2 id="features-h">What you can do</h2>
           <p class="sub">
-            Everything below works from the command line; the widget offers it
-            with buttons and sliders.
+            Everything below works from the command line; the widget offers the
+            everyday settings with buttons and sliders.
           </p>
           <ul class="cards">
             <li>
@@ -229,8 +229,8 @@
                 </tr>
                 <tr>
                   <th scope="row">Other models</th>
-                  <td><span class="status no">Not supported yet</span></td>
-                  <td>Needs an owner to test</td>
+                  <td><span class="status no">Not supported</span></td>
+                  <td>Untested</td>
                 </tr>
               </tbody>
             </table>
@@ -244,8 +244,9 @@
                 >open an issue</a
               >
               with the model name and the camera's line from <code>lsusb</code>.
-              Please do not attach logs or recordings to a public issue: they
-              can contain your camera's serial number.
+              Please do not paste logs or the full output of
+              <code>obsbot4linux status --json</code> into a public issue: the
+              device path can contain your camera's serial number.
             </p>
           </div>
         </div>
@@ -258,17 +259,19 @@
             Packages for x86_64 and ARM64 are attached to every
             <a href="https://github.com/hellwand/obsbot4linux/releases/latest"
               >release</a
-            >, together with <code>SHA256SUMS</code>. Set <code>VER</code> once,
-            then use the lines for your system:
+            >, together with <code>SHA256SUMS</code>. The latest release is
+            <span id="latest">0.13.2 from 2026-10-31</span>. Set
+            <code>VER</code> once, then use the lines for your system:
           </p>
           <pre
             class="ver"
-          ><code>VER=0.13.2   # latest release, 2026-10-31
+            tabindex="0"
+          ><code>VER=0.13.2
 DL=https://github.com/hellwand/obsbot4linux/releases/download/v$VER</code></pre>
           <div class="grid2 install">
             <article class="card">
               <h3>Debian, Ubuntu</h3>
-              <pre><code>curl -LO $DL/obsbot4linux_${VER}_amd64.deb
+              <pre tabindex="0"><code>curl -LO $DL/obsbot4linux_${VER}_amd64.deb
 sudo apt install ./obsbot4linux_${VER}_amd64.deb</code></pre>
               <p>
                 On ARM64 the file is <code>obsbot4linux_${VER}_arm64.deb</code>.
@@ -276,7 +279,7 @@ sudo apt install ./obsbot4linux_${VER}_amd64.deb</code></pre>
             </article>
             <article class="card">
               <h3>Fedora, openSUSE</h3>
-              <pre><code>curl -LO $DL/obsbot4linux-$VER-1.x86_64.rpm
+              <pre tabindex="0"><code>curl -LO $DL/obsbot4linux-$VER-1.x86_64.rpm
 sudo dnf install ./obsbot4linux-$VER-1.x86_64.rpm</code></pre>
               <p>
                 On openSUSE use <code>sudo zypper install</code>. On ARM64 the
@@ -285,7 +288,7 @@ sudo dnf install ./obsbot4linux-$VER-1.x86_64.rpm</code></pre>
             </article>
             <article class="card">
               <h3>Arch Linux, Arch Linux ARM</h3>
-              <pre><code>curl -LO $DL/obsbot4linux-$VER-1-x86_64.pkg.tar.zst
+              <pre tabindex="0"><code>curl -LO $DL/obsbot4linux-$VER-1-x86_64.pkg.tar.zst
 sudo pacman -U obsbot4linux-$VER-1-x86_64.pkg.tar.zst</code></pre>
               <p>
                 On ARM64 the file is
@@ -294,7 +297,7 @@ sudo pacman -U obsbot4linux-$VER-1-x86_64.pkg.tar.zst</code></pre>
             </article>
             <article class="card">
               <h3>Other distributions</h3>
-              <pre><code>curl -LO $DL/obsbot4linux-$VER-x86_64-linux.tar.gz
+              <pre tabindex="0"><code>curl -LO $DL/obsbot4linux-$VER-x86_64-linux.tar.gz
 tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz</code></pre>
               <p>
                 The tarball (<code>aarch64</code> for ARM64) holds the binary
@@ -311,7 +314,7 @@ tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz</code></pre>
           </div>
           <div class="card enable">
             <h3>Then, once: switch on the background service</h3>
-            <pre><code>systemctl --user enable --now obsbot4linux.socket</code></pre>
+            <pre tabindex="0"><code>systemctl --user enable --now obsbot4linux.socket</code></pre>
             <p>
               The packages install the program and the user units but do not
               enable anything. The socket starts the service when the first app
@@ -364,9 +367,8 @@ tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz</code></pre>
               <ul class="plain">
                 <li>Dux (DankMaterialShell) 2.0 or newer.</li>
                 <li>
-                  <code>obsbot4linux</code> 0.7.3 or newer on your
-                  <code>PATH</code>, installed as above. The widget checks this
-                  when you enable it.
+                  <code>obsbot4linux</code> 0.7.3 or newer, before 1.0, on your
+                  <code>PATH</code>. The widget checks this when you enable it.
                 </li>
                 <li>
                   <code>qt6-multimedia</code> for the live preview. Without it
@@ -381,13 +383,14 @@ tar -xzf obsbot4linux-$VER-x86_64-linux.tar.gz</code></pre>
               Install <strong>OBSBOT Control</strong> from the DMS plugin
               browser, or by hand:
             </p>
-            <pre><code>git clone https://github.com/hellwand/obsbot4linux-dux.git \
+            <pre tabindex="0"><code>git clone https://github.com/hellwand/obsbot4linux-dux.git \
     ~/.config/dms/plugins/obsbot4linuxDux
 dms ipc call plugins enable obsbot4linuxDux</code></pre>
             <p>
               Then add the <code>obsbot4linuxDux</code> widget to a bar in the
               DMS settings. Update it with
-              <code>dms plugins update obsbot4linuxDux</code>.
+              <code>dms plugins update obsbot4linuxDux</code>, then
+              <code>dms restart</code>.
             </p>
           </div>
         </div>

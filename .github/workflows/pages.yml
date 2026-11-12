@@ -2,9 +2,10 @@
 # release.yml after the GitHub release was made, and run by hand (workflow_dispatch) for text or
 # screenshot fixes between releases. Not run on push: the page never shows an unreleased version.
 #
-# The version on the page is not edited by hand: the build rewrites the one `VER=... # latest
-# release, <date>` line of site/index.html from the latest release (tag and date), whatever ref the
-# run is on. The value committed in site/ is only what a local preview shows.
+# The version on the page is not edited by hand: the build rewrites the `<code>VER=...` line and the
+# `<span id="latest">... from <date></span>` text of site/index.html from the latest release (tag and
+# date), whatever ref the run is on. The values committed in site/ are only what a local preview
+# shows. The VER line carries no trailing comment: interactive zsh would run a pasted `#` as a command.
 name: pages
 
 on:
@@ -37,10 +38,13 @@ jobs:
           mkdir -p dist
           cp -r site dist/pages
           page=dist/pages/index.html
-          line='VER=[^ ]*   # latest release, [0-9-]*'
-          test "$(grep -c "$line" "$page")" = 1
-          sed -i "s|$line|VER=$ver   # latest release, $date|" "$page"
-          grep -F "VER=$ver   # latest release, $date" "$page"
+          vline='<code>VER=[0-9][0-9.]*$'
+          latest='<span id="latest">[^<]*</span>'
+          test "$(grep -c "$vline" "$page")" = 1
+          test "$(grep -c "$latest" "$page")" = 1
+          sed -i -e "s|$vline|<code>VER=$ver|" -e "s|$latest|<span id=\"latest\">$ver from $date</span>|" "$page"
+          grep "<code>VER=$ver\$" "$page"
+          grep -F "<span id=\"latest\">$ver from $date</span>" "$page"
           touch dist/pages/.nojekyll
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

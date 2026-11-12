@@ -469,11 +469,9 @@ footer p {
   html {
     scroll-padding-top: 0;
   }
-  /* Wrap long commands instead of hiding them; copying gives the same text. */
-  .card pre,
-  pre.ver {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+  /* Long commands scroll inside their block (focusable for the keyboard), not the page. */
+  nav {
+    gap: 4px 12px;
   }
   .grid2,
   .pair {
@@ -487,6 +485,22 @@ footer p {
   }
   th,
   td {
-    padding: 10px 12px;
+    padding: 8px 10px;
+  }
+}
+
+@media print {
+  .top {
+    position: static;
+  }
+  nav,
+  .cta,
+  .skip {
+    display: none;
+  }
+  .cards li,
+  .card,
+  .links li {
+    break-inside: avoid;
   }
 }
