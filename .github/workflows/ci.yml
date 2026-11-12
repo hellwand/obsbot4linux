@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, rebuild]
   pull_request:
-    branches: [main]
+    branches: [main, rebuild]
 
 permissions:
   contents: read
@@ -39,9 +39,10 @@ jobs:
           else
             range="$PUSH_BEFORE...$PUSH_HEAD"
           fi
-          # Anything unclear (new branch, force push, empty diff) counts as code.
+          # --no-renames lists a renamed file under its old path too. Anything unclear (new
+          # branch, force push, empty diff) counts as code.
           code=true
-          if files=$(git diff --name-only "$range") && [ -n "$files" ]; then
+          if files=$(git diff --no-renames --name-only "$range") && [ -n "$files" ]; then
             code=false
             for f in $files; do
               case $f in
