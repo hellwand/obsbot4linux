@@ -255,6 +255,45 @@ pub struct HandArea {
     pub tilt_max: f32,
 }
 
+impl HandArea {
+    /// Decodes the area of the `0x2004` answer: four `f32`, yaw min / max, then pitch min / max
+    /// (camera pitch, positive down, so min and max swap and flip). None when the answer is too
+    /// short or holds a value that is not a number.
+    fn decode(area: &[u8]) -> Option<Self> {
+        let float = |i: usize| -> Option<f32> {
+            area.get(i * 4..i * 4 + 4)
+                .and_then(|s| s.try_into().ok())
+                .map(f32::from_le_bytes)
+                .filter(|v| v.is_finite())
+        };
+        Some(HandArea {
+            pan_min: float(0)?,
+            pan_max: float(1)?,
+            tilt_min: -float(3)? + 0.0,
+            tilt_max: -float(2)? + 0.0,
+        })
+    }
+}
+
+/// Whether the hand tracker may pan (byte 22) and tilt (byte 23) according to the `0x2004`
+/// answer; both are 1 on a camera nothing was changed on. A flag is None if the answer is too
+/// short for it.
+fn hand_enabled(area: &[u8]) -> (Option<bool>, Option<bool>) {
+    (area.get(22).map(|b| *b != 0), area.get(23).map(|b| *b != 0))
+}
+
+/// A tilt range (min, max) in obsbot4linux's angles (positive up) as the camera takes it (pitch,
+/// positive down): min and max swap and flip.
+fn tilt_to_pitch_range(tilt: (f32, f32)) -> (f32, f32) {
+    (-tilt.1, -tilt.0)
+}
+
+/// A pitch range (min, max) as the camera reports it (positive down) in obsbot4linux's angles
+/// (positive up): min and max swap and flip.
+fn pitch_to_tilt_range(pitch: (f32, f32)) -> (f32, f32) {
+    (-pitch.1 + 0.0, -pitch.0 + 0.0)
+}
+
 /// Framing options of the human tracking as the camera reports them (queries `0x0984`, `0x0a84`,
 /// `0x0b04`, `0x0b84`, `0x0c04`, `0x0c84`, `0x15c4`). An AI mode change overwrites most of them.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -475,13 +514,14 @@ impl Camera {
         let pitch_max = self.query_f32(0x4dc4)?;
         let follow = self.query(0x4e44)?;
         // the lead word is the preset id (always 0), see [`Zone::return_pose`]
-        let (_, return_pose) =
-            presets::parse_pose(&self.query(0x4ec4)?).ok_or(Error::NoAnswer(0x4ec4))?;
+        let return_pose =
+            presets::parse_zone_return(&self.query(0x4ec4)?).ok_or(Error::NoAnswer(0x4ec4))?;
+        let (tilt_min, tilt_max) = pitch_to_tilt_range((pitch_min, pitch_max));
         Ok(Zone {
             pan_min: self.query_f32(0x4c44)?,
             pan_max: self.query_f32(0x4cc4)?,
-            tilt_min: -pitch_max + 0.0,
-            tilt_max: -pitch_min + 0.0,
+            tilt_min,
+            tilt_max,
             follow: follow.first().ok_or(Error::NoAnswer(0x4e44))? != &0,
             return_pose,
             views: self.zone_views().ok(),
@@ -493,26 +533,14 @@ impl Camera {
     /// `i32` -1 while none is set). Both are queries OBSBOT Center sends to this camera.
     pub fn hand(&self) -> Result<Hand> {
         let area = self.query(0x2004)?;
-        let float = |i: usize| -> Result<f32> {
-            area.get(i * 4..i * 4 + 4)
-                .and_then(|s| s.try_into().ok())
-                .map(f32::from_le_bytes)
-                .filter(|v| v.is_finite())
-                .ok_or(Error::NoAnswer(0x2004))
-        };
-        let (lead, pose) =
-            presets::parse_pose(&self.query(0x2504)?).ok_or(Error::NoAnswer(0x2504))?;
+        let return_pose =
+            presets::parse_hand_return(&self.query(0x2504)?).ok_or(Error::NoAnswer(0x2504))?;
+        let (pan_enabled, tilt_enabled) = hand_enabled(&area);
         Ok(Hand {
-            area: HandArea {
-                pan_min: float(0)?,
-                pan_max: float(1)?,
-                tilt_min: -float(3)? + 0.0,
-                tilt_max: -float(2)? + 0.0,
-            },
-            return_pose: (lead != u32::MAX).then_some(pose),
-            // bytes 22 and 23 of the 0x2004 answer; both 1 on a camera nothing was changed on
-            pan_enabled: area.get(22).map(|b| *b != 0),
-            tilt_enabled: area.get(23).map(|b| *b != 0),
+            area: HandArea::decode(&area).ok_or(Error::NoAnswer(0x2004))?,
+            return_pose,
+            pan_enabled,
+            tilt_enabled,
             return_after: self.query_f32(0x2484).ok().filter(|s| *s >= 0.0),
         })
     }
@@ -541,7 +569,7 @@ impl Camera {
         let (source, pose) =
             presets::parse_pose(&self.query(0x3884)?).ok_or(Error::NoAnswer(0x3884))?;
         Ok(Startup {
-            preset: u8::try_from(source).ok().filter(|s| *s < presets::SLOTS),
+            preset: presets::startup_preset(source),
             pan: pose.pan,
             tilt: pose.tilt,
             zoom: pose.zoom,
@@ -815,7 +843,7 @@ impl Camera {
     /// camera's (pitch positive = down).
     pub fn set_zone_area(&self, pan: (f32, f32), tilt: (f32, f32)) -> Result<()> {
         let seqs = [0; 4].map(|_| self.seq.next());
-        for f in cmd::zone_area(pan, (-tilt.1, -tilt.0), seqs)? {
+        for f in cmd::zone_area(pan, tilt_to_pitch_range(tilt), seqs)? {
             self.framed(&f)?;
         }
         Ok(())
@@ -850,7 +878,7 @@ impl Camera {
     /// Hand tracking area in obsbot4linux's angles (as [`Camera::set_zone_area`]).
     pub fn set_hand_area(&self, pan: (f32, f32), tilt: (f32, f32)) -> Result<()> {
         let seqs = [0; 4].map(|_| self.seq.next());
-        for f in cmd::hand_area(pan, (-tilt.1, -tilt.0), seqs)? {
+        for f in cmd::hand_area(pan, tilt_to_pitch_range(tilt), seqs)? {
             self.framed(&f)?;
         }
         Ok(())
@@ -1485,6 +1513,100 @@ mod live_pose_tests {
     #[test]
     fn a_short_answer_is_no_pose() {
         assert!(LivePose::decode(&[0u8; 11]).is_none());
+    }
+}
+
+#[cfg(test)]
+mod angle_conversion_tests {
+    use super::*;
+
+    // The 0x2004 answer OBSBOT Center read from the camera (capture 11): yaw -45..45, pitch
+    // -30..30, then the pan and tilt flags in bytes 22 and 23.
+    const HAND_AREA_ANSWER: &str = "000034c2000034420000f0c10000f041ffffffff00050101";
+
+    fn hand_answer(patch: &[(usize, u8)]) -> Vec<u8> {
+        let mut d = hex::decode(HAND_AREA_ANSWER).unwrap();
+        for (i, b) in patch {
+            d[*i] = *b;
+        }
+        d
+    }
+
+    #[test]
+    fn tilt_up_is_pitch_down_and_min_max_swap() {
+        // asymmetric on purpose: a range that is its own mirror image cannot show a swap or a
+        // missing sign. `zone area --tilt -30 10` has to send pitch -10..30.
+        assert_eq!(tilt_to_pitch_range((-30.0, 10.0)), (-10.0, 30.0));
+        assert_eq!(pitch_to_tilt_range((-10.0, 30.0)), (-30.0, 10.0));
+        // what is set reads back the same
+        assert_eq!(
+            pitch_to_tilt_range(tilt_to_pitch_range((-30.0, 10.0))),
+            (-30.0, 10.0)
+        );
+        assert_eq!(
+            tilt_to_pitch_range(pitch_to_tilt_range((-10.0, 30.0))),
+            (-10.0, 30.0)
+        );
+    }
+
+    #[test]
+    fn a_zero_tilt_limit_keeps_the_sign_it_has_today() {
+        // The frame for `--tilt -30 0` carries -0.0 as pitch min (bits 0x80000000), the readback
+        // shows +0.0. 0.13.3 changes no byte sent to the camera, so this stays until a camera
+        // check says otherwise.
+        let (pitch_min, _) = tilt_to_pitch_range((-30.0, 0.0));
+        assert_eq!(pitch_min.to_bits(), 0x8000_0000);
+        let (tilt_min, _) = pitch_to_tilt_range((-30.0, 0.0));
+        assert_eq!(tilt_min.to_bits(), 0);
+    }
+
+    #[test]
+    fn hand_area_decodes_the_recorded_answer() {
+        let area = HandArea::decode(&hex::decode(HAND_AREA_ANSWER).unwrap()).unwrap();
+        assert_eq!(
+            (area.pan_min, area.pan_max, area.tilt_min, area.tilt_max),
+            (-45.0, 45.0, -30.0, 30.0)
+        );
+    }
+
+    #[test]
+    fn hand_area_tilt_is_the_flipped_pitch_in_the_right_order() {
+        // the recorded answer with pitch min -10 and max 30 (words 2 and 3 as f32): the user
+        // tilt range is -30..10
+        let d = hand_answer(&[(8, 0x00), (9, 0x00), (10, 0x20), (11, 0xc1)]);
+        let area = HandArea::decode(&d).unwrap();
+        assert_eq!((area.tilt_min, area.tilt_max), (-30.0, 10.0));
+        assert_eq!((area.pan_min, area.pan_max), (-45.0, 45.0));
+    }
+
+    #[test]
+    fn hand_area_refuses_a_short_or_non_numeric_answer() {
+        let d = hex::decode(HAND_AREA_ANSWER).unwrap();
+        assert!(HandArea::decode(&d[..15]).is_none());
+        assert!(HandArea::decode(&d[..16]).is_some());
+        // NaN as yaw max
+        let nan = hand_answer(&[(4, 0), (5, 0), (6, 0xc0), (7, 0x7f)]);
+        assert!(HandArea::decode(&nan).is_none());
+    }
+
+    #[test]
+    fn hand_pan_and_tilt_flags_are_bytes_22_and_23() {
+        assert_eq!(
+            hand_enabled(&hex::decode(HAND_AREA_ANSWER).unwrap()),
+            (Some(true), Some(true))
+        );
+        // pan off, tilt on and the other way round; the bytes before (20 and 21) stay non-zero
+        assert_eq!(
+            hand_enabled(&hand_answer(&[(22, 0)])),
+            (Some(false), Some(true))
+        );
+        assert_eq!(
+            hand_enabled(&hand_answer(&[(23, 0)])),
+            (Some(true), Some(false))
+        );
+        // a short answer says nothing
+        assert_eq!(hand_enabled(&hand_answer(&[])[..23]), (Some(true), None));
+        assert_eq!(hand_enabled(&hand_answer(&[])[..22]), (None, None));
     }
 }
 

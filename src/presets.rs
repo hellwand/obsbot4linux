@@ -228,6 +228,26 @@ pub fn parse_pose(data: &[u8]) -> Option<(u32, Pose)> {
     ))
 }
 
+/// The zone return position from the `0x4ec4` answer. The leading word is the preset id (always
+/// 0), not a "not set" marker, so the result is always a pose (#57).
+pub fn parse_zone_return(data: &[u8]) -> Option<Pose> {
+    let (_, pose) = parse_pose(data)?;
+    Some(pose)
+}
+
+/// The hand-tracking return position from the `0x2504` answer: `Some(None)` while none is set
+/// (leading word -1), `None` when the answer is short or holds a value that is not a number.
+pub fn parse_hand_return(data: &[u8]) -> Option<Option<Pose>> {
+    let (lead, pose) = parse_pose(data)?;
+    Some((lead != u32::MAX).then_some(pose))
+}
+
+/// The preset slot named by the leading word of the `0x3884` answer (0-2); None for an own pose
+/// (3) or any other value.
+pub fn startup_preset(source: u32) -> Option<u8> {
+    u8::try_from(source).ok().filter(|s| *s < SLOTS)
+}
+
 /// What the camera tracks again after `startup go`: byte 0 of the initial-state block. Only the
 /// values seen on the camera or in OBSBOT Center are offered; hand tracking (7 or 8, which one
 /// is written is not known), close-up (2) and lower body (4) are read but not written.
@@ -590,6 +610,40 @@ mod tests {
     }
 
     #[test]
+    fn zone_return_set_matches_capture() {
+        // capture 18, seq 267: Center sets the zone return position; wire pitch -13.9 (bits
+        // 0xc15e6667) is user tilt 13.9 up
+        assert_captured(
+            zone_return_set(
+                Pose {
+                    pan: 0.0,
+                    tilt: f32::from_bits(0x415e_6667),
+                    zoom: 1.0,
+                },
+                267,
+            )
+            .unwrap(),
+            "aa250b010c0067250a04844e1800b53e000000000000000067665ec1000000000000803f00000000",
+        );
+    }
+
+    #[test]
+    fn startup_source_3_is_an_own_pose_and_no_preset() {
+        // 0x3884 reads the preset slot 0-2, or 3 for an own pose (Center writes 3 in capture 08
+        // and slot 0 in capture 10)
+        assert_eq!(startup_preset(0), Some(0));
+        assert_eq!(startup_preset(1), Some(1));
+        assert_eq!(startup_preset(2), Some(2));
+        assert_eq!(startup_preset(u32::from(SLOTS)), None);
+        assert_eq!(startup_preset(256), None);
+        assert_eq!(startup_preset(u32::MAX), None);
+        let (source, _) =
+            parse_pose(&hex::decode("030000000000204100000000000000000000803f00000000").unwrap())
+                .unwrap();
+        assert_eq!(startup_preset(source), None);
+    }
+
+    #[test]
     fn hand_return_set_uses_the_zone_layout_with_its_own_command() {
         // measured: pan 20.1, tilt 4.9 up, zoom 1 read back from 0x2504 as sent
         let pose = Pose {
@@ -612,6 +666,18 @@ mod tests {
                 .unwrap();
         assert_eq!(lead, u32::MAX);
         assert_eq!((p.pan, p.tilt, p.zoom), (0.0, 0.0, 1.0));
+        // so `hand` shows no return position (null) for it, and a pose once there is one
+        // (hand-made: the lead of a set return position is anything but -1)
+        let unset = hex::decode("ffffffff0000000000000000000000000000803f00000000").unwrap();
+        assert_eq!(parse_hand_return(&unset), Some(None));
+        let set = hex::decode("000000000000a0410000a0c0000000000000803f00000000").unwrap();
+        let pose = Pose {
+            pan: 20.0,
+            tilt: 5.0,
+            zoom: 1.0,
+        };
+        assert_eq!(parse_hand_return(&set), Some(Some(pose)));
+        assert_eq!(parse_hand_return(&unset[..19]), None);
     }
 
     #[test]
@@ -625,6 +691,26 @@ mod tests {
             let (lead, _) = parse_pose(&hex::decode(reply).unwrap()).unwrap();
             assert_eq!(lead, 0, "{reply}");
         }
+        // and the zone return is the pose either way, even for the -1 the hand return uses
+        let pose = |reply| parse_zone_return(&hex::decode(reply).unwrap());
+        assert_eq!(
+            pose(fresh),
+            Some(Pose {
+                pan: 0.0,
+                tilt: 0.0,
+                zoom: 1.0
+            })
+        );
+        assert_eq!(
+            pose(set),
+            Some(Pose {
+                pan: 20.0,
+                tilt: 5.0,
+                zoom: 1.0
+            })
+        );
+        assert!(pose("ffffffff0000000000000000000000000000803f00000000").is_some());
+        assert_eq!(pose("0000"), None);
     }
 
     #[test]
