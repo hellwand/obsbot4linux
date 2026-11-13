@@ -5,7 +5,9 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
-## [0.14.0] - 2026-11-25
+### Added
+
+- `docs/protocol-2.md`: the normative part of the protocol 2 reference (transport, requests, replies, errors and their validation order, ordering rules, devices, descriptions, values, the path dictionary and live topics).
 
 ### Changed
 
@@ -25,6 +27,25 @@ All notable changes to OBSBot4Linux. The format follows
 - `audio --help` says that every microphone change restarts the camera, not only turning it off, and
   `gimbal rate --help` says that an omitted axis is stopped (#123).
 
+## [0.14.0] - 2026-11-25
+
+### Changed
+
+- The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
+- README and package text now say "most settings OBSBOT Center offers" and link `docs/center-parity.md` for the gaps; they also state the glibc 2.34 floor, how to switch to the socket units while the widget's daemon runs, to restart the daemon after an upgrade (socket users: `systemctl --user restart obsbot4linux.service`; a daemon started by `watch` ends with the shell's unit), that `zoom F --speed S` and `zoom stop` leave the AI mode alone, the `device busy` window of the on-air probe on uvcvideo up to 6.16, and the order of auto and manual image controls (#121).
+- The source is a cargo workspace now: `crates/obsbot-device` holds the camera access,
+  `crates/obsbot4linux` the CLI and the daemon. The program, its output and the packages do not
+  change.
+
+### Fixed
+
+- The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
+  leaves the repository clean; a local build is labelled with the release version (#120).
+- `docs/center-parity.md` describes obsbot4linux 0.13 instead of 0.6.0: hand area, auto zoom,
+  framing offset, gimbal rate and speed, stop, zone views, microphone volume, LED blink, power-on
+  mode and the firmware version are no longer listed as missing; gestures are read back (#122).
+- `audio --help` says that every microphone change restarts the camera, not only turning it off, and
+  `gimbal rate --help` says that an omitted axis is stopped (#123).
 ## [0.13.2] - 2026-10-31
 
 ### Fixed
