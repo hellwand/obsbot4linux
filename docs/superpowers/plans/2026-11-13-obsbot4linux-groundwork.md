@@ -157,9 +157,9 @@ These are not tasks of this plan; the coordinator checks them before the first p
   coordinator writes old tip, new tip and the reason into the tracking issue.
 
 - **P5. Shellcheck findings in the old scripts.** `shellcheck` reports SC2086 in
-  `scripts/build-arch.sh` and SC2086 and SC2034 in `scripts/check-readback.sh` on 66287b5. The
-  gate of this plan checks only the scripts it adds; the coordinator files an issue on `main`
-  for the old ones.
+  `scripts/build-arch.sh` and SC2086 and SC2034 in `scripts/check-readback.sh` on 66287b5. Issue
+  #154 fixes them on `rebuild`; the shellcheck line of the gate covers every script in `scripts/`
+  and passes from that fix on.
 
 ## Decisions
 
@@ -2739,7 +2739,8 @@ Not tasks of this plan; listed so that nobody releases early.
   next task's "Consumes" and `sed` lines use (checked by building the whole sequence once in a
   scratch copy of `rebuild`: every task's gate, G1, G2, G3 and G6 gave the outputs written
   here). The commands added after review were run once on 66287b5 as well: the shellcheck line
-  of the gate, the strip check (it fails on an unstripped binary, also inside a deb), the
+  of the gate (widened to the old scripts, it passes only from the fix of issue #154 on), the
+  strip check (it fails on an unstripped binary, also inside a deb), the
   feature-tree diff (empty across Task 2, not empty after a feature change) and the two split
   scripts followed by `rustfmt`.
 - **Review Focus:** each of the six items has its check in the owning task (Task 6 Step 7,
