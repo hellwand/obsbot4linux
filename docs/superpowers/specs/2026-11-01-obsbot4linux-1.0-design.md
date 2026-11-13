@@ -77,15 +77,18 @@ command catalogue. Section 13 lists them.
   names: the frames of that setting or action, nothing before them and nothing after them.**
   The daemon never writes a setting the user did not ask for, never switches an automatic
   control or a tracking mode off on its own, and never sends a command sequence as a
-  workaround. What the camera then does on its own is camera behaviour: the state shows it as
-  the camera reports it, and where it is not recorded yet it is a camera item (section 14).
-  Two kinds of frames belong to a request and are not additions to it: the frames the
-  camera's protocol defines for the one setting or action asked for (the two bounds of one
-  range, the block a start-pose action writes back), and the stop of a continuing action the
-  daemon was asked to start when nobody can end it any more (its connection closed, the
-  daemon shuts down, the camera fell asleep; 5.6, 5.9). Reads of the camera's state are not
-  commands. Clients follow the same rule: the CLI and the widget never chain a second request
-  to the one the user made. Reporting camera state (on-air probe, target flag) is fine.
+  workaround (one known exception, the preset list rewind of 8.8, stays until CAM-19). What
+  the camera then does on its own is camera behaviour: the state shows it as the camera
+  reports it, and where it is not recorded yet it is a camera item (section 14). Two kinds
+  of frames belong to a request and are not additions to it: the frames the camera's
+  protocol defines for the one setting or action asked for (the two bounds of one range, the
+  block a start-pose action writes back), and the end the request itself set: a
+  `gimbal.turn` without `keep:true` lasts as long as its connection, so its stop is sent
+  when that connection closes, a daemon shutdown included (5.6, 5.9). How the model encodes
+  a value in its frame so that it keeps the units of 4.2 (the sign of the tilt, the yaw sign
+  of a turn, 4.4) is part of that frame. Reads of the camera's state are not commands.
+  Clients follow the same rule: the CLI and the widget never chain a second request to the
+  one the user made. Reporting camera state (on-air probe, target flag) is fine.
 - **Nothing around the camera.** The daemon keeps no file: no state, no names, no keys, no
   remembered settings, no migration. What the camera cannot do or report is not there.
 - **Evidence first.** Only backed fields enter a released description (section 8.5).
@@ -159,6 +162,9 @@ decided with M5.
 | `cli.rs`                                     | `obsbot4linux`                                    | rewrite                                         |
 | `state.rs` (remembered values)               | –                                                 | drop: every value is read from the camera       |
 | byte-exact tests, recordings                 | `obsbot-device` tests, fixtures (section 8.5)     | carry over                                      |
+
+Carrying the logic excludes what section 2 forbids: the carried gimbal move and rate flows
+lose their switch to the static tracking mode (15.1 row 88).
 
 Carried code comes over with the fixes the audit of 0.13.2 asked for. Fixes that need no
 camera land on `main` first, in the 0.13 layout, so that the groundwork move carries them
@@ -614,8 +620,13 @@ factory_reset {confirm}
 - `gimbal.turn`: at least one of `pan_speed` and `tilt_speed` (°/s, up to 178); a missing
   one is 0. It keeps turning until `gimbal.stop` or speed 0. It stops when the issuing
   connection closes, unless `keep:true`; the CLI sends `keep:true`, so a one-shot call
-  keeps turning as `gimbal rate` did in 0.13. The daemon sends the stop when the camera falls asleep
-  while a turn runs, and best effort on a clean daemon shutdown (section 5.9).
+  keeps turning as `gimbal rate` did in 0.13. The daemon sends no stop of its own beyond
+  that (section 2): a `keep:true` turn goes on across a daemon shutdown (5.9), and what a
+  turn does when the camera falls asleep is the camera's (CAM-7). `pan_speed` has the
+  units of 4.2 whatever `image.mirror` and `gimbal.invert` say: the camera reverses the yaw
+  of a turn when exactly one of them is on, and the model encodes the speed so that a
+  positive `pan_speed` turns the camera to its left, as a positive `pan` of `gimbal.move`
+  does (field ledger, measured).
 - `gimbal.move` and `gimbal.turn` send only the move (section 2). They leave `tracking.mode`
   alone, as `zoom.move`, `zoom.stop` and `gimbal.stop` do, and they are not refused while the
   tracking is on. What the camera does with a manual move while it tracks is CAM-34; the
@@ -810,8 +821,8 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
 - **Continuing motion.** The worker records which connection started an action the model
   marks as continuing (on the Tiny 2 Lite `gimbal.turn`). Any other motion action of that
   device clears the record. When the recorded connection closes without `keep:true`, the
-  worker queues the model's stop for it. When `asleep` turns true while a continuing action
-  is recorded, the worker sends the stop.
+  worker queues the model's stop for it. The worker sends no other stop of its own: not when
+  `asleep` turns true, and not for a `keep:true` turn (section 2).
 
 ### 5.7 Polling and asleep
 
@@ -864,8 +875,10 @@ bounds each control transfer; its value is camera item CAM-29.
   holds the same lock file, so a 1.0 daemon started beside it exits with the lock message. A
   socket-activated 0.13 daemon takes no lock; it runs as `obsbot4linux.service` until the
   upgrade steps of 12.2 stop it.
-- **Shutdown.** On SIGTERM or SIGINT the daemon sends the stop of an active continuing
-  action (best effort) and exits 0. A crash leaves the camera as it is.
+- **Shutdown.** On SIGTERM or SIGINT the daemon closes its connections, so a continuing
+  action started without `keep:true` gets its stop (best effort, 5.6), and exits 0. A
+  `keep:true` turn goes on, and a crash leaves the camera as it is; `gimbal.stop` ends a turn
+  from any connection, after a restart too.
 - **Failures.** A panic in a worker, the registry thread or the acceptor ends the process
   with a non-zero code, and systemd restarts it. A panic in a connection thread closes only
   that connection. Locks are taken poison-tolerant.
@@ -1336,8 +1349,10 @@ M4 is the first model that completes these steps.
   exposure, image, focus, audio, LED, sleep). 60 s: zone, hand, power-on, views.
   `touched`: presets (read at plug-in and after `preset.*` and `power_on.use_preset`; the
   preset read writes to the camera to rewind its list, which the vendor app never does,
-  CAM-19). While asleep only the status block is read. This plan is carried from 0.13.2;
-  the vendor-app rate rule of 8.7 step 4 applies to models onboarded under 8.7.
+  CAM-19; this rewind is the one known exception to section 2's "no command sequence as a
+  workaround" and stays only until CAM-19 decides). While asleep only the status block is
+  read. This plan is carried from 0.13.2; the vendor-app rate rule of 8.7 step 4 applies to
+  models onboarded under 8.7.
 - **Apply order** inside a patch: a setting's `requires` paths before the setting
   (`exposure.mode=manual` before `exposure.time`; `image.white_balance.auto=false` before
   `image.white_balance.temperature`; `focus.mode=manual` before `focus.position`),
@@ -1679,7 +1694,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   decoder against recorded answers; the status decoder against recorded blocks; angle
   conversions as pure functions tested with a recorded answer and one asymmetric case; the
   send-table test; the registry test; the serial-format test; each audit defect in carried
-  code fixed or named in section 14.
+  code fixed or named in section 14; the carried gimbal move and rate flows without their
+  switch to the static tracking mode (3.2).
 - **Acceptance with camera (CS-1):** the live tests: CAM-1 to CAM-8, CAM-10, CAM-13 to
   CAM-20, CAM-22, CAM-23, CAM-25, CAM-33 and CAM-34 (CAM-21 is recorded if it happens and
   gates nothing).
@@ -1712,8 +1728,10 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   plug; the queue of an unplugged device answered and a new worker on re-plug; a re-added
   `port:` entry starting at rev 1; the wake read of `unread` groups and the retry of a
   failed `touched` read; an identity series ending at the first complete answer; a `set`
-  causes one `apply` per leaf and a `do` one `act`, and nothing else reaches the fake
-  (section 2).
+  causes at most one `apply` per leaf of its patch and no `act`, a `do` exactly one `act`
+  and no `apply`, and apart from reads nothing else reaches the fake for that request
+  (section 2); no stop reaches the fake when it falls asleep during a turn, nor for a
+  `keep:true` turn at shutdown (5.6, 5.9).
 - **Acceptance with camera:** none in this track (W4 covers the real path).
 
 **Track C: client and CLI**
@@ -1731,7 +1749,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   `hello` reply gives exit 4 and the restart message; no socket gives exit 4 and the
   `systemctl` line; end-to-end snapshots against an in-process
   `obsbot4linuxd --fake fake-a,fake-b,unknown`; every row of 9.1 turned into its request
-  against `fake-a`; the completions stale test.
+  against `fake-a`, the gimbal rows reaching the fake as one `act` each and no `apply`; the
+  completions stale test.
 - **Acceptance with camera:** none in this track.
 
 **Track D: widget (repository `obsbot4linux-dux`)**
@@ -1755,7 +1774,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   controls; its controls offer `fake-b`'s own enum values and bounds and its preset count,
   not the Tiny 2 Lite's; the unsupported device shows as in 8.4 step 3 and disappears on
   unplug as in step 7; a value set with the CLI appears
-  in the widget at once (`pending`); widget 0.28.0 is released before the 1.0 release
+  in the widget at once (`pending`); a gimbal control sends one request (checked against the
+  fake's operation log or by review); widget 0.28.0 is released before the 1.0 release
   candidate.
 - **Acceptance with camera:** in W4.
 
@@ -1776,7 +1796,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
 - **Content:** two-binary packages (12.1) with units (`ExecStart` = `obsbot4linuxd`,
   `NoNewPrivileges=yes`), completions and the schema; the release workflow publishes a tag
   `v1.0.0-rc.N` as a pre-release; the Tiny 2 Lite set to `support: tested` (8.8); CHANGELOG
-  with the migration notes; README support table.
+  with the migration notes; README support table, and the README without the 0.13 statements
+  that the gimbal moves switch the tracking to static first (section 2, 15.1 row 88).
 - **Owner files:** `.github/`, `packaging/` (except completions), `CHANGELOG.md`,
   `README.md`, and the support level in the `tiny2lite` registry entry.
 - **Depends on:** W2.
@@ -1972,7 +1993,7 @@ and CAM-29 are recorded only if they happen and gate nothing.
 | CAM-4  | During a speed-limited `zoom.move`, does the zoom readback report the target or the current factor?                                                                             | A                              | text of `docs/protocol-2.md`                                   |
 | CAM-5  | `settle_ms` per leaf (measured so far: zone tracking 1–3 s, target lock about 1 s)                                                                                              | A                              | `settle_ms` per leaf                                           |
 | CAM-6  | Do `hand.move_gimbal` and `led.blink` survive sleep and wake, re-plug, factory reset?                                                                                           | A                              | the `readback:false` lifetime (wake added if they are dropped) |
-| CAM-7  | Does a running `gimbal.turn` stop when the camera falls asleep? Does it resume after wake?                                                                                      | A                              | documentation; the daemon's stop on sleep stays                |
+| CAM-7  | Does a running `gimbal.turn` stop when the camera falls asleep? Does it resume after wake?                                                                                      | A                              | documentation; clients send `gimbal.stop` themselves           |
 | CAM-8  | Is the USB audio interface absent on a cold plug with the microphone off? Does a status-block value follow the microphone?                                                      | A                              | U-23                                                           |
 | CAM-9  | `factory_reset` while asleep; does the device return under the same `sn:` id?                                                                                                   | W4                             | `asleep` of `factory_reset`; parity row                        |
 | CAM-10 | How long do a cold read of all groups and a read of the 5 s tier take?                                                                                                          | A                              | documented `hello` latency; margin to `CLIENT_REPLY_TIMEOUT`   |
@@ -2125,6 +2146,7 @@ them and are not listed.
 Revision 2 was approved on 2026-11-13. Each later change has one row; each can be overruled
 on its own.
 
-| #   | Date       | Topic                                  | Approved revision 2                                                                                         | Now                                                                                                                                                                                                                                                                                | Why                                                                                                                                        | Source             |
-| --- | ---------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| 88  | 2026-11-13 | An action sends exactly what was asked | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13 | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request (2, 4.4, 6.2, 8.8, 12.2, 12.3) | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone | Thomas, 2026-11-13 |
+| #   | Date       | Topic                                  | Approved revision 2                                                                                                             | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Why                                                                                                                                                                       | Source                                  |
+| --- | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 88  | 2026-11-13 | An action sends exactly what was asked | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13                     | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request; the carried flows lose the switch (2, 3.2, 4.4, 5.6, 6.2, 8.2, 8.3, 8.8, 9.1, 10.3, 12.2, 12.3, 14); new tests: 8.3 the exact frames of each ledger row; 10.3 the W0 fake test, the track B, C and D checks | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone                                | Thomas, 2026-11-13                      |
+| 89  | 2026-11-13 | Stops the daemon sends on its own      | the daemon stops a running turn when the camera falls asleep, and best effort on a clean shutdown (also for a `keep:true` turn) | the only stop the daemon sends is the end a turn's request set: a turn without `keep:true` stops when its connection closes, a shutdown included; a `keep:true` turn goes on across a shutdown, and across sleep the camera decides (CAM-7) (2, 4.4, 5.6, 5.9, 10.3, 14)                                                                                                                                                                                         | the client that started a turn can still end it, and `gimbal.stop` works from any connection and after a restart, so these stops were logic of our own; 0.13 sent neither | Thomas, 2026-11-13 (the rule of row 88) |
