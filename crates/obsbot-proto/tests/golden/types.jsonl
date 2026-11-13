@@ -1,0 +1,65 @@
+# One line per case: the type name, a space, the canonical JSON of one value of that type.
+# Every line must parse into its type and serialise back byte for byte (tests/types.rs).
+RequestId 7
+RequestId "a-7"
+Support "tested"
+Support "untested"
+Support "unsupported"
+Support "beta"
+Unit "deg/s"
+Unit "K"
+Unit "lux"
+UnitSpec "fraction"
+UnitSpec {"pan":"deg","tilt":"deg","zoom":"factor"}
+Bound 0.01
+Bound {"max":150,"min":-150}
+Asleep "ignored"
+Asleep "sometimes"
+Warning "destructive"
+Warning "explode"
+SettingType "box"
+SettingType "matrix"
+ErrorCode "out_of_range"
+ErrorCode "rate_limited"
+Requirement {"path":"exposure.mode","equals":"manual"}
+ExtensionUnit {"unit":2,"guid":"00000000-0000-0000-0000-000000000001","controls":12}
+Usb {"vendor":"3564","product":"fa02","product_name":null,"bcd_device":"0100","path":"3-2.1","serial_present":false,"interfaces":["0e","0e","01","01"],"extension_units":[{"unit":2,"guid":"00000000-0000-0000-0000-000000000001","controls":12}]}
+Setting {"type":"bool","label":"Invert pan direction","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"settle_ms":3000}
+Setting {"type":"enum","label":"Field of view","readonly":false,"nullable":false,"readback":true,"asleep":"ignored","no_effect":false,"values":["wide","medium","narrow","custom"],"writable":["wide","medium","narrow"],"settle_ms":3000}
+Setting {"type":"number","label":"Exposure time","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"min":100,"max":250000,"unit":"us","precision":1,"requires":[{"path":"exposure.mode","equals":"manual"}],"default":33000,"live":"auto","settle_ms":3000}
+Setting {"type":"range","label":"Zone pan","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"min":{"max":-150,"min":-150},"max":{"max":150,"min":150},"unit":"deg","precision":0.1,"settle_ms":3000}
+Setting {"type":"pose","label":"Hand return pose","readonly":true,"nullable":true,"readback":true,"no_effect":false,"min":{"pan":-150,"tilt":-70,"zoom":1},"max":{"pan":150,"tilt":90,"zoom":4},"unit":{"pan":"deg","tilt":"deg","zoom":"factor"},"precision":{"pan":0.1,"tilt":0.1,"zoom":0.01}}
+Setting {"type":"string","label":"Name","readonly":false,"nullable":false,"readback":true,"no_effect":false,"max_len":32,"ascii":true,"optional":true}
+Setting {"type":"list","label":"Presets","readonly":true,"nullable":false,"readback":true,"no_effect":false,"item":{"name":{"type":"string","label":"Name","readonly":false,"nullable":false,"readback":true,"no_effect":false,"max_len":32,"ascii":true},"slot":{"type":"number","label":"Slot","readonly":false,"nullable":false,"readback":true,"no_effect":false,"min":0,"max":2,"step":1}}}
+Setting {"type":"bool","label":"LED blink","readonly":false,"nullable":false,"readback":false,"asleep":"unknown","no_effect":false}
+Setting {"type":"bool","label":"Microphone","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"settle_ms":3000,"warning":["restart"]}
+Setting {"type":"number","label":"Wake zoom","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":true,"min":1,"max":4,"unit":"factor","precision":0.01,"settle_ms":3000}
+Setting {"type":"matrix","label":"Colour matrix","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"settle_ms":3000}
+Action {"label":"Stop the gimbal","params":{},"asleep":"unknown"}
+Action {"label":"Save a view","params":{"name":{"type":"string","label":"Name","readonly":false,"nullable":false,"readback":true,"no_effect":false,"max_len":32,"ascii":true}},"result":{"id":{"type":"number","label":"View id","readonly":false,"nullable":false,"readback":true,"no_effect":false,"min":0,"step":1}},"asleep":"ignored"}
+Action {"label":"Factory reset","params":{"confirm":{"type":"bool","label":"Confirm","readonly":false,"nullable":false,"readback":true,"no_effect":false}},"asleep":"unknown","warning":["destructive","restart"]}
+Description {"settings":{"led.blink":{"type":"bool","label":"LED blink","readonly":false,"nullable":false,"readback":false,"asleep":"unknown","no_effect":false}},"actions":{"gimbal.stop":{"label":"Stop the gimbal","params":{},"asleep":"unknown"}},"limits":{"presets":3}}
+Device {"id":"port:3-2.1","name":"USB 3564:fa02 3-2.1","model":"unknown","support":"unsupported","serial":null,"firmware":null,"video_node":"/dev/video4","available":true,"usb":{"vendor":"3564","product":"fa02","product_name":null,"bcd_device":"0100","path":"3-2.1","serial_present":false,"interfaces":["0e","0e"],"extension_units":[]},"settings":{},"actions":{},"limits":{}}
+Device {"id":"port:3-2.2","name":"Example Camera 3-2.2","model":"example","support":"tested","serial":null,"firmware":null,"video_node":null,"available":false,"replaced_by":"sn:EXAMPLE0000001","usb":{"vendor":"3564","product":"fa01","product_name":"Example Camera","bcd_device":"0100","path":"3-2.2","serial_present":false,"interfaces":["0e"],"extension_units":[]},"settings":{},"actions":{},"limits":{}}
+State {"available":true,"pending":{"led.brightness":2},"unread":["presets"],"asleep":false,"led":{"brightness":1},"presets":null,"zone":{"area":{"pan":{"max":20,"min":-20}}}}
+Patch {"exposure":{"mode":"manual","time":20000},"led.brightness":2}
+Hello {"protocol":2,"client":"widget 1.0","subscribe":true,"live":["pose"]}
+Request {"id":1,"hello":{"protocol":2,"client":"obsbot4linux 1.0.0","subscribe":false,"live":[]}}
+Request {"id":2,"device":"sn:EXAMPLE0000001","get":null}
+Request {"id":3,"device":"sn:EXAMPLE0000001","get":["zoom.factor","presets"]}
+Request {"id":4,"device":"sn:EXAMPLE0000001","set":{"zone":{"area":{"pan":{"max":20,"min":-20}}}}}
+Request {"id":"v","device":"sn:EXAMPLE0000001","do":"view.save","with":{"name":"Desk","pose":{"pan":0,"tilt":5,"zoom":1.2}}}
+Request {"id":6,"device":"sn:EXAMPLE0000001","do":"gimbal.stop"}
+Request {"id":7,"live":["pose","target"]}
+Reply {"id":1,"ok":{"protocol":2,"daemon":"1.0.0","devices":[],"states":{}}}
+Reply {"id":2,"ok":{"rev":5,"state":{"available":true,"pending":{},"unread":[],"zoom":{"factor":1.5}}}}
+Reply {"id":4,"ok":{"rev":6}}
+Reply {"id":"v","ok":{"rev":7,"result":{"id":3}}}
+Reply {"id":7,"ok":{}}
+Reply {"id":8,"error":{"code":"camera","message":"the camera did not answer","rev":9,"applied":["exposure.mode"],"failed":"exposure.time"}}
+Reply {"id":null,"error":{"code":"protocol","message":"the first message must be hello","supported":[2]}}
+ErrorBody {"code":"out_of_range","message":"led.brightness: 4 is above the maximum 3"}
+Event {"event":"state","device":"sn:EXAMPLE0000001","rev":6,"state":{"available":true,"pending":{"led.brightness":2},"unread":[],"led":{"brightness":1}}}
+Event {"event":"devices","devices":[]}
+ServerMessage {"event":"devices","devices":[]}
+ServerMessage {"id":4,"ok":{"rev":6}}

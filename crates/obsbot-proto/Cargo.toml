@@ -1,0 +1,13 @@
+[package]
+name = "obsbot-proto"
+description = "Protocol 2 of obsbot4linux: messages, device descriptions, validator, schema and client"
+version.workspace = true
+edition = "2024"
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
