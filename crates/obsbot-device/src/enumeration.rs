@@ -10,6 +10,8 @@ use std::fs::{self, File};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 
+pub mod sysfs;
+
 const V4L2_CAP_META_CAPTURE: u32 = 0x0080_0000;
 
 #[repr(C)]
