@@ -28,7 +28,7 @@
 - "Public enums are `#[non_exhaustive]`, so additive protocol changes do not break Rust callers" (spec 6.1).
 - Fakes: "`fake-a` uses the Tiny 2 Lite's description, for client work; `support: tested`"; "`fake-b` is deliberately different: other enum values, whole groups missing (no `gimbal`, no `views`), a setting and an action under a group no client knows, another preset count (5), `readback:false` leaves, leaves with `asleep: ignored` and `asleep: unknown`, a `requires`, a readback that lags its write by a set time, `support: untested`"; "`unknown` is a device with an unregistered product id of a known vendor id"; "synthetic serials (`sn:FAKEA0000001`)"; test control on `<socket path>.test` with `plug`, `unplug`, `sleep`, `wake`, `fail_next`, "not part of protocol 2 and not in any schema or description" (spec 5.12).
 - "No raw send path exists anywhere: not in the daemon, the CLI, the protocol or the fakes" (spec 8.3).
-- "A request sends exactly what it names: the frames of that setting or action, nothing before them and nothing after them" (spec 2, changed after approval: spec 15.1 row 88). `gimbal.move` and `gimbal.turn` "leave `tracking.mode` alone" (spec 4.4); "`touched` names the groups whose values the camera itself changes in response to the leaf or action" (spec 8.2).
+- "A request sends exactly what it names: the frames of that setting or action, nothing before them and nothing after them" (spec 2, changed after approval: spec 15.1 row 88). `preset.save` without `name` sends no name: the daemon invents none (spec 4.4, 15.1 row 90). `gimbal.move` and `gimbal.turn` "leave `tracking.mode` alone" (spec 4.4); "`touched` names the groups whose values the camera itself changes in response to the leaf or action" (spec 8.2).
 - Tiny 2 Lite: "`settle_ms`: 3000 for every writable leaf with a readback"; "`readback:false`: `hand.move_gimbal`, `led.blink`"; "`presets`: at most 3 (`limits.presets`)"; "the description written in stage W0 contains the field, value or bound" of every row of 9.3 (spec 8.8, 4.3, 9.3).
 - "Golden files cover protocol 2 and the descriptions. An intentional change updates them in the same PR" (spec 11).
 - Public text (spec 8.5): English; paths, command ids, ranges, units, the model's own USB ids, evidence levels and opaque keys only; no private paths, no vendor-app or firmware names, no serial numbers (the synthetic `EXAMPLE0000001`, `FAKEA…`, `FAKEB…` are allowed).
@@ -74,7 +74,7 @@ The spec leaves these details of the contract open; this plan fixes them. Each c
 10. **`on_air.apps`** is a `list` of `{name}` items, because the description format's lists describe object items (spec 4.2 `item{<field> → Setting}`). This changes the state shape of spec 4.3 (`apps[]` of process names) to `[{"name": …}]`, which clients see; it goes into the spec's "Changes" table with W0.
 11. **CLI-only error codes** (`usage`, `ambiguous_device`, `no_device`, `daemon`) are not in `ErrorCode`; track C defines them in the CLI, as spec 6.2 says they "exist only in the CLI".
 12. **Tiny 2 Lite numbers the spec does not state.** Backed by the field ledger: gain 1–64, exposure compensation 0–18 default 9, focus position 0–100. Not backed by a ledger row, a capture or a measurement (none of the spec, the ledger, the carried code or the protocol notes holds them; they are working values of this plan): brightness, contrast, saturation, hue, sharpness 0–100 default 50; white balance 2000–10000 K step 100 default 5000, automatic by default; gain default 1; exposure time 100–250000 µs (1–2500 in 100 µs), default 33000 µs; focus position default 0. `tiny2lite::description::UNCONFIRMED` lists each of these by key (`image.brightness@min`, `image.white_balance.temperature#step`, …), and a unit test checks every key resolves. They replace 0.13's run-time `ctrl_range` check in the manual-exposure flow, so a wrong bound refuses valid values or lets the camera reject a write: track A confirms each in the ledger (from `Transport::ctrl_range` on the camera, or a capture) or corrects it, and empties `UNCONFIRMED`, before the evidence-level test of stage W3 (8.5). From 0.13.2: the hand area takes the gimbal range (pan −150..150, tilt −70..90), `hand.return_after` ≥ 0 s with no maximum, `gimbal.move` pan −150..150, tilt −70..90, speed 1–180 °/s.
-13. **Fakes.** Vendor id `0x3564` (in the vendor table, so `unknown` is unsupported, not ignored), products `fa0a`, `fa0b`, `fa00`; USB paths `9-<n>`; a restart (a `warning: restart` write or action) makes the device vanish for 1 s and come back with a new device number; `fake-b`'s `led.brightness` readback lags 250 ms and its `exposure.time` is stored rounded down to 100, so both ways out of `pending` happen; `fake-b`'s settle bound is 1000 ms. `fake-a`'s poll plan has one group per first path segment, not the Tiny 2 Lite's real grouping.
+13. **Fakes.** Vendor id `0x3564` (in the vendor table, so `unknown` is unsupported, not ignored), products `fa0a`, `fa0b`, `fa00`; USB paths `9-<n>`; a restart (a `warning: restart` write or action) makes the device vanish for 1 s and come back with a new device number; `fake-b`'s `led.brightness` readback lags 250 ms and its `exposure.time` is stored rounded down to 100, so both ways out of `pending` happen; `fake-b`'s settle bound is 1000 ms. `fake-a`'s poll plan has one group per first path segment, not the Tiny 2 Lite's real grouping. A preset saved without `name` is stored with an empty name in both fakes: their own behaviour, since the daemon names no preset (spec 4.4, 15.1 row 90) and what the camera reports for an unnamed preset is CAM-35.
 14. **The client** (spec 6.1) is written by track C, as spec 10.3 says; W0 reserves `crates/obsbot-proto/src/client.rs` so track C never edits `lib.rs`. `obsbot-proto` holds only the constants a client needs (`PROTOCOL`, the socket names, `MAX_REQUEST_LINE`, `REQUEST_DEADLINE`, `CLIENT_REPLY_TIMEOUT`); the daemon's limits (64 connections, 32 queued requests, 64 outbound lines) are constants of `obsbot4linuxd`, written by track B.
 15. **The 0.13 modules stage G keeps in `obsbot-device`.** G moves the 0.13 `state.rs` to `crates/obsbot-device/src/legacy/state.rs` and splits `legacy/full_status.rs` and `legacy/current_pose.rs` off the 0.13 camera module. Task 6 deletes `legacy/full_status.rs`, whose only users are the 0.13 daemon and CLI. `legacy/state.rs` and `legacy/current_pose.rs` stay: the carried Tiny 2 Lite flows still use them, and track A removes them with the flows it rewrites (spec 3.2). So at the end of W0 the 0.13 daemon, client, protocol, CLI and full status are gone, and the 0.13 state module is not.
 
@@ -132,7 +132,7 @@ Tasks 7 and 8 each depend on two wave-2 tasks (2 and 5): such a task starts from
 
 `Cargo.lock` changes in Tasks 1, 5, 6 and 11. When a rebase conflicts in it, take `rebuild`'s version and run `cargo build --workspace`; commit the result.
 
-The code of this plan was built and run in a copy of the workspace on 2026-11-13 (rustc 1.99.1), again after the review's fix round, and again after the change of spec 15.1 row 88 (with stand-ins for stage G's files; the regenerated description files and schema did not change): `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` and every test below passed. The code in the steps is that code.
+The code of this plan was built and run in a copy of the workspace on 2026-11-13 (rustc 1.99.1), again after the review's fix round, and again after the changes of spec 15.1 rows 88 and 90 (with stand-ins for stage G's files; the regenerated description files and schema did not change; 185 tests in the workspace, one more than before row 90: `a_preset_saved_without_a_name_gets_none`, which fails when the fake's default name is put back): `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` and every test below passed. The code in the steps is that code.
 
 ---
 
@@ -6296,7 +6296,8 @@ rebuilds from the reply. Revs of two connections are never compared.
   whose last read failed (they keep their last value).
 - A camera value the model cannot decode is the string `raw:<n>`.
 - List items carry the camera's own numbers: preset slots start at 0; view ids are the
-  camera's ids.
+  camera's ids. A preset's `name` is what the camera reports, empty included: the daemon
+  names no preset (`preset.save` without `name` sends no name).
 
 ## 9. Path dictionary
 
@@ -6937,6 +6938,49 @@ fn a_move_while_tracking_sends_only_the_move() {
             cam.touched(Target::Action(action)),
             Vec::<String>::new(),
             "{action} touches no group: only the camera could change the tracking, and that is CAM-34"
+        );
+    }
+}
+
+/// Spec 2 and 4.4: `preset.save` without `name` sends no rename and the daemon invents no
+/// name (0.13 named the preset `Preset <slot + 1>`). The fakes store an empty name for it,
+/// their own behaviour; what the camera reports for an unnamed preset is CAM-35.
+#[test]
+fn a_preset_saved_without_a_name_gets_none() {
+    let bus = bus();
+    for (product, id) in [("fa0a", "sn:FAKEA0000001"), ("fa0b", "sn:FAKEB0000001")] {
+        let mut cam = open(&bus, product);
+        let before = bus.ops(id).len();
+        cam.act(
+            "preset.save",
+            &params(json!({"slot": 0})),
+            &State::new(true),
+            &Ctx::none(),
+        )
+        .unwrap();
+        assert_eq!(
+            bus.ops(id)[before..],
+            [Op::Act("preset.save".into(), params(json!({"slot": 0})))],
+            "{product}: an action sends exactly what was asked (spec 2): one act, no rename after it"
+        );
+        let state = state_of(&mut *cam);
+        assert_eq!(
+            state.at("presets").unwrap()[0]["name"],
+            json!(""),
+            "{product}: the daemon invents no name (spec 2, 4.4)"
+        );
+        cam.act(
+            "preset.save",
+            &params(json!({"slot": 1, "name": "Desk"})),
+            &State::new(true),
+            &Ctx::none(),
+        )
+        .unwrap();
+        let state = state_of(&mut *cam);
+        assert_eq!(
+            state.at("presets").unwrap()[1]["name"],
+            json!("Desk"),
+            "{product}: a name that was given is stored"
         );
     }
 }
@@ -7711,10 +7755,9 @@ fn act(values: &mut Values, action: &str, p: &Params) -> Option<Params> {
         }
         "preset.save" => {
             let slot = p["slot"].as_u64().unwrap_or(0);
-            let name = p
-                .get("name")
-                .cloned()
-                .unwrap_or_else(|| json!(format!("Preset {}", slot + 1)));
+            // The fake's own behaviour: an unnamed preset has an empty name. What the
+            // camera reports for one is CAM-35; the daemon never invents a name (spec 2).
+            let name = p.get("name").cloned().unwrap_or_else(|| json!(""));
             let item = json!({"slot": slot, "name": name, "pose": pose(values)});
             let mut items: Vec<Value> = list(values, "presets")
                 .into_iter()
@@ -8029,10 +8072,8 @@ fn act(values: &mut Values, action: &str, p: &Params) -> Option<Params> {
     match action {
         "preset.save" => {
             let slot = p["slot"].clone();
-            let name = p
-                .get("name")
-                .cloned()
-                .unwrap_or_else(|| json!(format!("Preset {}", slot.as_u64().unwrap_or(0) + 1)));
+            // The fake's own behaviour: an unnamed preset has an empty name (CAM-35).
+            let name = p.get("name").cloned().unwrap_or_else(|| json!(""));
             items.retain(|i| i["slot"] != slot);
             items.push(json!({"slot": slot, "name": name}));
             items.sort_by_key(|i| i["slot"].as_u64());
@@ -8716,6 +8757,7 @@ git commit -m "obsbot4linuxd: crate stub with its fixed entry point run(Config)"
 | `fake-a` and `fake-b` pass a trait conformance test                                                                                                           | Task 9 `fake_a_and_fake_b_pass_the_conformance_check`, Task 7 |
 | every writable leaf with a readback in a group with a periodic tier                                                                                           | Task 7 (`WritableInTouchedGroup` row)                         |
 | `fake-a`'s `gimbal.move` and `gimbal.turn` are one operation each and leave `tracking.mode` alone (spec 2)                                                    | Task 9 `a_move_while_tracking_sends_only_the_move`            |
+| `preset.save` without `name` is one operation in both fakes, which store an empty name (spec 2, 4.4, CAM-35)                                                  | Task 9 `a_preset_saved_without_a_name_gets_none`              |
 | the `cargo metadata` check of section 3 passes                                                                                                                | Task 6                                                        |
 | the four crates as compiling stubs; the 0.13 daemon, client, protocol and CLI removed (the 0.13 `state` module stays in `legacy/` until track A, decision 15) | Tasks 1, 5, 6, 11                                             |
 | the Tiny 2 Lite description as data (every field of 4.3 and 4.4, U-rows included)                                                                             | Task 8                                                        |
@@ -8726,7 +8768,7 @@ git commit -m "obsbot4linuxd: crate stub with its fixed entry point run(Config)"
 
 ## Self-review
 
-1. **Spec coverage.** Section 2 (a request sends exactly what it names): the fakes, Task 9 `a_move_while_tracking_sends_only_the_move`. Section 3: crates, dependency direction and its CI check (Tasks 1, 5, 6, 11), `schema/` and `descriptions/` and `scripts/regenerate.sh` (3, 10). Section 4.1: every verb, reply, event and error code as a type (1), the ordering rules as transcript checks where a transcript can show them (4); the rest is daemon behaviour (track B). Section 4.2: every Device, Setting and Action field (1), the rules leaves, one meaning per path, naming, absent vs null, `unread`, `raw:<n>`, precision, identity shortening (1, 2, 12). Sections 4.3 and 4.4: every leaf and action (8), checked against the field ledger's rows. Sections 5.1 to 5.3: the enumeration seam `Bus`/`Found`/`Registry` (5) and the fakes' plug, unplug and re-enumeration (9); threads and start-up are track B. Section 5.12: the fakes and the test control (9). Section 6: the client is track C (decision 14); the CLI crate's dependency rule (6). Section 8.1 to 8.3: registry, `trait Camera`, send table types (5). Section 9.3: every row marked (8). Section 10.3 W0: the acceptance table above. Section 11: golden files and stale tests (1, 3, 4, 10). Not in W0 by the spec: daemon behaviour, the transports, the CLI commands, the widget.
+1. **Spec coverage.** Section 2 (a request sends exactly what it names): the fakes, Task 9 `a_move_while_tracking_sends_only_the_move` and `a_preset_saved_without_a_name_gets_none`. Section 3: crates, dependency direction and its CI check (Tasks 1, 5, 6, 11), `schema/` and `descriptions/` and `scripts/regenerate.sh` (3, 10). Section 4.1: every verb, reply, event and error code as a type (1), the ordering rules as transcript checks where a transcript can show them (4); the rest is daemon behaviour (track B). Section 4.2: every Device, Setting and Action field (1), the rules leaves, one meaning per path, naming, absent vs null, `unread`, `raw:<n>`, precision, identity shortening (1, 2, 12). Sections 4.3 and 4.4: every leaf and action (8), checked against the field ledger's rows. Sections 5.1 to 5.3: the enumeration seam `Bus`/`Found`/`Registry` (5) and the fakes' plug, unplug and re-enumeration (9); threads and start-up are track B. Section 5.12: the fakes and the test control (9). Section 6: the client is track C (decision 14); the CLI crate's dependency rule (6). Section 8.1 to 8.3: registry, `trait Camera`, send table types (5). Section 9.3: every row marked (8). Section 10.3 W0: the acceptance table above. Section 11: golden files and stale tests (1, 3, 4, 10). Not in W0 by the spec: daemon behaviour, the transports, the CLI commands, the widget.
 2. **Placeholder scan.** Every code step holds the whole file or the exact lines; the stubs of Tasks 1, 5 and 11 are complete files whose content later tasks replace.
 3. **Type consistency.** The names in every Interfaces block were compiled together in one workspace: `Refusal` lives in `obsbot_proto::validate` from Task 1 on; `Ctx`, `Motion`, `Need`, `Target`, `Group`, `Tier`, `LiveTier`, `SendTable`, `IdentitySource`, `ModelEntry` in `obsbot_device::contract`; `act` takes `&State` everywhere it is called or implemented (Tasks 5, 7, 9); `FakeBus` in `obsbot_device::models::fake`; `Config` in `obsbot4linuxd`.
 4. **Review Focus.** Five uncovered input classes, each with its test in the owning task (Tasks 1 and 2).

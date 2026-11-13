@@ -534,7 +534,8 @@ Per group:
   store it, and `false` stops the hand tracker's gimbal moves. `hand.return` is a pose or
   `null` (nullable: the camera reports "not set").
 - `presets`: at most 3 (`limits.presets`), slots 0–2. `views`: no known maximum. Names are
-  at most 32 printable ASCII characters.
+  at most 32 printable ASCII characters. A preset's `name` is what the camera reports, and
+  may be empty (4.4, CAM-35).
 - `exposure.mode`: `auto|manual`. `exposure.region`: `face|global`, the metering while the
   exposure is automatic. `exposure.time` in µs; it `requires` `exposure.mode=manual` (a time
   written while automatic freezes the automatic exposure); the camera rounds down to its own
@@ -638,7 +639,9 @@ factory_reset {confirm}
   from the camera. While the camera sleeps its live pose is the parking pose, which lies
   outside the tilt range, so these actions are `asleep: ignored` until CAM-22 shows
   otherwise.
-- `preset.save` without `name` names the preset `Preset <slot + 1>` (0.13.2 behaviour).
+- `preset.save` without `name` sends the preset and no name: no rename frame follows, and
+  obsbot4linux invents no name (0.13.2 named it `Preset <slot + 1>`). What the camera then
+  reports as the name of an unnamed preset is CAM-35; the state shows it as reported.
   `view.save` needs a name. Names are validated before the first frame is sent.
 - `preset.recall`, `preset.rename`, `preset.delete` and `power_on.use_preset` on an empty
   slot, and `view.*` with an unknown id, are refused with `conflict`. So are these actions
@@ -1013,6 +1016,11 @@ obsbot4linux watch [--live <topic>…]              hello reply and events as JS
 
   `describe <path|action>` for a path or action not in the device's description exits 2
   with code `unsupported`.
+
+- **Preset names.** `preset save N` without `--name` sends no name, and the CLI never makes
+  one up. For a preset whose `name` is empty, `preset list` and `status` may print a
+  placeholder of their own (for example `(unnamed)`) as display only; no client writes such
+  a label to the camera, and `--json` prints the name as the camera reported it.
 
 - **Errors.** With `--json`, an error prints `{"error":{"code","message"}}` on stdout;
   help and version stay plain text. An error the daemon sent keeps its code. Errors the CLI
@@ -1500,7 +1508,7 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`; CAM-14                                                                                           |
 | `image gamma V`                                                         | –                                                                    | PX-2                                                                                                              |
 | `preset list`                                                           | `get presets`                                                        |                                                                                                                   |
-| `preset save N`                                                         | `do preset.save slot=N`                                              | live pose, name `Preset <N + 1>`                                                                                  |
+| `preset save N`                                                         | `do preset.save slot=N`                                              | live pose; no name (12.2, CAM-35)                                                                                 |
 | `preset save N --name S`                                                | `do preset.save slot=N name=S`                                       |                                                                                                                   |
 | `preset save N --pan P --tilt T --zoom Z`                               | `do preset.save slot=N pose=P,T,Z`                                   |                                                                                                                   |
 | `preset rename N S`                                                     | `do preset.rename slot=N name=S`                                     |                                                                                                                   |
@@ -1697,7 +1705,7 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   code fixed or named in section 14; the carried gimbal move and rate flows without their
   switch to the static tracking mode (3.2).
 - **Acceptance with camera (CS-1):** the live tests: CAM-1 to CAM-8, CAM-10, CAM-13 to
-  CAM-20, CAM-22, CAM-23, CAM-25, CAM-33 and CAM-34 (CAM-21 is recorded if it happens and
+  CAM-20, CAM-22, CAM-23, CAM-25, CAM-33 to CAM-35 (CAM-21 is recorded if it happens and
   gates nothing).
   Results go into the ledger and arrive as contract-change PRs (U-rows removed,
   `settle_ms`, `asleep` values, `focus auto off` mapping).
@@ -1933,7 +1941,10 @@ The CHANGELOG of 1.0 carries the migration notes:
 - the 0.13 commands `gimbal [--pan P] [--tilt T]` and `gimbal rate` switched the tracking
   to static before they moved. `do gimbal.move` and `do gimbal.turn` send only the move and
   leave the tracking as it is (section 2). A script that relied on the switch runs
-  `obsbot4linux set tracking.mode=static` first, as its own step.
+  `obsbot4linux set tracking.mode=static` first, as its own step;
+- the 0.13 command `preset save N` without a name saved the preset as `Preset <N + 1>`.
+  `do preset.save slot=N` sends no name (section 2): what the camera shows for such a preset
+  is what the state shows, and a script that wants the old names passes `name=…` itself.
 
 ### 12.3 Widget
 
@@ -1942,7 +1953,9 @@ values by `pending` and `rev`; this replaces its own hold of up to 3 s
 (obsbot4linux-dux#89). Its `plugin.json` requires obsbot4linux ≥ 1.0. Each control sends
 the one request the user made and chains none (section 2): the gimbal controls send
 `gimbal.move` or `gimbal.turn` alone, never a tracking switch before them. A user who wants
-the tracking off uses the tracking control first.
+the tracking off uses the tracking control first. Saving a preset sends no name unless the
+user typed one. A control may show a placeholder of its own for a preset whose `name` is
+empty, as pure display; it never writes that label to the camera.
 
 ### 12.4 Desktop app
 
@@ -2021,6 +2034,7 @@ and CAM-29 are recorded only if they happen and gate nothing.
 | CAM-32 | The status block of a real Tiny 2: do Tiny 2 and Tiny 2 Lite share the layout? (an unverified hypothesis today)                                                                 | when a Tiny 2 is at hand       | onboarding of the Tiny 2                                       |
 | CAM-33 | Do `tracking.speed`, `tracking.profile=headroom` and `framing.*` change the tracking visibly, with a person in view? (Their write and readback are measured, #98.)              | A                              | `no_effect` of those leaves                                    |
 | CAM-34 | With the tracking on (`tracking.mode` not `static`), what do `gimbal.move` and `gimbal.turn` do: move and track on, switch the mode, or nothing? (with a person in view)        | A                              | the text of 4.4; `touched` of the moves (8.8)                  |
+| CAM-35 | What does the camera report as the name of a preset saved without a name, and does the name reach the state as empty or as a name of its own? (obsbot4linux sends none)         | A                              | the text of 4.4; the placeholder of clients (6.2, 12.3)        |
 
 **Tiny 3 and Tiny 3 Lite** (stage M4, onboarding steps 0–2 and 7 on the unit in hand;
 everything here is unknown until captures)
@@ -2150,3 +2164,4 @@ on its own.
 | --- | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | 88  | 2026-11-13 | An action sends exactly what was asked | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13                     | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request; the carried flows lose the switch (2, 3.2, 4.4, 5.6, 6.2, 8.2, 8.3, 8.8, 9.1, 10.3, 12.2, 12.3, 14); new tests: 8.3 the exact frames of each ledger row; 10.3 the W0 fake test, the track B, C and D checks | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone                                | Thomas, 2026-11-13                      |
 | 89  | 2026-11-13 | Stops the daemon sends on its own      | the daemon stops a running turn when the camera falls asleep, and best effort on a clean shutdown (also for a `keep:true` turn) | the only stop the daemon sends is the end a turn's request set: a turn without `keep:true` stops when its connection closes, a shutdown included; a `keep:true` turn goes on across a shutdown, and across sleep the camera decides (CAM-7) (2, 4.4, 5.6, 5.9, 10.3, 14)                                                                                                                                                                                         | the client that started a turn can still end it, and `gimbal.stop` works from any connection and after a restart, so these stops were logic of our own; 0.13 sent neither | Thomas, 2026-11-13 (the rule of row 88) |
+| 90  | 2026-11-13 | Presets saved without a name           | `preset.save` without `name` names the preset `Preset <slot + 1>` (0.13.2 behaviour)                                            | it sends the preset and no name, no rename frame follows; what the camera reports as the name of an unnamed preset is CAM-35; a client may show its own placeholder for an empty name as display only and never writes it to the camera (2, 4.3, 4.4, 6.2, 9.1, 10.3, 12.2, 12.3, 14); new test: 10.3 the W0 fake test for `preset.save`                                                                                                                         | a name the daemon invents is a write the user did not ask for and contradicts section 2; the camera can show an unnamed preset by itself                                  | the rule of row 88, applied 2026-11-13  |
