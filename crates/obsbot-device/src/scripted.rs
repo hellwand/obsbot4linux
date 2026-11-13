@@ -18,8 +18,6 @@ use std::sync::OnceLock;
 pub(crate) enum Answer {
     /// Type 0x29 with this data.
     Value(Vec<u8>),
-    /// Type 0x89 with this error code.
-    Rejected(i16),
     /// Sending the query fails (the write to selector 2 returns an error).
     SendFails,
 }
@@ -63,7 +61,6 @@ impl Scripted {
                 let command = u16::from_le_bytes([last[10], last[11]]);
                 Ok(match self.answers.get(&command) {
                     Some(Answer::Value(data)) => answer(0x29, &last, None, data),
-                    Some(Answer::Rejected(code)) => answer(0x89, &last, Some(*code), &[]),
                     Some(Answer::SendFails) | None => answer(0x89, &last, Some(-1), &[]),
                 })
             }
