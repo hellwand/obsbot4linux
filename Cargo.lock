@@ -204,8 +204,10 @@ dependencies = [
 name = "obsbot4linuxd"
 version = "0.14.0"
 dependencies = [
+ "nix",
  "obsbot-device",
  "obsbot-proto",
+ "serde_json",
 ]
 
 [[package]]
