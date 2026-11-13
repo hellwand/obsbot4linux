@@ -341,12 +341,12 @@ export CARGO_TARGET_DIR="$SCRATCH/target-<task key>"
 nice -n 19 cargo fmt --check
 nice -n 19 cargo clippy --workspace --all-targets --locked -j 3 -- -D warnings
 nice -n 19 cargo test --workspace --locked -j 3
-shellcheck scripts/groundwork/*.sh scripts/package-contents.sh
+shellcheck scripts/*.sh scripts/groundwork/*.sh
 actionlint .github/workflows/*.yml
 ```
 
-(The older scripts in `scripts/` have shellcheck findings of their own, P5; a pure move does not
-touch them.)
+(The gate covers every script in `scripts/`; the findings of the older ones, P5, are fixed by
+issue #154.)
 
 ## Order and parallel work
 
@@ -985,11 +985,11 @@ done | sed -e "s/$ver/VERSION/g" -e 's/x86_64\|aarch64\|amd64\|arm64/ARCH/g' | L
 
 ```bash
 chmod +x scripts/groundwork/test-names.sh scripts/groundwork/move-check.sh scripts/package-contents.sh
-shellcheck scripts/groundwork/*.sh scripts/package-contents.sh
+shellcheck scripts/*.sh scripts/groundwork/*.sh
 ```
 
-Expected: shellcheck prints nothing (checked on these three scripts). The older scripts in
-`scripts/` are left alone (P5).
+Expected: shellcheck prints nothing (all scripts in `scripts/`; the old findings, P5, are fixed
+by issue #154).
 
 - [ ] **Step 10: Add the job `contents` to `.github/workflows/release.yml`**
 

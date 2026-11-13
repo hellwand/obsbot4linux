@@ -40,4 +40,4 @@ if [ -z "$pkg" ]; then
   ls -la "$work/out" >&2 || true
   exit 1
 fi
-cp $pkg "$out"
+cp "$pkg" "$out"
