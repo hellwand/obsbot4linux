@@ -4,4 +4,5 @@
 
 pub mod checked;
 pub mod replay;
+pub mod usb;
 pub mod uvc;
