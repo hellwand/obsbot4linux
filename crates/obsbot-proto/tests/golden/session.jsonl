@@ -1,0 +1,23 @@
+# A widget connects, writes one leaf, reads it back, recalls a preset and changes its live list.
+# Example device sn:EXAMPLE0000001 (model "example") and one unsupported device port:3-2.4.
+> {"id":1,"hello":{"protocol":2,"client":"widget 1.0","subscribe":true,"live":["pose"]}}
+< {"id":1,"ok":{"protocol":2,"daemon":"1.0.0","devices":[{"id":"sn:EXAMPLE0000001","name":"Example Camera 0001","model":"example","support":"tested","serial":"EXAMPLE0000001","firmware":"1.2.3.4","video_node":"/dev/video2","available":true,"usb":{"vendor":"3564","product":"fa01","product_name":"Example Camera","bcd_device":"0100","path":"3-2.1","serial_present":false,"interfaces":["0e","0e"],"extension_units":[{"unit":2,"guid":"00000000-0000-0000-0000-000000000001","controls":12}]},"settings":{"asleep":{"type":"bool","label":"Asleep","readonly":true,"nullable":false,"readback":true,"no_effect":false},"gimbal.pan":{"type":"number","label":"Pan","readonly":true,"nullable":false,"readback":true,"no_effect":false,"unit":"deg","precision":0.1,"live":"pose"},"led.brightness":{"type":"number","label":"LED brightness","readonly":false,"nullable":false,"readback":true,"asleep":"unknown","no_effect":false,"min":0,"max":3,"step":1,"settle_ms":3000},"presets":{"type":"list","label":"Presets","readonly":true,"nullable":false,"readback":true,"no_effect":false,"item":{"name":{"type":"string","label":"Name","readonly":false,"nullable":false,"readback":true,"no_effect":false,"max_len":32,"ascii":true},"slot":{"type":"number","label":"Slot","readonly":false,"nullable":false,"readback":true,"no_effect":false,"min":0,"max":2,"step":1}}}},"actions":{"preset.recall":{"label":"Recall a preset","params":{"slot":{"type":"number","label":"Slot","readonly":false,"nullable":false,"readback":true,"no_effect":false,"min":0,"max":2,"step":1}},"asleep":"unknown"}},"limits":{"presets":3}},{"id":"port:3-2.4","name":"USB 3564:fa02 3-2.4","model":"unknown","support":"unsupported","serial":null,"firmware":null,"video_node":"/dev/video6","available":true,"usb":{"vendor":"3564","product":"fa02","product_name":null,"bcd_device":"0100","path":"3-2.4","serial_present":false,"interfaces":["0e","0e"],"extension_units":[]},"settings":{},"actions":{},"limits":{}}],"states":{"port:3-2.4":{"rev":1,"state":{"available":true,"pending":{},"unread":[]}},"sn:EXAMPLE0000001":{"rev":4,"state":{"available":true,"pending":{},"unread":[],"asleep":false,"gimbal":{"pan":12.5},"led":{"brightness":1},"presets":[{"name":"Desk","slot":0}]}}}}}
+# The write is accepted; the touched re-read does not show it yet, so it is pending (4.1 rules 3 and 4).
+> {"id":2,"device":"sn:EXAMPLE0000001","set":{"led.brightness":2}}
+< {"event":"state","device":"sn:EXAMPLE0000001","rev":5,"state":{"available":true,"pending":{"led.brightness":2},"unread":[],"asleep":false,"gimbal":{"pan":12.5},"led":{"brightness":1},"presets":[{"name":"Desk","slot":0}]}}
+< {"id":2,"ok":{"rev":5}}
+# The next read of the group shows the value: it leaves pending.
+< {"event":"state","device":"sn:EXAMPLE0000001","rev":6,"state":{"available":true,"pending":{},"unread":[],"asleep":false,"gimbal":{"pan":12.5},"led":{"brightness":2},"presets":[{"name":"Desk","slot":0}]}}
+> {"id":3,"device":"sn:EXAMPLE0000001","get":["led"]}
+< {"id":3,"ok":{"rev":6,"state":{"available":true,"pending":{},"unread":[],"led":{"brightness":2}}}}
+# A motion action replies on acceptance; the pose then moves through later events (4.1 rule 6).
+> {"id":4,"device":"sn:EXAMPLE0000001","do":"preset.recall","with":{"slot":0}}
+< {"id":4,"ok":{"rev":6}}
+< {"event":"state","device":"sn:EXAMPLE0000001","rev":7,"state":{"available":true,"pending":{},"unread":[],"asleep":false,"gimbal":{"pan":-20},"led":{"brightness":2},"presets":[{"name":"Desk","slot":0}]}}
+> {"id":5,"live":["pose","target"]}
+< {"id":5,"ok":{}}
+# Requests for the unsupported device are answered at once (4.1 rule 2, 5.4).
+> {"id":6,"device":"port:3-2.4","get":null}
+< {"id":6,"ok":{"rev":1,"state":{"available":true,"pending":{},"unread":[]}}}
+> {"id":7,"device":"port:3-2.4","set":{"led.brightness":2}}
+< {"id":7,"error":{"code":"unsupported_device","message":"port:3-2.4 is not supported by obsbot4linux"}}
