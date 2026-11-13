@@ -148,6 +148,12 @@ fn tilt_to_pitch_range(tilt: (f32, f32)) -> (f32, f32) {
     (-tilt.1, -tilt.0)
 }
 
+/// A tilt (obsbot4linux's angle, positive up) as the pose commands take it (pitch, positive
+/// down). Adding 0.0 turns -0.0 into 0.0, so a tilt of 0 is sent as +0.0.
+fn tilt_to_pitch(tilt: Option<f32>) -> Option<f32> {
+    tilt.map(|t| -t + 0.0)
+}
+
 /// A pitch range (min, max) as the camera reports it (positive down) in obsbot4linux's angles
 /// (positive up): min and max swap and flip.
 fn pitch_to_tilt_range(pitch: (f32, f32)) -> (f32, f32) {
@@ -805,7 +811,7 @@ impl Camera {
     pub fn gimbal(&self, pan: Option<f32>, tilt: Option<f32>, speed: Option<f32>) -> Result<()> {
         // build first so invalid input fails before anything is sent
         let seq = self.seq.next();
-        let tilt_wire = tilt.map(|t| -t + 0.0);
+        let tilt_wire = tilt_to_pitch(tilt);
         let frame = match speed {
             Some(s) => cmd::gimbal_pose_speed(pan, tilt_wire, s, seq)?,
             None => cmd::gimbal_pose(pan, tilt_wire, seq)?,
@@ -1031,6 +1037,53 @@ mod live_pose_tests {
     #[test]
     fn a_short_answer_is_no_pose() {
         assert!(LivePose::decode(&[0u8; 11]).is_none());
+    }
+}
+
+#[cfg(test)]
+mod gimbal_tilt_tests {
+    use super::*;
+    use crate::family::frame::FRAME_SIZE;
+
+    /// A frame built with the captured sequence number must equal the captured bytes.
+    fn assert_captured(built: [u8; FRAME_SIZE], captured: &str) {
+        let captured = hex::decode(captured).unwrap();
+        assert_eq!(built[..captured.len()], captured[..]);
+        assert!(built[captured.len()..].iter().all(|b| *b == 0));
+    }
+
+    #[test]
+    fn tilt_up_is_sent_as_the_negated_pitch() {
+        // `gimbal --tilt 20` has to tilt the camera up; the camera's pitch is positive down.
+        assert_eq!(tilt_to_pitch(Some(20.0)), Some(-20.0));
+        assert_eq!(tilt_to_pitch(Some(-20.0)), Some(20.0));
+        assert_eq!(tilt_to_pitch(Some(-70.0)), Some(70.0));
+    }
+
+    #[test]
+    fn a_tilt_of_zero_is_sent_as_positive_zero() {
+        // no -0.0 on the wire: it would put the sign bit into the frame
+        assert_eq!(tilt_to_pitch(Some(0.0)).unwrap().to_bits(), 0);
+        assert_eq!(tilt_to_pitch(Some(-0.0)).unwrap().to_bits(), 0);
+    }
+
+    #[test]
+    fn no_tilt_keeps_the_axis() {
+        assert_eq!(tilt_to_pitch(None), None);
+    }
+
+    #[test]
+    fn the_converted_tilt_builds_the_captured_pose_frames() {
+        // capture 18: the pitch word of the first pose is -30.0 and that of the second +0.0, so
+        // a tilt of 30 (up) and a tilt of 0 give these frames; the unconverted value would not.
+        assert_captured(
+            cmd::gimbal_pose(None, tilt_to_pitch(Some(30.0)), 28).unwrap(),
+            "aa251c000c000b250a0444640c000f1600007ac40000f0c100007ac4",
+        );
+        assert_captured(
+            cmd::gimbal_pose(Some(0.0), tilt_to_pitch(Some(0.0)), 33).unwrap(),
+            "aa2521000c009a200a0444640c0004c400007ac40000000000000000",
+        );
     }
 }
 
