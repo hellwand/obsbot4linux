@@ -10,3 +10,4 @@ mod proto;
 fn main() {
     std::process::exit(cli::run());
 }
+const _PROBE: u8=0;
