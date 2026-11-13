@@ -1,0 +1,47 @@
+[package]
+name = "obsbot4linux"
+description = "Control OBSBOT webcams on Linux from the console and the DMS widget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish.workspace = true
+readme = "../../README.md"
+
+[[bin]]
+name = "obsbot4linux"
+path = "src/main.rs"
+
+[dependencies]
+obsbot-device.workspace = true
+clap.workspace = true
+nix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[package.metadata.deb]
+maintainer = "Thomas Kroll <t.kroll@outlook.com>"
+section = "video"
+extended-description = "Most settings OBSBOT Center offers, from the console and from the DMS bar widget.\nWhat is missing: https://github.com/hellwand/obsbot4linux/blob/main/docs/center-parity.md\nThe obsbot4linux daemon (systemd user socket) owns the camera state."
+depends = "$auto"
+license-file = ["../../LICENSE", "0"]
+assets = [
+    ["target/release/obsbot4linux", "usr/bin/", "755"],
+    ["../../packaging/systemd/obsbot4linux.service", "usr/lib/systemd/user/", "644"],
+    ["../../packaging/systemd/obsbot4linux.socket", "usr/lib/systemd/user/", "644"],
+    ["../../README.md", "usr/share/doc/obsbot4linux/", "644"],
+    ["../../CHANGELOG.md", "usr/share/doc/obsbot4linux/", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/obsbot4linux", dest = "/usr/bin/obsbot4linux", mode = "755" },
+    { source = "../../packaging/systemd/obsbot4linux.service", dest = "/usr/lib/systemd/user/obsbot4linux.service", mode = "644" },
+    { source = "../../packaging/systemd/obsbot4linux.socket", dest = "/usr/lib/systemd/user/obsbot4linux.socket", mode = "644" },
+    { source = "../../README.md", dest = "/usr/share/doc/obsbot4linux/README.md", mode = "644", doc = true },
+    { source = "../../CHANGELOG.md", dest = "/usr/share/doc/obsbot4linux/CHANGELOG.md", mode = "644", doc = true },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/obsbot4linux/LICENSE", mode = "644" },
+]

@@ -9,6 +9,9 @@ All notable changes to OBSBot4Linux. The format follows
 
 - The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
 - README and package text now say "most settings OBSBOT Center offers" and link `docs/center-parity.md` for the gaps; they also state the glibc 2.34 floor, how to switch to the socket units while the widget's daemon runs, to restart the daemon after an upgrade (socket users: `systemctl --user restart obsbot4linux.service`; a daemon started by `watch` ends with the shell's unit), that `zoom F --speed S` and `zoom stop` leave the AI mode alone, the `device busy` window of the on-air probe on uvcvideo up to 6.16, and the order of auto and manual image controls (#121).
+- The source is a cargo workspace now: `crates/obsbot-device` holds the camera access,
+  `crates/obsbot4linux` the CLI and the daemon. The program, its output and the packages do not
+  change.
 
 ### Fixed
 

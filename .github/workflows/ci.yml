@@ -68,7 +68,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component clippy --no-self-update
-      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   test:
     needs: changes
@@ -79,7 +79,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update
-      - run: cargo test --locked
+      - run: cargo test --workspace --locked
 
   # Builds and tests with the oldest Rust that Cargo.toml's rust-version claims.
   msrv:
@@ -94,7 +94,7 @@ jobs:
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
           test -n "$msrv"
           rustup toolchain install "$msrv" --profile minimal --no-self-update
-          cargo "+$msrv" test --locked
+          cargo "+$msrv" test --workspace --locked
 
   # The one check the main ruleset requires. Code changes need fmt, clippy, test and msrv to
   # succeed; docs-only changes need them skipped. Anything else fails.

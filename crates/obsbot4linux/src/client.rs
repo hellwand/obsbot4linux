@@ -4,7 +4,7 @@
 
 use crate::cli::Cli;
 use crate::proto::{Response, socket_path};
-use obsbot4linux::error::{Error, Result};
+use obsbot_device::error::{Error, Result};
 use serde_json::{Value, json};
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
@@ -55,7 +55,7 @@ fn connect_or_start() -> Result<UnixStream> {
     }
     let exe = std::env::current_exe()?;
     // its errors go next to the state file; without a log they are lost, not fatal
-    let log = obsbot4linux::state::path().with_file_name("daemon.log");
+    let log = obsbot_device::state::path().with_file_name("daemon.log");
     let stderr = log
         .parent()
         .map_or(Ok(()), std::fs::create_dir_all)

@@ -407,7 +407,7 @@ it does not arm the flag but consumes one that a recall or `0x6604` armed earlie
 goes Static on arrival; afterwards tracking may stay suspended, since the view's actions name no
 AI mode, as with `startup go`. Not seen so far: tracking stayed on after a `zone view go` in AI normal. The flag part is still to be confirmed.
 
-Adding a model: an entry in `MODELS` in `src/models.rs` (name, USB id, by-id and card name
+Adding a model: an entry in `MODELS` in `crates/obsbot-device/src/registry.rs` (name, USB id, by-id and card name
 patterns) makes it detected. Its commands and status decoding differ per camera and today exist
 for the Tiny 2 Lite only; the plan is one module per model behind the same commands, once a
 camera is at hand to capture and test (see [CONTRIBUTING.md](CONTRIBUTING.md)).

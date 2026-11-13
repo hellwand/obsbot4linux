@@ -10,7 +10,7 @@
 //! number only. flock is advisory; streaming applications do not take it and are not held up.
 
 use crate::error::{Error, Result};
-use crate::models::{self, Model};
+use crate::registry::{self, Model};
 use nix::errno::Errno;
 use nix::fcntl::{Flock, FlockArg};
 use nix::{ioctl_read, ioctl_readwrite};
@@ -160,7 +160,7 @@ pub fn detect() -> Option<Detected> {
         if let Ok(file) = File::open(&path)
             && let Some((card, caps)) = card_name(&file)
             && caps & V4L2_CAP_META_CAPTURE == 0
-            && let Some(model) = models::from_card(&card)
+            && let Some(model) = registry::from_card(&card)
         {
             return Some(Detected {
                 model,
@@ -176,7 +176,7 @@ pub fn detect() -> Option<Detected> {
 fn first_by_id(mut links: Vec<PathBuf>) -> Option<Detected> {
     links.sort();
     links.into_iter().find_map(|device| {
-        let model = models::from_by_id(&device.file_name()?.to_string_lossy())?;
+        let model = registry::from_by_id(&device.file_name()?.to_string_lossy())?;
         Some(Detected { model, device })
     })
 }
