@@ -202,6 +202,17 @@ pub enum Frame {
     Short { selector: u8, command: u8 },
     /// A write of a standard UVC control (V4L2 control id).
     Uvc { control: u32 },
+    /// A framed query (frame type `0x01`, or `0x21` with a request such as a view id) on an
+    /// extension-unit selector. A query is a read, but it is a frame the model writes, so the
+    /// send table names it like a command; `Framed` names commands (type `0x25`) only.
+    Query {
+        selector: u8,
+        receiver: u8,
+        command: u16,
+    },
+    /// The whole buffer of a selector written back as it was read: on the Tiny 2 Lite the
+    /// preset list rewind on selector `0x0c` (spec 8.8, CAM-19).
+    Block { selector: u8 },
 }
 
 /// One entry of a send table, with its evidence (`"capture 11"`, `"measured 2026-10-31"`,

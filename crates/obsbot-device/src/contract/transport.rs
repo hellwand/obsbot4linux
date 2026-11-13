@@ -45,4 +45,14 @@ pub trait Transport: Send {
     fn usb_serial(&mut self) -> Result<Option<String>>;
     /// One sample of the on-air probe on the video node with index 0.
     fn on_air(&mut self) -> Result<OnAir>;
+    /// Takes the per-operation lock on the video node (5.8 `NODE_LOCK_WAIT`) and keeps it
+    /// until [`Transport::release`], so that one exchange (a command, or a query and the
+    /// reads of its answer) is not split by another process that talks to the same camera.
+    /// `Err(Locked)` when the lock stayed taken for `NODE_LOCK_WAIT`. A transport without
+    /// a lock (replay, fakes) keeps the default, which does nothing.
+    fn hold(&mut self) -> Result<()> {
+        Ok(())
+    }
+    /// Gives the lock of [`Transport::hold`] back. Calling it without a hold does nothing.
+    fn release(&mut self) {}
 }
