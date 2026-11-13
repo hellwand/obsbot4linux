@@ -5,7 +5,7 @@ name: Release
 # runs only its toolchain check.
 on:
   push:
-    tags: ['v*.*.*']
+    tags: ["v*.*.*"]
   pull_request:
     branches: [main, rebuild]
     paths:
@@ -26,7 +26,7 @@ env:
   CARGO_TERM_COLOR: always
   # Toolchain of the test, binary, deb and rpm jobs (the arch jobs build with the Rust of the
   # Arch container); verify fails unless ci.yml pins the same.
-  RUSTUP_TOOLCHAIN: '1.99.1'
+  RUSTUP_TOOLCHAIN: "1.99.1"
 
 jobs:
   # The version without "v": from the tag, on a pull request from Cargo.toml.
@@ -66,7 +66,8 @@ jobs:
       - if: startsWith(github.ref, 'refs/tags/')
         run: scripts/changelog-section.sh "$GITHUB_REF_NAME" > /dev/null
       - run: |
-          grep -qx "  RUSTUP_TOOLCHAIN: '$RUSTUP_TOOLCHAIN'" .github/workflows/ci.yml
+          grep -qxF -e "  RUSTUP_TOOLCHAIN: '$RUSTUP_TOOLCHAIN'" \
+            -e "  RUSTUP_TOOLCHAIN: \"$RUSTUP_TOOLCHAIN\"" .github/workflows/ci.yml
 
   # The fmt, clippy, test and msrv steps of ci.yml.
   test:
