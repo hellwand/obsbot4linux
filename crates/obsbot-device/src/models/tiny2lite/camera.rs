@@ -1175,6 +1175,41 @@ mod angle_conversion_tests {
         assert_eq!(hand_enabled(&hand_answer(&[])[..23]), (Some(true), None));
         assert_eq!(hand_enabled(&hand_answer(&[])[..22]), (None, None));
     }
+
+    #[test]
+    fn a_zero_pitch_minimum_reads_as_a_positive_zero_tilt_maximum() {
+        // the other end of `a_zero_pitch_limit_reads_as_positive_zero`: no "-0" in the output
+        let (_, tilt_max) = pitch_to_tilt_range((0.0, 30.0));
+        assert_eq!(tilt_max.to_bits(), 0);
+    }
+
+    #[test]
+    fn hand_area_pitch_limits_of_zero_read_as_positive_zero_tilts() {
+        // pitch min and max 0 (words 2 and 3 as f32): both tilts are +0.0, not -0.0
+        let d = hand_answer(&[
+            (8, 0),
+            (9, 0),
+            (10, 0),
+            (11, 0),
+            (12, 0),
+            (13, 0),
+            (14, 0),
+            (15, 0),
+        ]);
+        let area = HandArea::decode(&d).unwrap();
+        assert_eq!(area.tilt_min.to_bits(), 0);
+        assert_eq!(area.tilt_max.to_bits(), 0);
+    }
+
+    #[test]
+    fn a_live_pose_at_pitch_zero_has_a_positive_zero_tilt() {
+        // pitch word 0, yaw +20.00: tilt reads as +0.0, not -0.0 (the JSON would show "-0.0")
+        let mut d = [0u8; 32];
+        d[10..12].copy_from_slice(&2000i16.to_le_bytes());
+        let p = LivePose::decode(&d).unwrap();
+        assert_eq!(p.pan, 20.0);
+        assert_eq!(p.tilt.to_bits(), 0);
+    }
 }
 
 #[cfg(test)]
@@ -1232,5 +1267,361 @@ mod picture_and_sound_tests {
         );
         assert!(r.is_err());
         assert!(log.borrow().is_empty(), "no switch, no value");
+    }
+}
+
+/// The reads and the checks of `Camera` on a scripted camera (no device is opened).
+#[cfg(test)]
+mod scripted_camera_tests {
+    use super::*;
+    use crate::scripted::{self, Answer, Scripted};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::time::Instant;
+
+    // V4L2 control ids
+    const BRIGHTNESS: u32 = 0x0098_0900;
+    const GAIN: u32 = 0x0098_0913;
+    const EXPOSURE_TIME: u32 = 0x009a_0902;
+
+    type Log = Rc<RefCell<Vec<(u32, i32)>>>;
+
+    fn floats(values: &[f32]) -> Vec<u8> {
+        values.iter().flat_map(|v| v.to_le_bytes()).collect()
+    }
+
+    fn script() -> Scripted {
+        Scripted::new([0u8; 60])
+    }
+
+    fn answer(script: &mut Scripted, command: u16, data: Vec<u8>) {
+        script.answers.insert(command, Answer::Value(data));
+    }
+
+    /// A pose answer (`0x4ec4`, `0x2504`, `0x1444`): the leading u32, then pan, pitch, one word
+    /// that is not read, and zoom as f32.
+    fn pose_answer(lead: u32, pan: f32, pitch: f32, zoom: f32) -> Vec<u8> {
+        let mut d = lead.to_le_bytes().to_vec();
+        d.extend(floats(&[pan, pitch, 0.0, zoom]));
+        d
+    }
+
+    /// A camera whose controls are `ctrls`, and the log of its `set_ctrl` calls.
+    fn with_ctrls(ctrls: &[(u32, i32)]) -> (Camera, Log) {
+        let mut script = script();
+        script.ctrls.extend(ctrls.iter().copied());
+        let log = script.set_ctrls.clone();
+        (scripted::camera(script), log)
+    }
+
+    #[test]
+    fn image_controls_lists_the_controls_the_camera_has_with_their_values() {
+        let (camera, _) = with_ctrls(&[(BRIGHTNESS, 12)]);
+        let controls = camera.image_controls().unwrap();
+        assert_eq!(controls.len(), 1);
+        assert_eq!(controls["brightness"].value, 12);
+    }
+
+    #[test]
+    fn image_names_map_to_their_v4l2_ids() {
+        assert_eq!(Camera::image_id("brightness").unwrap(), BRIGHTNESS);
+        assert_eq!(Camera::image_id("gain").unwrap(), GAIN);
+        assert!(matches!(
+            Camera::image_id("sparkle"),
+            Err(Error::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn an_image_value_must_be_inside_the_range_of_the_control() {
+        // the scripted range is 0 to 100
+        let (camera, _) = with_ctrls(&[(BRIGHTNESS, 50)]);
+        assert_eq!(
+            camera.image_id_in_range("brightness", 0).unwrap(),
+            BRIGHTNESS
+        );
+        assert_eq!(
+            camera.image_id_in_range("brightness", 100).unwrap(),
+            BRIGHTNESS
+        );
+        for value in [-1, 101] {
+            let result = camera.image_id_in_range("brightness", value);
+            assert!(matches!(result, Err(Error::Invalid(_))), "{value}");
+        }
+        let result = camera.image_id_in_range("gain", 5);
+        assert!(
+            matches!(result, Err(Error::Unsupported(_))),
+            "the camera has no gain"
+        );
+    }
+
+    #[test]
+    fn a_shutter_time_needs_manual_exposure() {
+        // sent while the exposure is automatic it would freeze the automatic exposure
+        let (camera, log) =
+            with_ctrls(&[(EXPOSURE_TIME, 10), (EXPOSURE_AUTO, 0), (BRIGHTNESS, 50)]);
+        let result = camera.set_image("exposure_time", 20);
+        assert!(matches!(result, Err(Error::Invalid(_))), "{result:?}");
+        assert!(log.borrow().is_empty(), "nothing was set");
+        // the other controls do not care
+        camera.set_image("brightness", 20).unwrap();
+        assert_eq!(*log.borrow(), [(BRIGHTNESS, 20)]);
+        let (camera, log) = with_ctrls(&[(EXPOSURE_TIME, 10), (EXPOSURE_AUTO, 1)]);
+        camera.set_image("exposure_time", 20).unwrap();
+        assert_eq!(*log.borrow(), [(EXPOSURE_TIME, 20)]);
+    }
+
+    #[test]
+    fn manual_exposure_switches_first_and_then_sets_time_and_gain() {
+        let (camera, log) = with_ctrls(&[(EXPOSURE_AUTO, 1), (EXPOSURE_TIME, 10), (GAIN, 0)]);
+        camera.set_manual_exposure(Some(100), Some(7)).unwrap();
+        assert_eq!(
+            *log.borrow(),
+            [(EXPOSURE_AUTO, 1), (EXPOSURE_TIME, 100), (GAIN, 7)]
+        );
+    }
+
+    #[test]
+    fn manual_focus_turns_autofocus_off_and_stays_in_range() {
+        let (camera, log) = with_ctrls(&[(FOCUS_ABSOLUTE, 50)]);
+        for value in [0, 100] {
+            log.borrow_mut().clear();
+            camera.set_focus(value).unwrap();
+            assert_eq!(*log.borrow(), [(FOCUS_AUTO, 0), (FOCUS_ABSOLUTE, value)]);
+        }
+        for value in [-1, 101] {
+            log.borrow_mut().clear();
+            let result = camera.set_focus(value);
+            assert!(matches!(result, Err(Error::Invalid(_))), "{value}");
+            assert!(log.borrow().is_empty(), "{value} changed something");
+        }
+        let (camera, _) = with_ctrls(&[]);
+        assert!(matches!(camera.set_focus(10), Err(Error::Unsupported(_))));
+    }
+
+    #[test]
+    fn autofocus_is_the_continuous_autofocus_control() {
+        let (camera, log) = with_ctrls(&[]);
+        camera.set_autofocus(true).unwrap();
+        camera.set_autofocus(false).unwrap();
+        assert_eq!(*log.borrow(), [(FOCUS_AUTO, 1), (FOCUS_AUTO, 0)]);
+    }
+
+    #[test]
+    fn zoom_maps_the_factor_onto_the_range_of_the_zoom_control() {
+        // a range that does not start at 0 and whose width differs from its end, so that a
+        // mixed-up minimum, maximum or width shows: factor 1.0 is the minimum, 4.0 the maximum,
+        // 2.5 the middle
+        let mut script = script();
+        script.ctrls.insert(ZOOM_ABSOLUTE, 100);
+        script.ranges.insert(ZOOM_ABSOLUTE, (100, 500));
+        let log = script.set_ctrls.clone();
+        let camera = scripted::camera(script);
+        for (factor, value) in [(1.0, 100), (2.5, 300), (4.0, 500)] {
+            camera.set_zoom(factor).unwrap();
+            assert_eq!(
+                log.borrow().last(),
+                Some(&(ZOOM_ABSOLUTE, value)),
+                "{factor}"
+            );
+        }
+        for factor in [0.9, 4.1] {
+            let before = log.borrow().len();
+            let result = camera.set_zoom(factor);
+            assert!(matches!(result, Err(Error::Invalid(_))), "{factor}");
+            assert_eq!(log.borrow().len(), before, "{factor} changed something");
+        }
+    }
+
+    #[test]
+    fn the_wake_up_zoom_is_reported_as_the_percent_that_was_stored() {
+        // factor 1 + 3 * percent / 100
+        let (camera, _) = with_ctrls(&[]);
+        assert_eq!(camera.set_wake_zoom(2.5).unwrap(), 50);
+        assert_eq!(camera.set_wake_zoom(4.0).unwrap(), 100);
+        assert!(camera.set_wake_zoom(4.5).is_err());
+    }
+
+    #[test]
+    fn the_framing_offset_needs_an_axis() {
+        let (camera, _) = with_ctrls(&[]);
+        assert!(matches!(
+            camera.set_framing_offset(None, None),
+            Err(Error::Invalid(_))
+        ));
+        camera.set_framing_offset(Some(0.1), None).unwrap();
+        camera.set_framing_offset(None, Some(-0.1)).unwrap();
+    }
+
+    #[test]
+    fn two_offset_frames_are_a_gap_apart_and_one_frame_needs_no_gap() {
+        // back to back the camera applies neither frame; a single frame has nothing to wait for
+        let (camera, _) = with_ctrls(&[]);
+        let start = Instant::now();
+        camera.set_framing_offset(Some(0.1), Some(-0.1)).unwrap();
+        assert!(start.elapsed() >= PAIR_GAP);
+        let start = Instant::now();
+        camera.set_framing_offset(Some(0.1), None).unwrap();
+        assert!(start.elapsed() < PAIR_GAP, "{:?}", start.elapsed());
+    }
+
+    #[test]
+    fn the_zone_is_read_from_its_queries_in_obsbot4linux_angles() {
+        let zone = |follow: bool| {
+            let mut script = script();
+            answer(&mut script, 0x4c44, floats(&[-45.0]));
+            answer(&mut script, 0x4cc4, floats(&[45.0]));
+            // camera pitch -10..30 (positive down) is tilt -30..10
+            answer(&mut script, 0x4d44, floats(&[-10.0]));
+            answer(&mut script, 0x4dc4, floats(&[30.0]));
+            answer(&mut script, 0x4e44, vec![follow as u8]);
+            answer(&mut script, 0x4ec4, pose_answer(0, 12.5, -3.25, 1.5));
+            answer(&mut script, 0x1344, vec![2, 0, 0, 0]);
+            answer(&mut script, 0x1504, b"left".to_vec());
+            answer(&mut script, 0x1444, pose_answer(0, 20.0, -5.0, 2.0));
+            scripted::camera(script).zone().unwrap()
+        };
+        let expected = |follow| Zone {
+            pan_min: -45.0,
+            pan_max: 45.0,
+            tilt_min: -30.0,
+            tilt_max: 10.0,
+            follow,
+            return_pose: Pose {
+                pan: 12.5,
+                tilt: 3.25,
+                zoom: 1.5,
+            },
+            views: Some(vec![ZoneView {
+                id: 2,
+                name: "left".into(),
+                pose: Pose {
+                    pan: 20.0,
+                    tilt: 5.0,
+                    zoom: 2.0,
+                },
+            }]),
+        };
+        assert_eq!(zone(true), expected(true));
+        assert_eq!(zone(false), expected(false));
+    }
+
+    /// The `0x2004` answer: yaw -45..45 and pitch -30..30 as f32, six more bytes, then the pan
+    /// and tilt flags in bytes 22 and 23.
+    fn hand_area_answer() -> Vec<u8> {
+        let mut d = floats(&[-45.0, 45.0, -30.0, 30.0]);
+        d.extend([0, 0, 0, 0, 0, 0, 1, 1]);
+        d
+    }
+
+    #[test]
+    fn the_hand_tracking_is_read_from_its_queries() {
+        let mut script = script();
+        answer(&mut script, 0x2004, hand_area_answer());
+        // leading word -1: no return position set
+        answer(&mut script, 0x2504, pose_answer(u32::MAX, 0.0, 0.0, 1.0));
+        answer(&mut script, 0x2484, floats(&[2.5]));
+        let hand = scripted::camera(script).hand().unwrap();
+        assert_eq!(
+            hand.area,
+            HandArea {
+                pan_min: -45.0,
+                pan_max: 45.0,
+                tilt_min: -30.0,
+                tilt_max: 30.0
+            }
+        );
+        assert_eq!(hand.return_pose, None);
+        assert_eq!(
+            (hand.pan_enabled, hand.tilt_enabled),
+            (Some(true), Some(true))
+        );
+        assert_eq!(hand.return_after, Some(2.5));
+    }
+
+    #[test]
+    fn a_hand_return_time_is_zero_or_more_else_it_is_not_shown() {
+        for (seconds, shown) in [(0.0, Some(0.0)), (-1.0, None)] {
+            let mut script = script();
+            answer(&mut script, 0x2004, hand_area_answer());
+            answer(&mut script, 0x2504, pose_answer(u32::MAX, 0.0, 0.0, 1.0));
+            answer(&mut script, 0x2484, floats(&[seconds]));
+            let hand = scripted::camera(script).hand().unwrap();
+            assert_eq!(hand.return_after, shown, "{seconds}");
+        }
+    }
+
+    #[test]
+    fn the_framing_options_are_read_from_their_queries() {
+        // speed mode 3 fast, size 2 medium shot, auto zoom speed 30 is medium (a camera that was
+        // never set reports the speed itself), part mode 1 head removal
+        let framing = |auto_zoom: u8| {
+            let mut script = script();
+            answer(&mut script, 0x0984, vec![3]);
+            answer(&mut script, 0x0a84, vec![auto_zoom]);
+            answer(&mut script, 0x0b04, vec![2]);
+            answer(&mut script, 0x0b84, vec![30]);
+            answer(&mut script, 0x0c04, floats(&[0.05]));
+            answer(&mut script, 0x0c84, floats(&[-0.1]));
+            answer(&mut script, 0x15c4, vec![1]);
+            scripted::camera(script).framing().unwrap()
+        };
+        let on = framing(1);
+        assert_eq!(
+            on,
+            Framing {
+                speed_mode: SpeedMode::Fast,
+                auto_zoom: true,
+                size: FramingSize::MediumShot,
+                zoom_speed: AutoZoomSpeed::Medium,
+                offset: Offset { x: 0.05, y: -0.1 },
+                part_mode: PartMode::HeadRemoval,
+            }
+        );
+        assert!(!framing(0).auto_zoom);
+    }
+
+    #[test]
+    fn the_tracking_target_is_read_from_query_0x01c4() {
+        // `01 01 <detected> 01 00 00` and four f32
+        let mut d = vec![1, 1, 1, 1, 0, 0];
+        d.extend(floats(&[0.25, 0.5, 0.75, 1.0]));
+        let mut script = script();
+        answer(&mut script, 0x01c4, d);
+        let target = scripted::camera(script).target().unwrap();
+        assert_eq!(
+            target,
+            Some(Target {
+                detected: true,
+                coords: [0.25, 0.5, 0.75, 1.0]
+            })
+        );
+    }
+
+    #[test]
+    fn the_initial_state_ai_byte_is_the_first_byte_of_0x3e84() {
+        let mut script = script();
+        answer(&mut script, 0x3e84, vec![0xfe, 1, 2]);
+        assert_eq!(scripted::camera(script).startup_ai_byte().unwrap(), 0xfe);
+    }
+
+    #[test]
+    fn the_current_pose_is_the_live_pose_and_the_zoom_with_the_zoom_kept_in_range() {
+        // pitch -10.00 (up) and yaw 25.00; a zoom reading above the range is held at the maximum
+        let mut script = script();
+        let mut pose = vec![0u8; 12];
+        pose[8..10].copy_from_slice(&(-1000i16).to_le_bytes());
+        pose[10..12].copy_from_slice(&2500i16.to_le_bytes());
+        answer(&mut script, 0x0043, pose);
+        answer(&mut script, 0x6804, floats(&[5.0]));
+        let pose = scripted::camera(script).live_pose_and_zoom().unwrap();
+        assert_eq!(
+            pose,
+            Pose {
+                pan: 25.0,
+                tilt: 10.0,
+                zoom: MAX_ZOOM
+            }
+        );
     }
 }

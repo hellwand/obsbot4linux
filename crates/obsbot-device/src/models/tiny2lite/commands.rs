@@ -1089,4 +1089,35 @@ mod tests {
         assert_eq!(auto_sleep_off(32767).unwrap(), auto_sleep(-32767));
         assert!(auto_sleep_off(32768).is_err());
     }
+
+    #[test]
+    fn a_documented_limit_is_accepted_and_one_past_it_is_not() {
+        assert!(led(3).is_ok(), "LED brightness is 0-3");
+        assert!(wake_zoom(100).is_ok(), "wake-up zoom is 0-100 percent");
+        assert!(audio_volume(100, 0).is_ok(), "microphone volume is 0-100");
+        assert!(zoom_to(1, 2.0, 0).is_ok(), "zoom speed must be positive");
+        assert!(zoom_to(0, 2.0, 0).is_err());
+        assert!(
+            hand_return_after(0.0, 0).is_ok(),
+            "hand return time is 0 seconds or more"
+        );
+    }
+
+    #[test]
+    fn an_area_needs_its_minimum_below_its_maximum() {
+        // equal limits are no area ("min must be below max")
+        assert!(zone_area((10.0, 10.0), (-30.0, 30.0), [0; 4]).is_err());
+        assert!(zone_area((-100.0, 100.0), (5.0, 5.0), [0; 4]).is_err());
+        assert!(hand_area((10.0, 10.0), (-30.0, 30.0), [0; 4]).is_err());
+    }
+
+    #[test]
+    fn a_rate_of_zero_sends_twelve_zero_bytes_whatever_mirror_and_invert_are() {
+        // Center releasing the joystick (capture 13, seq 525): 0x6484 with the data all zero.
+        // A negated zero would put the sign bit into the frame.
+        for (mirror, invert) in [(false, false), (false, true), (true, false), (true, true)] {
+            let f = gimbal_rate(0.0, 0.0, mirror, invert, 525).unwrap();
+            assert_eq!(f[16..28], [0u8; 12], "mirror {mirror}, invert {invert}");
+        }
+    }
 }

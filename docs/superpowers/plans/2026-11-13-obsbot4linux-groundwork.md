@@ -2599,6 +2599,12 @@ Expected on top of 66287b5: `847`; per file: `enumeration.rs` 16, `family/exchan
 `models/tiny2lite/presets.rs` 169, `models/tiny2lite/status.rs` 81, `registry.rs` 5,
 `transport/uvc.rs` 36 (other numbers if `main` added code; the run records what it found).
 
+`cargo mutants` lists no mutant inside `#[cfg(test)]` items: `scripted.rs` (the scripted device)
+and `Device::scripted` are not mutated and not counted. The `#[cfg(test)]` hooks inside the
+bodies of `Device::xu_get`, `xu_set`, `get_ctrl`, `set_ctrl` and `ctrl_range` are part of those
+production functions, so a mutant that replaces such a function replaces its hook too; the
+tests run against that mutated function like against any other.
+
 - [ ] **Step 3: Run the pass** (in place, one mutant at a time, builds with three jobs and low
       priority: in-place mutation needs a clean tree and touches only this worktree; about 20 to
       30 minutes)
@@ -2638,7 +2644,8 @@ Each line of `missed.txt` gets exactly one:
 - **L, 0.13 only:** a write of the remembered state (`State { … }.save()`) inside a flow; not
   carried (spec 3.2).
 - **E, equivalent:** no input can tell the mutant from the code; one sentence why.
-- **M, waits for main:** the named mutants of Step 5 while their test seam is not on `main`.
+- **M, waits for a seam:** the named mutants of Step 5 while their test seam is not on the
+  branch the pass runs on (`rebuild` carries P3, so none is expected).
 
 A survivor in a function that does no I/O (a builder, decoder, conversion or parser) may only
 be K or E.
@@ -2648,7 +2655,7 @@ be K or E.
 ```bash
 F=crates/obsbot-device/src
 grep 'delete match arm 0x89 in parse_answer' "$SCRATCH/mutants/mutants.out/caught.txt"
-grep -E 'delete - in (tilt_to_pitch_range|pitch_to_tilt_range|HandArea::decode|LivePose::decode|Camera::gimbal)' \
+grep -E 'delete - in (tilt_to_pitch|tilt_to_pitch_range|pitch_to_tilt_range|HandArea::decode|LivePose::decode)' \
   "$SCRATCH/mutants/mutants.out/caught.txt" "$SCRATCH/mutants/mutants.out/missed.txt"
 # a rejected answer handled as stale (hand-made: cargo-mutants cannot delete that arm)
 sed -i 's/Some(Answer::Rejected(code)) => return Err(Error::Rejected(command, code)),/Some(Answer::Rejected(_)) => {}/' $F/family/exchange.rs
@@ -2661,13 +2668,13 @@ git checkout -- $F/legacy/full_status.rs
 git status --short
 ```
 
-Expected on top of 66287b5: the `0x89` arm deletion is in `caught.txt`; every `delete -` in
-the four conversion functions is caught, and `delete - in Camera::gimbal` (the tilt negation
-of the gimbal move) is in `missed.txt`; both hand-made mutants compile and give five
-`test result: ok` lines (survived); `git status` prints nothing. The three survivors get disposition M and
-are listed in the pull request as open items of the stage acceptance (see "After the tasks").
-Once `main` has the seams of "Before Task 1", P3, and `rebuild` is rebased, this step is
-repeated and must show all of them caught (a hand-made mutant then gives a `test result: FAILED` line).
+Expected on `rebuild` with the seams of P3 in: the `0x89` arm deletion is in `caught.txt`; every
+`delete -` in the five conversion functions is caught (the tilt negation of the gimbal move is
+`tilt_to_pitch` since #153, not a line of `Camera::gimbal`); both hand-made mutants compile and
+make a test fail (a `test result: FAILED` line; add `--no-fail-fast` to see every test binary);
+`git status` prints nothing. A named mutant whose seam is missing (survives, or gives only
+`test result: ok` lines) gets disposition M and is listed in the pull request as an open item of
+the stage acceptance (see "After the tasks"); on `rebuild` with P3 in, none is.
 
 - [ ] **Step 6: Gate and guards**
 
@@ -2707,7 +2714,8 @@ tracking issue of the stage, and the task ends there.
 
 Not tasks of this plan; listed so that nobody releases early.
 
-1. The named mutants of Task 8, Step 5 are all caught (needs P3 on `main` and a rebase).
+1. The named mutants of Task 8, Step 5 are all caught (needs P3 on the branch the pass runs on;
+   it is on `rebuild`).
 2. The camera smoke test CS-0 (spec 10.2, CAM-30) on the real Tiny 2 Lite with a build of the
    tip of `rebuild`: `status`, one setting set and read back, one gimbal move, `preset list`.
 3. A release pull request into `rebuild`: workspace version 0.14.0, `Cargo.lock`, PKGBUILD

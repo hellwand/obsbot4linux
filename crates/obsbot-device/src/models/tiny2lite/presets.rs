@@ -926,4 +926,81 @@ mod tests {
         assert_eq!(parse_slots(&[0x02, 0x00, 0x02]), vec![0, 2]);
         assert_eq!(parse_slots(&[0x02, 0x00, 0x07]), vec![0]);
     }
+
+    #[test]
+    fn startup_ai_mode_names_the_documented_bytes() {
+        // byte 0 of the initial-state block; 7 and 8 are both hand tracking, 0xfe is not set
+        let table = [
+            (0xff, Some(AiMode::Static)),
+            (0, Some(AiMode::Normal)),
+            (1, Some(AiMode::UpperBody)),
+            (2, Some(AiMode::CloseUp)),
+            (3, Some(AiMode::Headless)),
+            (4, Some(AiMode::LowerBody)),
+            (7, Some(AiMode::Hand)),
+            (8, Some(AiMode::Hand)),
+            (9, Some(AiMode::Group)),
+            (STARTUP_AI_NOT_SET, None),
+            (5, None),
+        ];
+        for (byte, mode) in table {
+            assert_eq!(startup_ai_mode(byte), mode, "byte {byte:#04x}");
+        }
+    }
+
+    #[test]
+    fn startup_actions_need_the_24_bytes_up_to_the_hue() {
+        // hue is byte 23, the last byte read
+        let mut d = [0xffu8; 24];
+        d[23] = 7;
+        assert_eq!(StartupActions::decode(&d).unwrap().hue, Some(7));
+        assert!(StartupActions::decode(&d[..23]).is_none());
+    }
+
+    #[test]
+    fn a_slot_index_outside_the_slots_is_not_listed() {
+        // the slots are 0 to SLOTS - 1; the index SLOTS itself is out
+        assert_eq!(parse_slots(&[0x02, 0x00, SLOTS]), vec![0]);
+        assert_eq!(parse_slots(&[0x02, SLOTS - 1, 0x00]), vec![SLOTS - 1, 0]);
+    }
+
+    #[test]
+    fn an_entry_reads_each_pose_word_from_its_own_bytes() {
+        // layout: status, slot, 2 pad bytes, pitch i16, yaw i16, zoom u16 (hundredths); every
+        // byte of the three words differs, so a word read from the wrong place shows
+        let mut block = [0u8; 60];
+        block[1] = 2;
+        block[4..6].copy_from_slice(&291i16.to_le_bytes());
+        block[6..8].copy_from_slice(&1110i16.to_le_bytes());
+        block[8..10].copy_from_slice(&376u16.to_le_bytes());
+        let p = parse_entry(&block).unwrap();
+        assert_eq!(p.slot, 2);
+        assert_eq!(
+            p.pose,
+            Pose {
+                pan: 11.1,
+                tilt: -2.91,
+                zoom: 3.76
+            }
+        );
+    }
+
+    #[test]
+    fn a_preset_at_tilt_zero_reads_as_positive_zero() {
+        // no -0 in the output: pitch 0 is tilt 0, not -0.0
+        let mut block = [0u8; 60];
+        block[1] = 1;
+        let p = parse_entry(&block).unwrap();
+        assert_eq!(p.pose.tilt.to_bits(), 0);
+    }
+
+    #[test]
+    fn base64_names_use_the_standard_alphabet() {
+        // RFC 4648 test vectors and the characters after the letters: digits, `+`, `/`
+        assert_eq!(decode_base64(b"Zm9vYmFy").unwrap(), b"foobar");
+        assert_eq!(decode_base64(b"Zm9vYg==").unwrap(), b"foob");
+        assert_eq!(decode_base64(b"0123").unwrap(), [0xd3, 0x5d, 0xb7]);
+        assert_eq!(decode_base64(b"+/+/").unwrap(), [0xfb, 0xff, 0xbf]);
+        assert_eq!(decode_base64(b"Zm9v!"), None, "not in the alphabet");
+    }
 }

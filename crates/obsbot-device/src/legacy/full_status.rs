@@ -431,11 +431,22 @@ mod scripted_camera_tests {
     /// (2.0), the live pose (pan 25, tilt 10), the microphone volume (55) and the absolute zoom
     /// control (37). The tracking query gets `tracking`; every other query is rejected.
     fn camera(tracking: Answer) -> Camera {
+        camera_in_mode(tracking, (0, 0), Vec::new())
+    }
+
+    /// The same camera in the AI mode of the status bytes 0x18 and 0x1c (0, 0 is Static), with
+    /// `target` as the answer to the target query when it is not empty.
+    fn camera_in_mode(tracking: Answer, ai_mode: (u8, u8), target: Vec<u8>) -> Camera {
         let mut status = [0u8; 60];
         status[0x06] = 1;
+        status[0x18] = ai_mode.0;
+        status[0x1c] = ai_mode.1;
         status[0x21] = 2;
         let mut script = Scripted::new(status);
         script.answers.insert(0x0104, tracking);
+        if !target.is_empty() {
+            script.answers.insert(0x01c4, Answer::Value(target));
+        }
         script
             .answers
             .insert(0x6804, Answer::Value(2.0f32.to_le_bytes().to_vec()));
@@ -513,5 +524,26 @@ mod scripted_camera_tests {
         let (zones, identity) = known();
         let result = camera(Answer::SendFails).full_status_with(zones, identity);
         assert!(matches!(result, Err(Error::Io(_))), "{result:?}");
+    }
+
+    #[test]
+    fn the_target_is_asked_only_while_ai_tracking_is_on() {
+        // `01 01 <detected> 01 00 00` and four f32; a camera in Static would answer a single 00,
+        // so it is not asked at all
+        let mut answer = vec![1, 1, 1, 1, 0, 0];
+        for v in [0.25f32, 0.5, 0.75, 1.0] {
+            answer.extend(v.to_le_bytes());
+        }
+        let target = |ai_mode| {
+            let (zones, identity) = known();
+            camera_in_mode(Answer::Value(vec![0; 12]), ai_mode, answer.clone())
+                .full_status_with(zones, identity)
+                .unwrap()
+                .target
+        };
+        assert_eq!(target((0, 0)), None, "Static");
+        let followed = target((2, 0)).expect("Normal tracking asks for the target");
+        assert!(followed.detected);
+        assert_eq!(followed.coords, [0.25, 0.5, 0.75, 1.0]);
     }
 }

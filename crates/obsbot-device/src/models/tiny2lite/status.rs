@@ -639,4 +639,33 @@ mod tests {
         nan[6..10].copy_from_slice(&f32::NAN.to_le_bytes());
         assert_eq!(Target::decode(&nan), None);
     }
+
+    #[test]
+    fn field_of_view_reading_names_every_value_the_camera_reports() {
+        // status byte 0x11: 3 is a factor set by hand, reported as `custom`
+        let all = [
+            FovReading::Wide,
+            FovReading::Medium,
+            FovReading::Narrow,
+            FovReading::Custom,
+        ];
+        for (byte, reading) in all.into_iter().enumerate() {
+            assert_eq!(FovReading::from_u8(byte as u8), Some(reading));
+        }
+        assert_eq!(FovReading::from_u8(4), None);
+    }
+
+    #[test]
+    fn anti_flicker_names_every_value_of_power_line_frequency() {
+        let all = [
+            AntiFlicker::Off,
+            AntiFlicker::Hz50,
+            AntiFlicker::Hz60,
+            AntiFlicker::Auto,
+        ];
+        for (byte, reading) in all.into_iter().enumerate() {
+            assert_eq!(AntiFlicker::from_u8(byte as u8), Some(reading));
+        }
+        assert_eq!(AntiFlicker::from_u8(4), None);
+    }
 }
