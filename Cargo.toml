@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/obsbot-device", "crates/obsbot4linux", "crates/obsbot-proto"]
+members = ["crates/obsbot-device", "crates/obsbot4linux", "crates/obsbot-proto", "crates/obsbot4linuxd"]
 
 [workspace.package]
 version = "0.13.2"
@@ -15,6 +15,7 @@ publish = false
 [workspace.dependencies]
 obsbot-device = { path = "crates/obsbot-device" }
 obsbot-proto = { path = "crates/obsbot-proto" }
+obsbot4linuxd = { path = "crates/obsbot4linuxd" }
 schemars = "1.2"
 clap = { version = "4", features = ["derive"] }
 nix = { version = "0.31", features = ["fs", "ioctl"] }

@@ -197,6 +197,15 @@ name = "obsbot4linux"
 version = "0.13.2"
 dependencies = [
  "obsbot-proto",
+ "obsbot4linuxd",
+]
+
+[[package]]
+name = "obsbot4linuxd"
+version = "0.13.2"
+dependencies = [
+ "obsbot-device",
+ "obsbot-proto",
 ]
 
 [[package]]

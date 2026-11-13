@@ -1,0 +1,19 @@
+[package]
+name = "obsbot4linuxd"
+description = "The obsbot4linux daemon: owns the cameras and serves protocol 2"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "obsbot4linuxd"
+path = "src/main.rs"
+
+[dependencies]
+obsbot-device.workspace = true
+obsbot-proto.workspace = true
