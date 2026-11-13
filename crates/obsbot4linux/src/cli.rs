@@ -5,10 +5,11 @@
 use std::io::Write;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use obsbot_device::camera::{Camera, Identity};
 use obsbot_device::commands::*;
 use obsbot_device::device::Detected;
 use obsbot_device::error::{Error, Result};
+use obsbot_device::family::exchange::Camera;
+use obsbot_device::models::tiny2lite::camera::Identity;
 use obsbot_device::presets::{Pose, StartupAi};
 use serde_json::{Value, json};
 
