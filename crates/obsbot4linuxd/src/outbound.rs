@@ -182,6 +182,10 @@ mod tests {
         assert!(!out.send("2".into()));
         let mut buf = [0u8; 1];
         use std::io::Read;
+        // Without a timeout a missing shutdown would hang the test instead of failing it.
+        theirs
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
         assert_eq!(
             (&theirs).read(&mut buf).unwrap(),
             0,
