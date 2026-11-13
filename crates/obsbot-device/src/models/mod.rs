@@ -2,4 +2,5 @@
 
 //! The camera models, one module each.
 
+pub mod fake;
 pub mod tiny2lite;
