@@ -115,21 +115,10 @@ pub(crate) fn camera(script: Scripted) -> Camera {
     }
 }
 
-/// An answer to the query frame `query`: same sequence number, header length 16, then either
-/// the error code of a rejection or the data section, as `parse_answer` reads it.
+/// An answer to the query frame `query`: same sequence number, receiver and command, in the
+/// recorded layout.
 fn answer(kind: u8, query: &[u8; XU_SIZE], code: Option<i16>, data: &[u8]) -> [u8; XU_SIZE] {
-    let mut r = [0u8; XU_SIZE];
-    r[0] = 0xaa;
-    r[1] = kind;
-    r[2..4].copy_from_slice(&query[2..4]);
-    r[4..6].copy_from_slice(&16u16.to_le_bytes());
-    r[10..12].copy_from_slice(&query[10..12]);
-    if let Some(code) = code {
-        r[12..14].copy_from_slice(&[0x00, 0x02]);
-        r[14..16].copy_from_slice(&code.to_le_bytes());
-    } else {
-        r[12..14].copy_from_slice(&(data.len() as u16).to_le_bytes());
-    }
-    r[16..16 + data.len()].copy_from_slice(data);
-    r
+    let seq = u16::from_le_bytes([query[2], query[3]]);
+    let command = u16::from_le_bytes([query[10], query[11]]);
+    crate::transport::replay::answer_frame(kind, seq, query[9], command, code, data)
 }

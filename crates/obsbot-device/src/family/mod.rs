@@ -4,4 +4,5 @@
 
 pub mod exchange;
 pub mod frame;
+pub mod link;
 pub mod streaming;
