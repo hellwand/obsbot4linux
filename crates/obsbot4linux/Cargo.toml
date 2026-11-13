@@ -11,12 +11,19 @@ homepage.workspace = true
 publish.workspace = true
 readme = "../../README.md"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "obsbot4linux"
 path = "src/main.rs"
 
 [dependencies]
+clap.workspace = true
+nix = { workspace = true, features = ["signal"] }
 obsbot-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 obsbot4linuxd.workspace = true
