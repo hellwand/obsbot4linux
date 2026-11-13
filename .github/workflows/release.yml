@@ -276,10 +276,60 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Lists the files of every package and compares the list with packaging/contents.txt, so that
+  # a change to what a package holds shows up in review. A release needs it too.
+  contents:
+    needs: [version, binary, deb, rpm, arch]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+      - run: sudo apt-get install -y --no-install-recommends libarchive-tools
+      # [profile.release] strip = true must reach every package (cargo ignores a member
+      # manifest's profile, and the file list alone would not show it)
+      - name: The packaged binaries are stripped
+        run: |
+          for pkg in dist/obsbot4linux*; do
+            case $pkg in
+            *.deb) bsdtar -xOf "$pkg" 'data.tar*' > payload ;;
+            *) cp "$pkg" payload ;;
+            esac
+            bin=$(bsdtar -tf payload | grep -E '(usr/bin|-linux)/obsbot4linux$')
+            bsdtar -xOf payload "$bin" > obsbot4linux.bin
+            info=$(file -b obsbot4linux.bin)
+            echo "$pkg: $info"
+            case $info in
+            *', stripped') ;;
+            *) echo "::error::$pkg ships an unstripped binary"; exit 1 ;;
+            esac
+          done
+          rm -f payload obsbot4linux.bin
+      - name: Compare the package contents
+        env:
+          VER: ${{ needs.version.outputs.ver }}
+        run: |
+          scripts/package-contents.sh dist "$VER" > contents.txt
+          cat contents.txt
+          diff -u packaging/contents.txt contents.txt
+      # the list itself, also when it differs, to update packaging/contents.txt from
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-contents
+          path: contents.txt
+          if-no-files-found: error
+
   # Tags only: a pull request builds the packages above and publishes nothing.
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [binary, deb, rpm, arch]
+    needs: [binary, deb, rpm, arch, contents]
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:
