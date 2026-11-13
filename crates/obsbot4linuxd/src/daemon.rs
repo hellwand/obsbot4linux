@@ -137,6 +137,10 @@ fn serve(config: &Config, timing: Timing, bound: &Bound) -> io::Result<()> {
     let (acceptor, registry_thread, sweeper) = match started {
         Ok(threads) => threads,
         Err(e) => {
+            // A thread that did start must not outlive the error: wake the acceptor, which
+            // may already run, so that it ends too.
+            accept_stop.store(true, Ordering::SeqCst);
+            let _ = UnixStream::connect(&config.socket);
             registry_stop.store(true, Ordering::SeqCst);
             stop_control(&control_stop, &control_path, control);
             return Err(e);
