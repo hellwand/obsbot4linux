@@ -20,8 +20,8 @@ pub(crate) enum Answer {
     SendFails,
 }
 
-/// The table behind a scripted [`Device`]. A query that is not in `answers` is rejected, as a
-/// camera rejects a query it does not know; that keeps a test free of waiting for polls.
+/// The table behind a scripted [`Device`]. A query that is not in `answers` is rejected (type
+/// 0x89, code -1), so a test never waits out the poll.
 pub(crate) struct Scripted {
     /// What a read of selector 6 (the status buffer) returns.
     pub status: [u8; XU_SIZE],
