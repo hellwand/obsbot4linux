@@ -6,8 +6,8 @@ pub mod camera;
 pub mod error;
 pub mod state;
 
-pub mod frame;
-pub mod streaming;
+pub mod family;
+pub use family::{frame, streaming};
 
 pub mod device;
 pub mod registry;
