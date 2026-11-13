@@ -5,6 +5,10 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `docs/protocol-2.md`: the normative part of the protocol 2 reference (transport, requests, replies, errors and their validation order, ordering rules, devices, descriptions, values, the path dictionary and live topics).
+
 ### Changed
 
 - The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
