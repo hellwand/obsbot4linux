@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! `obsbot4linux`: the command line (design spec 6.2), a pure client of protocol 2. Track C
-//! writes it; the 0.13 command line stays on `main` for 0.14.x.
+//! `obsbot4linux`: the command line (design spec 6.2). Everything is in the library, so that
+//! tests run it in-process.
 
+use std::ffi::OsString;
+use std::io;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    eprintln!("obsbot4linux: the 1.0 command line is not built yet (stage W0 of the 1.0 rebuild)");
-    ExitCode::FAILURE
+    let args: Vec<OsString> = std::env::args_os().collect();
+    let code = obsbot4linux::run(
+        &args,
+        obsbot_proto::socket_path(),
+        true,
+        &mut io::stdout(),
+        &mut io::stderr(),
+    );
+    ExitCode::from(code)
 }
