@@ -1,0 +1,1126 @@
+=== obsbot4linux --help
+Control the OBSBOT Tiny 2 Lite
+
+Usage: obsbot4linux [OPTIONS] <COMMAND>
+
+Commands:
+  daemon                   Run the daemon: owns the camera, serves the socket, broadcasts state changes
+  watch                    Stream state events as JSON lines and forward JSON requests from stdin (for widgets)
+  live-pose                Ask the daemon to poll the gimbal pose for this connection (a `watch` request; the daemon polls it every second only while a connection wants it). Not usable as a one-off call
+  detect                   Exit 0 and print the model (--json: model and video device) when a supported camera is connected, exit 1 with no output when not. Enumeration only: no daemon, no camera command
+  status                   Show all settings (the camera's status block, tracking readback, zoom, image controls, remembered state)
+  sleep                    Put the camera to sleep
+  wake                     Wake the camera, or set the stored wake-up zoom (`wake zoom`) or the tracking mode at power-on (`wake mode`)
+  tracking                 AI tracking mode
+  speed                    Tracking type: standard, sport (fixed fast gain) or headroom (more room above the head)
+  speed-mode               Fine tracking speed, from lazy to very-fast, or auto. Ignored while `speed sport` is set or the part mode is not normal
+  framing                  Framing options of the human tracking; an AI mode change overwrites them
+  hdr                      HDR
+  exposure                 Exposure: automatic metering over the whole picture (global) or on faces (face), or manual, optionally with the shutter time and gain (`image gain` sets the gain too; `image exposure_time` is refused unless the exposure is already manual)
+  zoom                     Zoom factor 1.0-4.0; with --speed the camera zooms smoothly instead of jumping
+  gimbal                   Move the gimbal to an absolute pose in degrees (switches tracking to static first), or `gimbal stop|rate`
+  fov                      Field of view (ignored by the camera while it sleeps)
+  led                      Status LED: brightness 0 (off) to 3, or `led blink on|off`
+  mirror                   Mirror the image
+  invert                   Invert view and gimbal (reverses the gimbal's pan direction)
+  auto-sleep               Auto-sleep: "off" or a time in seconds
+  sleep-background         Picture shown while the camera sleeps
+  sleep-background-mirror  Mirror the sleep background
+  audio                    Microphone settings
+  gesture                  Gesture control
+  hand                     Hand tracking: which hand, return position, area, axes
+  zone                     Zone tracking
+  focus                    Focus: autofocus mode, continuous autofocus, manual focus
+  startup                  Initial state: the pose the camera moves to when it powers on
+  image                    UVC image control, e.g. "image brightness 128" (names are in "status")
+  preset                   Presets stored in the camera (slots 0-2)
+  factory-reset            Reset the camera to factory settings (it restarts and deletes its presets)
+  help                     Print this message or the help of the given subcommand(s)
+
+Options:
+      --json     Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct   Do not use a running daemon; talk to the camera directly
+  -h, --help     Print help
+  -V, --version  Print version
+=== obsbot4linux daemon --help
+Run the daemon: owns the camera, serves the socket, broadcasts state changes
+
+Usage: obsbot4linux daemon [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux watch --help
+Stream state events as JSON lines and forward JSON requests from stdin (for widgets)
+
+Usage: obsbot4linux watch [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux live-pose --help
+Ask the daemon to poll the gimbal pose for this connection (a `watch` request; the daemon polls it every second only while a connection wants it). Not usable as a one-off call
+
+Usage: obsbot4linux live-pose [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux detect --help
+Exit 0 and print the model (--json: model and video device) when a supported camera is connected, exit 1 with no output when not. Enumeration only: no daemon, no camera command
+
+Usage: obsbot4linux detect [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux status --help
+Show all settings (the camera's status block, tracking readback, zoom, image controls, remembered state)
+
+Usage: obsbot4linux status [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux sleep --help
+Put the camera to sleep
+
+Usage: obsbot4linux sleep [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux wake --help
+Wake the camera, or set the stored wake-up zoom (`wake zoom`) or the tracking mode at power-on (`wake mode`)
+
+Usage: obsbot4linux wake [OPTIONS] [COMMAND]
+
+Commands:
+  zoom  Stored wake-up zoom, factor 1.0-4.0 (the camera stores 0-100 percent). Effect unknown on the Tiny 2 Lite: no change at power-on or on waking from sleep
+  mode  Tracking mode the camera starts in at power-on, not on waking from sleep (the current mode stays)
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux wake zoom --help
+Stored wake-up zoom, factor 1.0-4.0 (the camera stores 0-100 percent). Effect unknown on the Tiny 2 Lite: no change at power-on or on waking from sleep
+
+Usage: obsbot4linux wake zoom [OPTIONS] <FACTOR>
+
+Arguments:
+  <FACTOR>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux wake mode --help
+Tracking mode the camera starts in at power-on, not on waking from sleep (the current mode stays)
+
+Usage: obsbot4linux wake mode [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: static, normal, upper-body, close-up, headless, lower-body, hand, group]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux tracking --help
+AI tracking mode
+
+Usage: obsbot4linux tracking [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: static, normal, upper-body, close-up, headless, lower-body, hand, group]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux speed --help
+Tracking type: standard, sport (fixed fast gain) or headroom (more room above the head)
+
+Usage: obsbot4linux speed [OPTIONS] <SPEED>
+
+Arguments:
+  <SPEED>  [possible values: standard, headroom, sport]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux speed-mode --help
+Fine tracking speed, from lazy to very-fast, or auto. Ignored while `speed sport` is set or the part mode is not normal
+
+Usage: obsbot4linux speed-mode [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: lazy, slow, normal, fast, very-fast, auto]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux framing --help
+Framing options of the human tracking; an AI mode change overwrites them
+
+Usage: obsbot4linux framing [OPTIONS] <COMMAND>
+
+Commands:
+  auto-zoom   Auto zoom of the human tracking on or off
+  size        Size of the auto zoom framing
+  zoom-speed  How fast the auto zoom follows
+  offset      Shift the framing by a fraction of the frame, -0.16 to 0.16
+  part        Which part of the body the framing follows
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux framing auto-zoom --help
+Auto zoom of the human tracking on or off
+
+Usage: obsbot4linux framing auto-zoom [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux framing size --help
+Size of the auto zoom framing
+
+Usage: obsbot4linux framing size [OPTIONS] <SIZE>
+
+Arguments:
+  <SIZE>  [possible values: long-shot, medium-long-shot, medium-shot, medium-close-up, close-up, big-close-up]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux framing zoom-speed --help
+How fast the auto zoom follows
+
+Usage: obsbot4linux framing zoom-speed [OPTIONS] <SPEED>
+
+Arguments:
+  <SPEED>  [possible values: slow, medium, fast]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux framing offset --help
+Shift the framing by a fraction of the frame, -0.16 to 0.16
+
+Usage: obsbot4linux framing offset [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --x <X>   
+      --direct  Do not use a running daemon; talk to the camera directly
+      --y <Y>   
+  -h, --help    Print help
+=== obsbot4linux framing part --help
+Which part of the body the framing follows
+
+Usage: obsbot4linux framing part [OPTIONS] <PART>
+
+Arguments:
+  <PART>  [possible values: normal, head-removal, lower-body]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hdr --help
+HDR
+
+Usage: obsbot4linux hdr [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux exposure --help
+Exposure: automatic metering over the whole picture (global) or on faces (face), or manual, optionally with the shutter time and gain (`image gain` sets the gain too; `image exposure_time` is refused unless the exposure is already manual)
+
+Usage: obsbot4linux exposure [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: global, face, manual]
+
+Options:
+      --json         Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --time <TIME>  Manual only: shutter time in 100 us units, 1-2500 (330 is one frame at 30 fps); the camera uses the step at or below it
+      --direct       Do not use a running daemon; talk to the camera directly
+      --gain <GAIN>  Manual only: gain 1-64 (ISO is gain x 100)
+  -h, --help         Print help
+=== obsbot4linux zoom --help
+Zoom factor 1.0-4.0; with --speed the camera zooms smoothly instead of jumping
+
+Usage: obsbot4linux zoom [OPTIONS] [FACTOR]
+       obsbot4linux zoom <COMMAND>
+
+Commands:
+  stop  Stop a zoom in progress
+  help  Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [FACTOR]  
+
+Options:
+      --json           Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --speed <SPEED>  Zoom speed (OBSBOT Center uses 30; the auto zoom 10, 30, 50)
+      --direct         Do not use a running daemon; talk to the camera directly
+  -h, --help           Print help
+=== obsbot4linux zoom stop --help
+Stop a zoom in progress
+
+Usage: obsbot4linux zoom stop [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gimbal --help
+Move the gimbal to an absolute pose in degrees (switches tracking to static first), or `gimbal stop|rate`
+
+Usage: obsbot4linux gimbal [OPTIONS]
+       obsbot4linux gimbal <COMMAND>
+
+Commands:
+  stop  Stop all gimbal axes (also a `gimbal rate` still running)
+  rate  Keep turning at a speed in degrees per second (up to 178) UNTIL `gimbal stop` or a speed of 0, also when the client is gone; like the joystick of OBSBOT Center (switches tracking to static first). An axis you leave out is stopped: `--pan 5` alone also stops a running tilt turn
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json           Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --pan <PAN>      Positive turns the camera to its left
+      --direct         Do not use a running daemon; talk to the camera directly
+      --tilt <TILT>    Positive tilts the camera up
+      --speed <SPEED>  Take as long as this many degrees per second (1-180) need instead of going as fast as possible
+  -h, --help           Print help
+=== obsbot4linux gimbal stop --help
+Stop all gimbal axes (also a `gimbal rate` still running)
+
+Usage: obsbot4linux gimbal stop [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gimbal rate --help
+Keep turning at a speed in degrees per second (up to 178) UNTIL `gimbal stop` or a speed of 0, also when the client is gone; like the joystick of OBSBOT Center (switches tracking to static first). An axis you leave out is stopped: `--pan 5` alone also stops a running tilt turn
+
+Usage: obsbot4linux gimbal rate [OPTIONS]
+
+Options:
+      --json         Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --pan <PAN>    Positive turns the camera to its left
+      --direct       Do not use a running daemon; talk to the camera directly
+      --tilt <TILT>  Positive tilts the camera up
+  -h, --help         Print help
+=== obsbot4linux fov --help
+Field of view (ignored by the camera while it sleeps)
+
+Usage: obsbot4linux fov [OPTIONS] <FOV>
+
+Arguments:
+  <FOV>  [possible values: wide, medium, narrow]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux led --help
+Status LED: brightness 0 (off) to 3, or `led blink on|off`
+
+Usage: obsbot4linux led [OPTIONS] [BRIGHTNESS]
+       obsbot4linux led <COMMAND>
+
+Commands:
+  blink  Let the status LED blink (on) or burn steadily (off). The camera does not report it
+  help   Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [BRIGHTNESS]  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux led blink --help
+Let the status LED blink (on) or burn steadily (off). The camera does not report it
+
+Usage: obsbot4linux led blink [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux mirror --help
+Mirror the image
+
+Usage: obsbot4linux mirror [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux invert --help
+Invert view and gimbal (reverses the gimbal's pan direction)
+
+Usage: obsbot4linux invert [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux auto-sleep --help
+Auto-sleep: "off" or a time in seconds
+
+Usage: obsbot4linux auto-sleep [OPTIONS] <TIME>
+
+Arguments:
+  <TIME>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux sleep-background --help
+Picture shown while the camera sleeps
+
+Usage: obsbot4linux sleep-background [OPTIONS] <BACKGROUND>
+
+Arguments:
+  <BACKGROUND>  [possible values: black, image]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux sleep-background-mirror --help
+Mirror the sleep background
+
+Usage: obsbot4linux sleep-background-mirror [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio --help
+Microphone settings
+
+Usage: obsbot4linux audio [OPTIONS] <COMMAND>
+
+Commands:
+  noise      Microphone noise reduction
+  gain       Automatic gain
+  distance   Pickup distance
+  volume     Microphone volume 0-100 (below 50 reads as near, 50-84 standard, from 85 far)
+  sleep-mic  Keep the microphone on while the camera sleeps
+  mic        Microphone on/off; every change makes the camera restart (about 18 s)
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio noise --help
+Microphone noise reduction
+
+Usage: obsbot4linux audio noise [OPTIONS] <LEVEL>
+
+Arguments:
+  <LEVEL>  [possible values: off, weak, medium, strong]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio gain --help
+Automatic gain
+
+Usage: obsbot4linux audio gain [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio distance --help
+Pickup distance
+
+Usage: obsbot4linux audio distance [OPTIONS] <DISTANCE>
+
+Arguments:
+  <DISTANCE>  [possible values: near, standard, far]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio volume --help
+Microphone volume 0-100 (below 50 reads as near, 50-84 standard, from 85 far)
+
+Usage: obsbot4linux audio volume [OPTIONS] <VOLUME>
+
+Arguments:
+  <VOLUME>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio sleep-mic --help
+Keep the microphone on while the camera sleeps
+
+Usage: obsbot4linux audio sleep-mic [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux audio mic --help
+Microphone on/off; every change makes the camera restart (about 18 s)
+
+Usage: obsbot4linux audio mic [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gesture --help
+Gesture control
+
+Usage: obsbot4linux gesture [OPTIONS] <COMMAND>
+
+Commands:
+  set         Switch one gesture on or off
+  zoom-ratio  Zoom ratio of the zoom gestures, 1.0-4.0
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gesture set --help
+Switch one gesture on or off
+
+Usage: obsbot4linux gesture set [OPTIONS] <GESTURE> <STATE>
+
+Arguments:
+  <GESTURE>  [possible values: target-lock, zoom, dynamic-zoom, direction-change]
+  <STATE>    [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gesture zoom-ratio --help
+Zoom ratio of the zoom gestures, 1.0-4.0
+
+Usage: obsbot4linux gesture zoom-ratio [OPTIONS] <RATIO>
+
+Arguments:
+  <RATIO>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand --help
+Hand tracking: which hand, return position, area, axes
+
+Usage: obsbot4linux hand [OPTIONS] <COMMAND>
+
+Commands:
+  right         Track the right hand
+  left          Track the left hand
+  return-here   Take the current camera pose as the position the camera returns to after the hand leaves
+  return-go     Move the camera to the hand-tracking return position
+  return-reset  Clear the hand-tracking return position
+  area          Area the hand is tracked in, in degrees. The camera's default: --pan -45 45 --tilt -30 30
+  area-reset    Set the hand tracking area back to the camera's default
+  pan           Whether the hand tracker may pan (off: the pan axis stays where it is)
+  tilt          Whether the hand tracker may tilt (off: the tilt axis stays where it is)
+  return-after  Seconds the hand may stay outside the area before the camera returns to the return position
+  gimbal        Whether the hand tracker may move the gimbal at all (off stops it; the camera does not keep this setting)
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand right --help
+Track the right hand
+
+Usage: obsbot4linux hand right [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand left --help
+Track the left hand
+
+Usage: obsbot4linux hand left [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand return-here --help
+Take the current camera pose as the position the camera returns to after the hand leaves
+
+Usage: obsbot4linux hand return-here [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand return-go --help
+Move the camera to the hand-tracking return position
+
+Usage: obsbot4linux hand return-go [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand return-reset --help
+Clear the hand-tracking return position
+
+Usage: obsbot4linux hand return-reset [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand area --help
+Area the hand is tracked in, in degrees. The camera's default: --pan -45 45 --tilt -30 30
+
+Usage: obsbot4linux hand area [OPTIONS] --pan <MIN> <MAX> --tilt <MIN> <MAX>
+
+Options:
+      --json              Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --pan <MIN> <MAX>   Pan range, MIN MAX, positive = camera left (-150..150)
+      --direct            Do not use a running daemon; talk to the camera directly
+      --tilt <MIN> <MAX>  Tilt range, MIN MAX, positive = up (-70..90)
+  -h, --help              Print help
+=== obsbot4linux hand area-reset --help
+Set the hand tracking area back to the camera's default
+
+Usage: obsbot4linux hand area-reset [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand pan --help
+Whether the hand tracker may pan (off: the pan axis stays where it is)
+
+Usage: obsbot4linux hand pan [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand tilt --help
+Whether the hand tracker may tilt (off: the tilt axis stays where it is)
+
+Usage: obsbot4linux hand tilt [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand return-after --help
+Seconds the hand may stay outside the area before the camera returns to the return position
+
+Usage: obsbot4linux hand return-after [OPTIONS] <SECONDS>
+
+Arguments:
+  <SECONDS>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux hand gimbal --help
+Whether the hand tracker may move the gimbal at all (off stops it; the camera does not keep this setting)
+
+Usage: obsbot4linux hand gimbal [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone --help
+Zone tracking
+
+Usage: obsbot4linux zone [OPTIONS] <COMMAND>
+
+Commands:
+  on           
+  off          
+  follow       Automatically follow new targets
+  area         Area the zone tracking stays in, in degrees. Full area: --pan -150 150 --tilt -70 90
+  return-here  Take the current camera pose as the position the zone tracking returns to
+  return-go    Move the camera to the zone return position
+  view         Named poses stored in the camera ("zone views"); the camera does not track by them
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone on --help
+Usage: obsbot4linux zone on [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone off --help
+Usage: obsbot4linux zone off [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone follow --help
+Automatically follow new targets
+
+Usage: obsbot4linux zone follow [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone area --help
+Area the zone tracking stays in, in degrees. Full area: --pan -150 150 --tilt -70 90
+
+Usage: obsbot4linux zone area [OPTIONS] --pan <MIN> <MAX> --tilt <MIN> <MAX>
+
+Options:
+      --json              Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --pan <MIN> <MAX>   Pan range, MIN MAX, positive = camera left (-150..150)
+      --direct            Do not use a running daemon; talk to the camera directly
+      --tilt <MIN> <MAX>  Tilt range, MIN MAX, positive = up (-70..90)
+  -h, --help              Print help
+=== obsbot4linux zone return-here --help
+Take the current camera pose as the position the zone tracking returns to
+
+Usage: obsbot4linux zone return-here [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone return-go --help
+Move the camera to the zone return position
+
+Usage: obsbot4linux zone return-go [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone view --help
+Named poses stored in the camera ("zone views"); the camera does not track by them
+
+Usage: obsbot4linux zone view [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the views
+  save    Store a view under the lowest free id; without --pan/--tilt/--zoom the current pose is used
+  rename  Rename a view (printable ASCII, up to 32 characters)
+  delete  Delete a view
+  go      Move the camera to a view
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone view list --help
+List the views
+
+Usage: obsbot4linux zone view list [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone view save --help
+Store a view under the lowest free id; without --pan/--tilt/--zoom the current pose is used
+
+Usage: obsbot4linux zone view save [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  
+
+Options:
+      --json         Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --pan <PAN>    
+      --direct       Do not use a running daemon; talk to the camera directly
+      --tilt <TILT>  
+      --zoom <ZOOM>  
+  -h, --help         Print help
+=== obsbot4linux zone view rename --help
+Rename a view (printable ASCII, up to 32 characters)
+
+Usage: obsbot4linux zone view rename [OPTIONS] <ID> <NAME>
+
+Arguments:
+  <ID>    
+  <NAME>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone view delete --help
+Delete a view
+
+Usage: obsbot4linux zone view delete [OPTIONS] <ID>
+
+Arguments:
+  <ID>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux zone view go --help
+Move the camera to a view
+
+Usage: obsbot4linux zone view go [OPTIONS] <ID>
+
+Arguments:
+  <ID>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus --help
+Focus: autofocus mode, continuous autofocus, manual focus
+
+Usage: obsbot4linux focus [OPTIONS] <COMMAND>
+
+Commands:
+  mode   Autofocus mode
+  auto   Continuous autofocus on/off
+  af     The camera's own autofocus mode: continuous, single (focus once and hold) or manual
+  point  Focus once on a point: x and y from 0.0 to 1.0, from the top left of the picture
+  set    Manual focus 0-100 (turns autofocus off)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus mode --help
+Autofocus mode
+
+Usage: obsbot4linux focus mode [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: face, global]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus auto --help
+Continuous autofocus on/off
+
+Usage: obsbot4linux focus auto [OPTIONS] <STATE>
+
+Arguments:
+  <STATE>  [possible values: on, off]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus af --help
+The camera's own autofocus mode: continuous, single (focus once and hold) or manual
+
+Usage: obsbot4linux focus af [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>  [possible values: continuous, single, manual]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus point --help
+Focus once on a point: x and y from 0.0 to 1.0, from the top left of the picture
+
+Usage: obsbot4linux focus point [OPTIONS] <X> <Y>
+
+Arguments:
+  <X>  
+  <Y>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux focus set --help
+Manual focus 0-100 (turns autofocus off)
+
+Usage: obsbot4linux focus set [OPTIONS] <VALUE>
+
+Arguments:
+  <VALUE>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux startup --help
+Initial state: the pose the camera moves to when it powers on
+
+Usage: obsbot4linux startup [OPTIONS] <COMMAND>
+
+Commands:
+  set   Set the start pose: --pan/--tilt/--zoom, or --preset <slot>, or --current. There is no way known to clear it; pan 0, tilt 0, zoom 1 is the neutral start
+  show  Show the start pose and the picture settings of the initial state
+  go    Move the camera to the start pose now (the pose it takes at power-on)
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux startup set --help
+Set the start pose: --pan/--tilt/--zoom, or --preset <slot>, or --current. There is no way known to clear it; pan 0, tilt 0, zoom 1 is the neutral start
+
+Usage: obsbot4linux startup set [OPTIONS]
+
+Options:
+      --json
+          Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+
+      --pan <PAN>
+          Positive turns the camera to its left
+
+      --direct
+          Do not use a running daemon; talk to the camera directly
+
+      --tilt <TILT>
+          Positive tilts the camera up
+
+      --zoom <ZOOM>
+          
+
+      --preset <PRESET>
+          Use the pose of a stored preset (slot as in "preset list", 0-2)
+
+      --current
+          Use the current pose (remembered gimbal pose, live zoom)
+
+      --ai <AI>
+          AI mode of the initial state (the camera tracks in it again after "startup go" and powers on in it). Kept as it is when not given; "none" clears it, and then "startup go" leaves tracking suspended. Alone, it leaves the pose untouched
+
+          Possible values:
+          - static
+          - normal
+          - upper-body
+          - headless
+          - group
+          - none:       Not set (the camera's own default): `startup go` leaves tracking suspended
+
+  -h, --help
+          Print help (see a summary with '-h')
+=== obsbot4linux startup show --help
+Show the start pose and the picture settings of the initial state
+
+Usage: obsbot4linux startup show [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux startup go --help
+Move the camera to the start pose now (the pose it takes at power-on)
+
+Usage: obsbot4linux startup go [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux image --help
+UVC image control, e.g. "image brightness 128" (names are in "status")
+
+Usage: obsbot4linux image [OPTIONS] <CONTROL> <VALUE>
+
+Arguments:
+  <CONTROL>  
+  <VALUE>    
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux preset --help
+Presets stored in the camera (slots 0-2)
+
+Usage: obsbot4linux preset [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the presets
+  save    Save a pose to a slot; without --pan/--tilt/--zoom the current pose is used (the last gimbal pose obsbot4linux sent, else the one V4L2 last set; live zoom)
+  rename  Rename a preset (printable ASCII, up to 32 characters)
+  delete  Delete a preset
+  recall  Move the camera to a preset
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux preset list --help
+List the presets
+
+Usage: obsbot4linux preset list [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux preset save --help
+Save a pose to a slot; without --pan/--tilt/--zoom the current pose is used (the last gimbal pose obsbot4linux sent, else the one V4L2 last set; live zoom)
+
+Usage: obsbot4linux preset save [OPTIONS] <SLOT>
+
+Arguments:
+  <SLOT>  
+
+Options:
+      --json         Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --name <NAME>  
+      --direct       Do not use a running daemon; talk to the camera directly
+      --pan <PAN>    
+      --tilt <TILT>  
+      --zoom <ZOOM>  
+  -h, --help         Print help
+=== obsbot4linux preset rename --help
+Rename a preset (printable ASCII, up to 32 characters)
+
+Usage: obsbot4linux preset rename [OPTIONS] <SLOT> <NAME>
+
+Arguments:
+  <SLOT>  
+  <NAME>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux preset delete --help
+Delete a preset
+
+Usage: obsbot4linux preset delete [OPTIONS] <SLOT>
+
+Arguments:
+  <SLOT>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux preset recall --help
+Move the camera to a preset
+
+Usage: obsbot4linux preset recall [OPTIONS] <SLOT>
+
+Arguments:
+  <SLOT>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux factory-reset --help
+Reset the camera to factory settings (it restarts and deletes its presets)
+
+Usage: obsbot4linux factory-reset [OPTIONS]
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --yes     
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
+=== obsbot4linux gimbal center --help
+Turn the gimbal so that a point of the picture moves to its centre: x and y from 0.0 to 1.0, from the top left (switches tracking to static first)
+
+Usage: obsbot4linux gimbal center [OPTIONS] <X> <Y>
+
+Arguments:
+  <X>  
+  <Y>  
+
+Options:
+      --json    Print machine-readable JSON (errors too, as {"ok":false,"error":...})
+      --direct  Do not use a running daemon; talk to the camera directly
+  -h, --help    Print help
