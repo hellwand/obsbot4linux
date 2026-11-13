@@ -274,7 +274,8 @@ re-read the device before answering.
    published state, `set` and `do` with `unavailable`; every request for an unsupported
    device (`get` from its fixed state, `set` and `do` with
    `unsupported_device`). A stop (an action the model marks as a stop; on the Tiny 2 Lite
-   `gimbal.stop` and `zoom.stop`) is taken before every queued request and answered when
+   `gimbal.stop` and `zoom.stop`) is taken before every queued request, is accepted even
+   when 32 requests are already queued (it is never answered `busy`), and is answered when
    the camera accepted it. Requests for different devices may be answered in any order.
    Requests may be pipelined.
 3. For a `set` or `do` that changes state, the daemon sends the state event to every
@@ -292,8 +293,9 @@ re-read the device before answering.
    until its reply arrives, and the state (its `pending` values included) after that. They
    run no timers of their own.
 5. `set`: the whole patch is validated first, against the description and against the
-   current state with the patch applied. If any field fails, nothing is sent. The worker
-   then applies the leaves in the order the model defines. On a camera failure midway it
+   current state with the patch applied. A value in `pending` counts as the current value
+   there, for `requires` and for the asleep check. If any field fails, nothing is sent.
+   The worker then applies the leaves in the order the model defines. On a camera failure midway it
    stops, re-reads, publishes the real state and answers `camera` with `applied` and
    `failed`. There is no rollback: the camera has no transactions. The same holds for `do`:
    all parameters are validated before the first frame is sent, and a failure after a frame
@@ -408,8 +410,9 @@ Setting and Action fields:
 - `no_effect`: the camera accepts and reports the value, and it has no observable effect on
   this model.
 - `requires`: conditions on other paths. The check uses the current state with the patch
-  applied, so `{"exposure":{"mode":"manual","time":20000}}` is accepted while the exposure
-  is automatic, and `exposure.time` alone is refused with `conflict`.
+  applied (a `pending` value counts as current, 4.1 rule 5), so
+  `{"exposure":{"mode":"manual","time":20000}}` is accepted while the exposure is
+  automatic, and `exposure.time` alone is refused with `conflict`.
 - `default`: the camera's own default as it reports it (UVC). Absent when the camera
   reports none or when the reported value lies outside the setting's range.
 - `live`: the live topic of a volatile leaf: a value that changes without a request (pose,
@@ -419,7 +422,8 @@ Setting and Action fields:
 - `warning`: a list of one or both of `restart` (the camera restarts after this write or
   action) and `destructive` (data on the camera is lost). An action whose `warning` holds
   `destructive` requires the parameter `confirm: true`; without it the daemon answers
-  `invalid`. Generic UIs ask before they send either.
+  `invalid`. Interactive UIs, such as the widget, ask before they send either. The command
+  line does not prompt: scripts use it, and a destructive action already needs `confirm=true`.
 
 Rules:
 
@@ -771,7 +775,8 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
 - **Duplicates.** The duplicate rule is applied before the hand-over. If an available device
   already holds the same `sn:` id, the newcomer gets a `port:` id for this plug-in and a log
   line. The newcomer is the device whose serial was read later; for two serials read in one
-  enumeration pass, the one later in the order of the scan.
+  enumeration pass, the one whose serial reaches the device table later (the workers
+  read in parallel, so the order of the scan does not decide).
 - Identity values (serial, firmware) are kept only once the camera answered them.
 - **Hand-over.** When a `port:` id resolves to `sn:<serial>`, the device takes that id. If an
   unavailable entry with that id exists, the device takes that entry. The daemon sends, one
@@ -790,8 +795,8 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
 
 ### 5.6 Worker and write path
 
-- Each worker owns one device queue (FIFO, at most 32 requests; more is `busy`) and applies
-  the queue rules of 4.1 rule 9.
+- Each worker owns one device queue (FIFO, at most 32 requests; more is `busy`, except a
+  stop, 4.1 rule 2) and applies the queue rules of 4.1 rule 9.
 - **Write path:** validate against the description and the current state (`invalid`,
   `unsupported`, `out_of_range`, `conflict`, `asleep`) → send the request's frames and no
   others (section 2), in the model's apply order →
@@ -949,7 +954,7 @@ let (rev, state) = c.get(&id, Some(&["zoom.factor"]))?;
 let rev = c.set(&id, Patch::new().leaf("zoom.factor", 1.5))?;
 let (rev, result) = c.act(&id, "preset.recall", json!({"slot": 1}))?;
 
-let (tx, rx) = Client::subscribe(Hello::new("widget 1.0").live(&["pose"]))?;
+let (hello, tx, rx) = Client::subscribe(Hello::new("widget 1.0").live(&["pose"]))?;
 let req = tx.set(&id, Patch::new().leaf("led.brightness", 2))?;  // returns the request id
 for msg in rx { match msg? { Incoming::Reply { id, .. } => …, Incoming::Event(e) => … } }
 ```
@@ -958,9 +963,10 @@ for msg in rx { match msg? { Incoming::Reply { id, .. } => …, Incoming::Event(
   helpers (`state.at("zoom.factor")`, `Patch::leaf`) and no per-setting methods. It may
   validate a patch against the description with the same validator the daemon uses; the
   daemon stays authoritative.
-- `Client::connect` blocks per request. `Client::subscribe` returns a sender and a receiver;
-  a reader thread delivers replies (with their request ids) and events in arrival order.
-  The caller keeps its own device list from `hello` and the `devices` events.
+- `Client::connect` blocks per request. `Client::subscribe` returns the `hello` reply, a
+  sender and a receiver; a reader thread delivers replies (with their request ids) and
+  events in arrival order. The caller keeps its own device list, starting from the `hello`
+  reply, and the `devices` events.
 - Errors are typed (`ErrorCode`, with an unknown-code variant). There is no built-in retry:
   on disconnect the receiver ends with an error, and the caller decides whether to
   reconnect (4.1).
@@ -985,7 +991,8 @@ obsbot4linux watch [--live <topic>…]              hello reply and events as JS
 ```
 
 - **Device selection.** `status`, `get`, `set`, `do` and `describe` act on one device.
-  `--device` takes the full id, a serial suffix of at least four characters, or a model key
+  `--device` takes the full id, a serial suffix of at least four characters (the shortened
+  id that human output prints, such as `…0001`, is accepted too), or a model key
   (`unknown` included); it must match exactly one listed device. Without `--device` these
   commands use the only usable device (support `tested` or `untested`, available).
   Unsupported devices never count as usable, but `--device` can name one. `devices` lists
@@ -1355,7 +1362,8 @@ M4 is the first model that completes these steps.
   connection subscribes `pose`, else
   5 s: the live pose. 5 s: the settings readbacks (tracking, framing, gestures, zoom,
   exposure, image, focus, audio, LED, sleep). 60 s: zone, hand, power-on, views.
-  `touched`: presets (read at plug-in and after `preset.*` and `power_on.use_preset`; the
+  `touched`: presets (read at plug-in and after `preset.save`, `preset.rename` and
+  `preset.delete`, not after `preset.recall` or `power_on.use_preset`; the
   preset read writes to the camera to rewind its list, which the vendor app never does,
   CAM-19; this rewind is the one known exception to section 2's "no command sequence as a
   workaround" and stays only until CAM-19 decides). While asleep only the status block is
@@ -1712,9 +1720,10 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
 
 **Track B: daemon**
 
-- **Content:** `crates/obsbot4linuxd` as specified in section 5, in two PRs. B-1: the
+- **Content:** `crates/obsbot4linuxd` as specified in section 5, in two milestones. B-1: the
   daemon core with fake mode (`--fake`, test-control socket), so that tracks C and D can run
-  their acceptance against it. B-2: the real device path (enumeration, registry lookup,
+  their acceptance against it; it is reached when its last task has landed and is built in
+  several pull requests. B-2: the real device path (enumeration, registry lookup,
   workers over `trait Camera` with `tiny2lite`).
 - **Owner files:** `crates/obsbot4linuxd`.
 - **Depends on:** W0 (B-1); track A's registry, enumeration and `tiny2lite` (B-2).
@@ -1767,14 +1776,17 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   shell that hosts it (DankMaterialShell); if it cannot, track C adds `relay` (6.2) and the
   widget uses it. Second, a check whether `dms plugins update` follows the widget
   repository's default branch or its tags; the answer decides how the upper bound of widget
-  0.28.0 reaches users. Then the widget on protocol 2: `hello`, device picker, every
+  0.29.2 reaches users. Then the widget on protocol 2: `hello`, device picker, every
   control gated on a path or action of the description, enum values, bounds, step, unit
   and list limits taken from the description, `pending` values shown, live topics only
   while the popup is open, markers for `untested` and `unsupported`, the exit-4 hint, and
   the defaults reset built from `default` values (a `set` patch; which controls it covers is
   the widget's product choice). Each control sends its one request and chains none (section
-  2, 12.3). Also widget 0.28.0, the last 0.x release, which refuses
-  obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >= 0.7.3, < 1.0`).
+  2, 12.3). Also widget 0.29.2, the last 0.x release, which refuses
+  obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >= 0.7.3, < 1.0`); 0.28.0 to 0.29.1 are
+  released already and carry the refusal. Widget 1.0 is built on a branch `v1` of the
+  widget repository until release day, because users receive every commit of its default
+  branch at their next plugin update.
 - **Owner files:** the widget repository.
 - **Depends on:** W0 (golden transcripts); B-1 for live tests.
 - **Acceptance without camera:** against `obsbot4linuxd --fake fake-a,fake-b,unknown`:
@@ -1783,7 +1795,7 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   not the Tiny 2 Lite's; the unsupported device shows as in 8.4 step 3 and disappears on
   unplug as in step 7; a value set with the CLI appears
   in the widget at once (`pending`); a gimbal control sends one request (checked against the
-  fake's operation log or by review); widget 0.28.0 is released before the 1.0 release
+  fake's operation log or by review); widget 0.29.2 is released before the 1.0 release
   candidate.
 - **Acceptance with camera:** in W4.
 
@@ -1854,14 +1866,15 @@ spec, and the plan is first reconciled with the audit's fix plan.
 
 Release day, in this order:
 
-1. Widget 0.28.0 (the last 0.x release, with its upper bound) is out.
+1. Widget 0.29.2 (the last 0.x release, with its upper bound) is out.
 2. The release candidate `v1.0.0-rc.N` is published and W4 has passed on it.
 3. `main` fast-forwards to `rebuild`; tag `v1.0.0`; the release workflow publishes the
    packages; the maintainers' private mirror of the repository follows the tag.
-4. Widget 1.0 is released after the tool, the same day. Its `plugin.json` requires
+4. Widget 1.0 is released after the tool, the same day: `v1` is merged into the widget
+   repository's default branch by fast-forward. Its `plugin.json` requires
    obsbot4linux ≥ 1.0. The widget's entry in the DankMaterialShell plugin registry is
    updated.
-5. The 0.13.2 packages and widget 0.28.0 stay downloadable for rollback. The release notes
+5. The 0.13.2 packages and widget 0.29.2 stay downloadable for rollback. The release notes
    name them. Rollback beyond that is a fix forward.
 
 1.0 is done when:
@@ -2160,8 +2173,18 @@ them and are not listed.
 Revision 2 was approved on 2026-11-13. Each later change has one row; each can be overruled
 on its own.
 
-| #   | Date       | Topic                                  | Approved revision 2                                                                                                             | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Why                                                                                                                                                                       | Source                                  |
-| --- | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 88  | 2026-11-13 | An action sends exactly what was asked | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13                     | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request; the carried flows lose the switch (2, 3.2, 4.4, 5.6, 6.2, 8.2, 8.3, 8.8, 9.1, 10.3, 12.2, 12.3, 14); new tests: 8.3 the exact frames of each ledger row; 10.3 the W0 fake test, the track B, C and D checks | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone                                | Thomas, 2026-11-13                      |
-| 89  | 2026-11-13 | Stops the daemon sends on its own      | the daemon stops a running turn when the camera falls asleep, and best effort on a clean shutdown (also for a `keep:true` turn) | the only stop the daemon sends is the end a turn's request set: a turn without `keep:true` stops when its connection closes, a shutdown included; a `keep:true` turn goes on across a shutdown, and across sleep the camera decides (CAM-7) (2, 4.4, 5.6, 5.9, 10.3, 14)                                                                                                                                                                                         | the client that started a turn can still end it, and `gimbal.stop` works from any connection and after a restart, so these stops were logic of our own; 0.13 sent neither | Thomas, 2026-11-13 (the rule of row 88) |
-| 90  | 2026-11-13 | Presets saved without a name           | `preset.save` without `name` names the preset `Preset <slot + 1>` (0.13.2 behaviour)                                            | it sends the preset and no name, no rename frame follows; what the camera reports as the name of an unnamed preset is CAM-35; a client may show its own placeholder for an empty name as display only and never writes it to the camera (2, 4.3, 4.4, 6.2, 9.1, 10.3, 12.2, 12.3, 14); new test: 10.3 the W0 fake test for `preset.save`                                                                                                                         | a name the daemon invents is a write the user did not ask for and contradicts section 2; the camera can show an unnamed preset by itself                                  | the rule of row 88, applied 2026-11-13  |
+| #   | Date       | Topic                                          | Approved revision 2                                                                                                             | Now                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Why                                                                                                                                                                       | Source                                  |
+| --- | ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 88  | 2026-11-13 | An action sends exactly what was asked         | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13                     | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request; the carried flows lose the switch (2, 3.2, 4.4, 5.6, 6.2, 8.2, 8.3, 8.8, 9.1, 10.3, 12.2, 12.3, 14); new tests: 8.3 the exact frames of each ledger row; 10.3 the W0 fake test, the track B, C and D checks | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone                                | Thomas, 2026-11-13                      |
+| 89  | 2026-11-13 | Stops the daemon sends on its own              | the daemon stops a running turn when the camera falls asleep, and best effort on a clean shutdown (also for a `keep:true` turn) | the only stop the daemon sends is the end a turn's request set: a turn without `keep:true` stops when its connection closes, a shutdown included; a `keep:true` turn goes on across a shutdown, and across sleep the camera decides (CAM-7) (2, 4.4, 5.6, 5.9, 10.3, 14)                                                                                                                                                                                         | the client that started a turn can still end it, and `gimbal.stop` works from any connection and after a restart, so these stops were logic of our own; 0.13 sent neither | Thomas, 2026-11-13 (the rule of row 88) |
+| 90  | 2026-11-13 | Presets saved without a name                   | `preset.save` without `name` names the preset `Preset <slot + 1>` (0.13.2 behaviour)                                            | it sends the preset and no name, no rename frame follows; what the camera reports as the name of an unnamed preset is CAM-35; a client may show its own placeholder for an empty name as display only and never writes it to the camera (2, 4.3, 4.4, 6.2, 9.1, 10.3, 12.2, 12.3, 14); new test: 10.3 the W0 fake test for `preset.save`                                                                                                                         | a name the daemon invents is a write the user did not ask for and contradicts section 2; the camera can show an unnamed preset by itself                                  | the rule of row 88, applied 2026-11-13  |
+| 91  | 2026-11-13 | Presets are re-read less often                 | the presets are read at plug-in and after `preset.*` and `power_on.use_preset`                                                  | read at plug-in and after `preset.save`, `preset.rename` and `preset.delete` only; a recall or `power_on.use_preset` does not change the list (8.8)                                                                                                                                                                                                                                                                                                              | a recall adds no preset, and every read of the list is a write of the rewind (section 2 exception, CAM-19)                                                                | the W1 plan review                      |
+| 92  | 2026-11-13 | A stop is accepted when the queue is full      | a stop is taken before every queued request; 32 queued requests make the next one `busy`                                        | a stop (`gimbal.stop`, `zoom.stop`) is accepted when 32 requests are queued; every other request is still `busy` (4.1 rule 2, 5.6)                                                                                                                                                                                                                                                                                                                               | a user who floods a device and then presses stop would otherwise get `busy` for the stop                                                                                  | the W1 plan review                      |
+| 93  | 2026-11-13 | A pending value counts as current              | a `set` is validated against the current state with the patch applied                                                           | a value in `pending` counts as the current value for `requires` and for the asleep check, also across batches (4.1 rule 5, 4.2); clients that gate controls do the same                                                                                                                                                                                                                                                                                          | `set exposure.mode=manual` and then `set exposure.time=…` must work however the two requests are timed                                                                    | the W1 plan review                      |
+| 94  | 2026-11-13 | Duplicate serial: which device is the newcomer | for two serials of one enumeration pass, the one later in the order of the scan                                                 | the one whose serial reaches the device table later (5.5)                                                                                                                                                                                                                                                                                                                                                                                                        | the workers read in parallel, so the order of the scan does not decide and cannot be tested                                                                               | the W1 plan review                      |
+| 95  | 2026-11-13 | The command line does not prompt               | "Generic UIs ask before they send either" (4.2)                                                                                 | the command line does not prompt: scripts use it and a destructive action needs `confirm=true`; interactive UIs such as the widget ask (4.2)                                                                                                                                                                                                                                                                                                                     | the sentence read as if the command line had to ask as well                                                                                                               | the W1 plan review                      |
+| 96  | 2026-11-13 | `Client::subscribe` returns the hello reply    | `Client::subscribe` returns a sender and a receiver                                                                             | it returns the `hello` reply, a sender and a receiver (6.1)                                                                                                                                                                                                                                                                                                                                                                                                      | the caller needs the device list and the states from the reply, and a refusal or a protocol mismatch is reported by the call itself                                       | the W1 plan review                      |
+| 97  | 2026-11-13 | `--device` takes the shortened id              | `--device` takes the full id, a serial suffix of at least four characters, or a model key                                       | the shortened id that human output prints (`…0001`) is accepted as well (6.2)                                                                                                                                                                                                                                                                                                                                                                                    | a person pastes what the command line printed                                                                                                                             | the W1 plan review                      |
+| 98  | 2026-11-13 | The last 0.x widget release is 0.29.2          | widget 0.28.0 is the last 0.x release and carries the upper bound                                                               | 0.28.0 to 0.29.1 are released and carry the refusal; 0.29.2 is the last 0.x release and adds the bound `< 1.0` to `plugin.json` (10.3, 10.6)                                                                                                                                                                                                                                                                                                                     | 0.28.0 was released before this change; later 0.x releases exist                                                                                                          | the W1 plan review                      |
+| 99  | 2026-11-13 | Widget 1.0 is built on a branch                | widget 1.0 is built in the widget repository, merged on release day                                                             | built on a branch `v1` of the widget repository and merged into the default branch by fast-forward on release day (10.3, 10.6)                                                                                                                                                                                                                                                                                                                                   | `dms plugins update` follows the default branch, so a 1.0 commit there would reach users of 0.13                                                                          | the W1 plan review                      |
+| 100 | 2026-11-13 | B-1 is a milestone                             | track B in two PRs, B-1 and B-2                                                                                                 | B-1 is reached when the last task of the daemon core with fake mode has landed; it is built in several pull requests (10.3 B)                                                                                                                                                                                                                                                                                                                                    | the daemon core is too large for one reviewable pull request                                                                                                              | the W1 plan review                      |
