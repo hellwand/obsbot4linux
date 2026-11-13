@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The cameras obsbot4linux supports and how to recognise them. Matching is pure string
-//! work so it can be tested without a camera; `device::detect` feeds it from `/dev`.
+//! work so it can be tested without a camera; `enumeration::detect` feeds it from `/dev`.
 
 /// A supported camera model.
 #[derive(Debug, PartialEq, Eq)]

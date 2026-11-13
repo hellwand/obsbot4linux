@@ -5,12 +5,12 @@
 use std::io::Write;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use obsbot_device::commands::*;
-use obsbot_device::device::Detected;
+use obsbot_device::enumeration::Detected;
 use obsbot_device::error::{Error, Result};
 use obsbot_device::family::exchange::Camera;
 use obsbot_device::models::tiny2lite::camera::Identity;
-use obsbot_device::presets::{Pose, StartupAi};
+use obsbot_device::models::tiny2lite::commands::*;
+use obsbot_device::models::tiny2lite::presets::{Pose, StartupAi};
 use serde_json::{Value, json};
 
 #[derive(Parser)]
@@ -972,7 +972,7 @@ pub fn run() -> i32 {
 /// `obsbot4linux detect`: exit 0 and the model (and device) of a supported camera, exit 1 and
 /// no output without one. Never goes through the daemon.
 fn detect(json: bool) -> i32 {
-    let Some(found) = obsbot_device::device::detect() else {
+    let Some(found) = obsbot_device::enumeration::detect() else {
         return 1;
     };
     let (value, text) = detect_output(&found);

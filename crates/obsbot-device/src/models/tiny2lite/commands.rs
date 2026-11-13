@@ -4,10 +4,10 @@
 //! Byte builders for the documented commands, plus the setting enums.
 //!
 //! Short commands go to unit 2 selector 6 (`<cmd> <len> <value>`), framed commands to
-//! selector 2 (see [`crate::frame`]). Only ids from the protocol reference are used.
+//! selector 2 (see [`crate::family::frame`]). Only ids from the protocol reference are used.
 
 use crate::error::{Error, Result};
-use crate::frame::{FRAME_SIZE, frame};
+use crate::family::frame::{FRAME_SIZE, frame};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 

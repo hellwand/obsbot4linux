@@ -55,7 +55,7 @@ fn connect_or_start() -> Result<UnixStream> {
     }
     let exe = std::env::current_exe()?;
     // its errors go next to the state file; without a log they are lost, not fatal
-    let log = obsbot_device::state::path().with_file_name("daemon.log");
+    let log = obsbot_device::legacy::state::path().with_file_name("daemon.log");
     let stderr = log
         .parent()
         .map_or(Ok(()), std::fs::create_dir_all)
