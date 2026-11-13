@@ -93,7 +93,6 @@ pub(crate) fn poll_answer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::uvc::XU_SIZE;
     use std::cell::Cell;
 
     const COMMAND: u16 = 0x1344;
