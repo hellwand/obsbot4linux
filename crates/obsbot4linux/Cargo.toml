@@ -16,11 +16,7 @@ name = "obsbot4linux"
 path = "src/main.rs"
 
 [dependencies]
-obsbot-device.workspace = true
-clap.workspace = true
-nix.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+obsbot-proto.workspace = true
 
 [package.metadata.deb]
 maintainer = "Thomas Kroll <t.kroll@outlook.com>"

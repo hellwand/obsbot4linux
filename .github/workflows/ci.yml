@@ -80,6 +80,7 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update
       - run: cargo test --workspace --locked
+      - run: scripts/check-cli-deps.sh
 
   # Builds and tests with the oldest Rust that Cargo.toml's rust-version claims.
   msrv:
