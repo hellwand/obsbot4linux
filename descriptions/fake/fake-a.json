@@ -1,0 +1,1875 @@
+{
+  "settings": {
+    "asleep": {
+      "type": "bool",
+      "label": "Asleep",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "audio.auto_gain": {
+      "type": "bool",
+      "label": "Automatic microphone gain",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "audio.enabled": {
+      "type": "bool",
+      "label": "Microphone",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000,
+      "warning": [
+        "restart"
+      ]
+    },
+    "audio.in_sleep": {
+      "type": "bool",
+      "label": "Microphone while asleep",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "audio.noise_reduction": {
+      "type": "enum",
+      "label": "Noise reduction",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "off",
+        "weak",
+        "medium",
+        "strong"
+      ],
+      "writable": [
+        "off",
+        "weak",
+        "medium",
+        "strong"
+      ],
+      "settle_ms": 3000
+    },
+    "audio.volume": {
+      "type": "number",
+      "label": "Microphone volume",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "percent",
+      "precision": 1,
+      "settle_ms": 3000
+    },
+    "exposure.anti_flicker": {
+      "type": "enum",
+      "label": "Anti-flicker",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "off",
+        "50hz",
+        "60hz",
+        "auto"
+      ],
+      "writable": [
+        "off",
+        "50hz",
+        "60hz"
+      ],
+      "settle_ms": 3000
+    },
+    "exposure.compensation": {
+      "type": "number",
+      "label": "Exposure compensation",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 18,
+      "step": 1,
+      "precision": 1,
+      "default": 9.0,
+      "settle_ms": 3000
+    },
+    "exposure.gain": {
+      "type": "number",
+      "label": "Gain",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 1,
+      "max": 64,
+      "step": 1,
+      "precision": 1,
+      "default": 1.0,
+      "live": "auto",
+      "settle_ms": 3000
+    },
+    "exposure.hdr": {
+      "type": "bool",
+      "label": "HDR",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "exposure.mode": {
+      "type": "enum",
+      "label": "Exposure",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "auto",
+        "manual"
+      ],
+      "writable": [
+        "auto",
+        "manual"
+      ],
+      "settle_ms": 3000
+    },
+    "exposure.region": {
+      "type": "enum",
+      "label": "Exposure metering",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "face",
+        "global"
+      ],
+      "writable": [
+        "face",
+        "global"
+      ],
+      "settle_ms": 3000
+    },
+    "exposure.time": {
+      "type": "number",
+      "label": "Exposure time",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 100,
+      "max": 250000,
+      "unit": "us",
+      "precision": 1,
+      "requires": [
+        {
+          "path": "exposure.mode",
+          "equals": "manual"
+        }
+      ],
+      "default": 33000,
+      "live": "auto",
+      "settle_ms": 3000
+    },
+    "focus.mode": {
+      "type": "enum",
+      "label": "Focus",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "continuous",
+        "single",
+        "manual"
+      ],
+      "writable": [
+        "continuous",
+        "single",
+        "manual"
+      ],
+      "settle_ms": 3000
+    },
+    "focus.position": {
+      "type": "number",
+      "label": "Focus position",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": true,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "requires": [
+        {
+          "path": "focus.mode",
+          "equals": "manual"
+        }
+      ],
+      "default": 0.0,
+      "settle_ms": 3000
+    },
+    "focus.region": {
+      "type": "enum",
+      "label": "Focus region",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "face",
+        "global"
+      ],
+      "writable": [
+        "face",
+        "global"
+      ],
+      "settle_ms": 3000
+    },
+    "framing.auto_zoom": {
+      "type": "bool",
+      "label": "Automatic framing zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "framing.offset.x": {
+      "type": "number",
+      "label": "Framing offset x",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": -0.16,
+      "max": 0.16,
+      "unit": "fraction",
+      "precision": 0.01,
+      "settle_ms": 3000
+    },
+    "framing.offset.y": {
+      "type": "number",
+      "label": "Framing offset y",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": -0.16,
+      "max": 0.16,
+      "unit": "fraction",
+      "precision": 0.01,
+      "settle_ms": 3000
+    },
+    "framing.part": {
+      "type": "enum",
+      "label": "Framed part",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "normal",
+        "head_removal",
+        "lower_body"
+      ],
+      "writable": [
+        "normal",
+        "head_removal",
+        "lower_body"
+      ],
+      "settle_ms": 3000
+    },
+    "framing.size": {
+      "type": "enum",
+      "label": "Framing size",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "long_shot",
+        "medium_long_shot",
+        "medium_shot",
+        "medium_close_up",
+        "close_up",
+        "big_close_up"
+      ],
+      "writable": [
+        "long_shot",
+        "medium_long_shot",
+        "medium_shot",
+        "medium_close_up",
+        "close_up",
+        "big_close_up"
+      ],
+      "settle_ms": 3000
+    },
+    "framing.zoom_speed": {
+      "type": "enum",
+      "label": "Framing zoom speed",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "slow",
+        "medium",
+        "fast"
+      ],
+      "writable": [
+        "slow",
+        "medium",
+        "fast"
+      ],
+      "settle_ms": 3000
+    },
+    "gestures.direction_change": {
+      "type": "bool",
+      "label": "Gesture: reverse the dynamic zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "gestures.dynamic_zoom": {
+      "type": "bool",
+      "label": "Gesture: dynamic zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "gestures.target_lock": {
+      "type": "bool",
+      "label": "Gesture: target lock",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "gestures.zoom": {
+      "type": "bool",
+      "label": "Gesture: zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "gestures.zoom_ratio": {
+      "type": "number",
+      "label": "Gesture zoom ratio",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 1,
+      "max": 4,
+      "step": 0.1,
+      "unit": "factor",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "gimbal.invert": {
+      "type": "bool",
+      "label": "Reverse the pan direction",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "gimbal.pan": {
+      "type": "number",
+      "label": "Pan",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "unit": "deg",
+      "precision": 0.1,
+      "live": "pose"
+    },
+    "gimbal.tilt": {
+      "type": "number",
+      "label": "Tilt",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "unit": "deg",
+      "precision": 0.1,
+      "live": "pose"
+    },
+    "hand.area.pan": {
+      "type": "range",
+      "label": "Hand tracking pan range",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": {
+        "max": -150,
+        "min": -150
+      },
+      "max": {
+        "max": 150,
+        "min": 150
+      },
+      "unit": "deg",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "hand.area.tilt": {
+      "type": "range",
+      "label": "Hand tracking tilt range",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": {
+        "max": -70,
+        "min": -70
+      },
+      "max": {
+        "max": 90,
+        "min": 90
+      },
+      "unit": "deg",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "hand.axes.pan": {
+      "type": "bool",
+      "label": "Hand tracking may pan",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "hand.axes.tilt": {
+      "type": "bool",
+      "label": "Hand tracking may tilt",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "hand.move_gimbal": {
+      "type": "bool",
+      "label": "Hand tracking moves the gimbal",
+      "readonly": false,
+      "nullable": false,
+      "readback": false,
+      "asleep": "unknown",
+      "no_effect": false
+    },
+    "hand.return": {
+      "type": "pose",
+      "label": "Hand return pose",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false,
+      "min": {
+        "pan": -150,
+        "tilt": -70,
+        "zoom": 1
+      },
+      "max": {
+        "pan": 150,
+        "tilt": 90,
+        "zoom": 4
+      },
+      "unit": {
+        "pan": "deg",
+        "tilt": "deg",
+        "zoom": "factor"
+      },
+      "precision": {
+        "pan": 0.1,
+        "tilt": 0.1,
+        "zoom": 0.01
+      }
+    },
+    "hand.return_after": {
+      "type": "number",
+      "label": "Hand return after",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "unit": "s",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "hand.side": {
+      "type": "enum",
+      "label": "Hand",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "left",
+        "right"
+      ],
+      "writable": [
+        "left",
+        "right"
+      ],
+      "settle_ms": 3000
+    },
+    "image.brightness": {
+      "type": "number",
+      "label": "Brightness",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "default": 50.0,
+      "settle_ms": 3000
+    },
+    "image.contrast": {
+      "type": "number",
+      "label": "Contrast",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "default": 50.0,
+      "settle_ms": 3000
+    },
+    "image.frame_rate": {
+      "type": "number",
+      "label": "Frame rate",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "min": 30,
+      "max": 60,
+      "unit": "fps"
+    },
+    "image.hue": {
+      "type": "number",
+      "label": "Hue",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "default": 50.0,
+      "settle_ms": 3000
+    },
+    "image.mirror": {
+      "type": "bool",
+      "label": "Mirror",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "image.saturation": {
+      "type": "number",
+      "label": "Saturation",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "default": 50.0,
+      "settle_ms": 3000
+    },
+    "image.sharpness": {
+      "type": "number",
+      "label": "Sharpness",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "precision": 1,
+      "default": 50.0,
+      "settle_ms": 3000
+    },
+    "image.white_balance.auto": {
+      "type": "bool",
+      "label": "Automatic white balance",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "default": true,
+      "settle_ms": 3000
+    },
+    "image.white_balance.temperature": {
+      "type": "number",
+      "label": "White balance temperature",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 2000,
+      "max": 10000,
+      "step": 100,
+      "unit": "K",
+      "precision": 1,
+      "requires": [
+        {
+          "path": "image.white_balance.auto",
+          "equals": false
+        }
+      ],
+      "default": 5000,
+      "live": "auto",
+      "settle_ms": 3000
+    },
+    "led.blink": {
+      "type": "bool",
+      "label": "LED blink",
+      "readonly": false,
+      "nullable": false,
+      "readback": false,
+      "asleep": "unknown",
+      "no_effect": false
+    },
+    "led.brightness": {
+      "type": "number",
+      "label": "LED brightness",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 3,
+      "step": 1,
+      "precision": 1,
+      "settle_ms": 3000
+    },
+    "on_air.active": {
+      "type": "bool",
+      "label": "On air",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "on_air.apps": {
+      "type": "list",
+      "label": "Applications using the camera",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "item": {
+        "name": {
+          "type": "string",
+          "label": "Process name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 255
+        }
+      }
+    },
+    "power_on.mode": {
+      "type": "enum",
+      "label": "Tracking mode at power-on",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "static",
+        "normal",
+        "upper_body",
+        "close_up",
+        "headless",
+        "lower_body",
+        "hand",
+        "group"
+      ],
+      "writable": [
+        "static",
+        "normal",
+        "upper_body",
+        "close_up",
+        "headless",
+        "lower_body",
+        "hand",
+        "group"
+      ],
+      "settle_ms": 3000
+    },
+    "power_on.settings.auto_exposure": {
+      "type": "number",
+      "label": "Initial automatic exposure (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.autofocus": {
+      "type": "number",
+      "label": "Initial autofocus (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.contrast": {
+      "type": "number",
+      "label": "Initial contrast (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.exposure_compensation": {
+      "type": "number",
+      "label": "Initial exposure compensation (raw)",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.hue": {
+      "type": "number",
+      "label": "Initial hue (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.saturation": {
+      "type": "number",
+      "label": "Initial saturation (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.sharpness": {
+      "type": "number",
+      "label": "Initial sharpness (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.tracking_speed": {
+      "type": "number",
+      "label": "Initial tracking speed (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.white_balance_mode": {
+      "type": "number",
+      "label": "Initial white balance mode (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.settings.white_balance_temperature": {
+      "type": "number",
+      "label": "Initial white balance temperature (raw)",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false
+    },
+    "power_on.start.mode": {
+      "type": "enum",
+      "label": "Initial tracking mode",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "static",
+        "normal",
+        "upper_body",
+        "close_up",
+        "headless",
+        "lower_body",
+        "hand",
+        "group",
+        "unset"
+      ],
+      "writable": [
+        "static",
+        "normal",
+        "upper_body",
+        "headless",
+        "group",
+        "unset"
+      ],
+      "settle_ms": 3000
+    },
+    "power_on.start.pose": {
+      "type": "pose",
+      "label": "Initial pose",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "min": {
+        "pan": -150,
+        "tilt": -70,
+        "zoom": 1
+      },
+      "max": {
+        "pan": 150,
+        "tilt": 90,
+        "zoom": 4
+      },
+      "unit": {
+        "pan": "deg",
+        "tilt": "deg",
+        "zoom": "factor"
+      },
+      "precision": {
+        "pan": 0.1,
+        "tilt": 0.1,
+        "zoom": 0.01
+      }
+    },
+    "power_on.start.source": {
+      "type": "enum",
+      "label": "Initial state source",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "values": [
+        "own",
+        "preset_0",
+        "preset_1",
+        "preset_2"
+      ]
+    },
+    "presets": {
+      "type": "list",
+      "label": "Presets",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "item": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true
+        },
+        "pose": {
+          "type": "pose",
+          "label": "Pose",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": {
+            "pan": -150,
+            "tilt": -70,
+            "zoom": 1
+          },
+          "max": {
+            "pan": 150,
+            "tilt": 90,
+            "zoom": 4
+          },
+          "unit": {
+            "pan": "deg",
+            "tilt": "deg",
+            "zoom": "factor"
+          },
+          "precision": {
+            "pan": 0.1,
+            "tilt": 0.1,
+            "zoom": 0.01
+          }
+        },
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      }
+    },
+    "sleep.auto.enabled": {
+      "type": "bool",
+      "label": "Auto-sleep",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "sleep.auto.seconds": {
+      "type": "number",
+      "label": "Auto-sleep after",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 1,
+      "max": 32767,
+      "step": 1,
+      "unit": "s",
+      "precision": 1,
+      "settle_ms": 3000
+    },
+    "sleep.background": {
+      "type": "enum",
+      "label": "Sleep background",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "black",
+        "image",
+        "own_image"
+      ],
+      "writable": [
+        "black",
+        "image"
+      ],
+      "settle_ms": 3000
+    },
+    "sleep.background_mirror": {
+      "type": "bool",
+      "label": "Mirror the sleep background",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "sleep.wake_zoom": {
+      "type": "number",
+      "label": "Zoom at wake",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": true,
+      "min": 1,
+      "max": 4,
+      "unit": "factor",
+      "precision": 0.01,
+      "settle_ms": 3000
+    },
+    "tracking.mode": {
+      "type": "enum",
+      "label": "Tracking mode",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "static",
+        "normal",
+        "upper_body",
+        "close_up",
+        "headless",
+        "lower_body",
+        "hand",
+        "group"
+      ],
+      "writable": [
+        "static",
+        "normal",
+        "upper_body",
+        "close_up",
+        "headless",
+        "lower_body",
+        "hand",
+        "group"
+      ],
+      "settle_ms": 3000
+    },
+    "tracking.profile": {
+      "type": "enum",
+      "label": "Tracking profile",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "standard",
+        "headroom",
+        "sport"
+      ],
+      "writable": [
+        "standard",
+        "headroom",
+        "sport"
+      ],
+      "settle_ms": 3000
+    },
+    "tracking.speed": {
+      "type": "enum",
+      "label": "Tracking speed",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "lazy",
+        "slow",
+        "normal",
+        "fast",
+        "very_fast",
+        "auto"
+      ],
+      "writable": [
+        "lazy",
+        "slow",
+        "normal",
+        "fast",
+        "very_fast",
+        "auto"
+      ],
+      "settle_ms": 3000
+    },
+    "tracking.target.box": {
+      "type": "box",
+      "label": "Target box",
+      "readonly": true,
+      "nullable": true,
+      "readback": true,
+      "no_effect": false,
+      "min": {
+        "bottom": 0,
+        "left": 0,
+        "right": 0,
+        "top": 0
+      },
+      "max": {
+        "bottom": 1,
+        "left": 1,
+        "right": 1,
+        "top": 1
+      },
+      "unit": "fraction",
+      "precision": 0.01,
+      "live": "target"
+    },
+    "tracking.target.detected": {
+      "type": "bool",
+      "label": "Target detected",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "views": {
+      "type": "list",
+      "label": "Views",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "item": {
+        "id": {
+          "type": "number",
+          "label": "View id",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "step": 1
+        },
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true
+        },
+        "pose": {
+          "type": "pose",
+          "label": "Pose",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": {
+            "pan": -150,
+            "tilt": -70,
+            "zoom": 1
+          },
+          "max": {
+            "pan": 150,
+            "tilt": 90,
+            "zoom": 4
+          },
+          "unit": {
+            "pan": "deg",
+            "tilt": "deg",
+            "zoom": "factor"
+          },
+          "precision": {
+            "pan": 0.1,
+            "tilt": 0.1,
+            "zoom": 0.01
+          }
+        }
+      }
+    },
+    "zone.area.pan": {
+      "type": "range",
+      "label": "Zone pan range",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": {
+        "max": -150,
+        "min": -150
+      },
+      "max": {
+        "max": 150,
+        "min": 150
+      },
+      "unit": "deg",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "zone.area.tilt": {
+      "type": "range",
+      "label": "Zone tilt range",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": {
+        "max": -70,
+        "min": -70
+      },
+      "max": {
+        "max": 90,
+        "min": 90
+      },
+      "unit": "deg",
+      "precision": 0.1,
+      "settle_ms": 3000
+    },
+    "zone.enabled": {
+      "type": "bool",
+      "label": "Zone tracking",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "zone.follow": {
+      "type": "bool",
+      "label": "Zone: follow the target",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "settle_ms": 3000
+    },
+    "zone.return": {
+      "type": "pose",
+      "label": "Zone return pose",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "min": {
+        "pan": -150,
+        "tilt": -70,
+        "zoom": 1
+      },
+      "max": {
+        "pan": 150,
+        "tilt": 90,
+        "zoom": 4
+      },
+      "unit": {
+        "pan": "deg",
+        "tilt": "deg",
+        "zoom": "factor"
+      },
+      "precision": {
+        "pan": 0.1,
+        "tilt": 0.1,
+        "zoom": 0.01
+      }
+    },
+    "zoom.factor": {
+      "type": "number",
+      "label": "Zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 1,
+      "max": 4,
+      "unit": "factor",
+      "precision": 0.01,
+      "settle_ms": 3000
+    },
+    "zoom.field_of_view": {
+      "type": "enum",
+      "label": "Field of view",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "ignored",
+      "no_effect": false,
+      "values": [
+        "wide",
+        "medium",
+        "narrow",
+        "custom"
+      ],
+      "writable": [
+        "wide",
+        "medium",
+        "narrow"
+      ],
+      "settle_ms": 3000
+    }
+  },
+  "actions": {
+    "factory_reset": {
+      "label": "Factory reset",
+      "params": {
+        "confirm": {
+          "type": "bool",
+          "label": "Confirm",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false
+        }
+      },
+      "asleep": "unknown",
+      "warning": [
+        "destructive",
+        "restart"
+      ]
+    },
+    "focus.point": {
+      "label": "Focus on a point",
+      "params": {
+        "x": {
+          "type": "number",
+          "label": "x",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 1,
+          "unit": "fraction",
+          "precision": 0.01
+        },
+        "y": {
+          "type": "number",
+          "label": "y",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 1,
+          "unit": "fraction",
+          "precision": 0.01
+        }
+      },
+      "asleep": "unknown"
+    },
+    "gimbal.move": {
+      "label": "Move the gimbal",
+      "params": {
+        "pan": {
+          "type": "number",
+          "label": "Pan",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": -150,
+          "max": 150,
+          "unit": "deg",
+          "precision": 0.1,
+          "optional": true
+        },
+        "speed": {
+          "type": "number",
+          "label": "Speed",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 1,
+          "max": 180,
+          "unit": "deg/s",
+          "precision": 0.1,
+          "optional": true
+        },
+        "tilt": {
+          "type": "number",
+          "label": "Tilt",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": -70,
+          "max": 90,
+          "unit": "deg",
+          "precision": 0.1,
+          "optional": true
+        }
+      },
+      "asleep": "unknown"
+    },
+    "gimbal.stop": {
+      "label": "Stop the gimbal",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "gimbal.turn": {
+      "label": "Turn the gimbal",
+      "params": {
+        "keep": {
+          "type": "bool",
+          "label": "Keep turning after the connection closes",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "optional": true
+        },
+        "pan_speed": {
+          "type": "number",
+          "label": "Pan speed",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": -178,
+          "max": 178,
+          "unit": "deg/s",
+          "precision": 0.1,
+          "optional": true
+        },
+        "tilt_speed": {
+          "type": "number",
+          "label": "Tilt speed",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": -178,
+          "max": 178,
+          "unit": "deg/s",
+          "precision": 0.1,
+          "optional": true
+        }
+      },
+      "asleep": "unknown"
+    },
+    "hand.area_reset": {
+      "label": "Reset the hand tracking area",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "hand.go_return": {
+      "label": "Go to the hand return pose",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "hand.return_clear": {
+      "label": "Clear the hand return pose",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "hand.return_here": {
+      "label": "Set the hand return pose here",
+      "params": {},
+      "asleep": "ignored"
+    },
+    "power_on.go": {
+      "label": "Go to the initial pose",
+      "params": {},
+      "asleep": "ignored"
+    },
+    "power_on.set_pose": {
+      "label": "Set the initial pose",
+      "params": {
+        "pose": {
+          "type": "pose",
+          "label": "Pose",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": {
+            "pan": -150,
+            "tilt": -70,
+            "zoom": 1
+          },
+          "max": {
+            "pan": 150,
+            "tilt": 90,
+            "zoom": 4
+          },
+          "unit": {
+            "pan": "deg",
+            "tilt": "deg",
+            "zoom": "factor"
+          },
+          "precision": {
+            "pan": 0.1,
+            "tilt": 0.1,
+            "zoom": 0.01
+          }
+        }
+      },
+      "asleep": "unknown"
+    },
+    "power_on.use_current": {
+      "label": "Use the current pose as the initial pose",
+      "params": {},
+      "asleep": "ignored"
+    },
+    "power_on.use_preset": {
+      "label": "Use a preset as the initial pose",
+      "params": {
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.delete": {
+      "label": "Delete a preset",
+      "params": {
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.recall": {
+      "label": "Recall a preset",
+      "params": {
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.rename": {
+      "label": "Rename a preset",
+      "params": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true
+        },
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.save": {
+      "label": "Save a preset",
+      "params": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true,
+          "optional": true
+        },
+        "pose": {
+          "type": "pose",
+          "label": "Pose",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": {
+            "pan": -150,
+            "tilt": -70,
+            "zoom": 1
+          },
+          "max": {
+            "pan": 150,
+            "tilt": 90,
+            "zoom": 4
+          },
+          "unit": {
+            "pan": "deg",
+            "tilt": "deg",
+            "zoom": "factor"
+          },
+          "precision": {
+            "pan": 0.1,
+            "tilt": 0.1,
+            "zoom": 0.01
+          },
+          "optional": true
+        },
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 2,
+          "step": 1
+        }
+      },
+      "asleep": "ignored"
+    },
+    "sleep": {
+      "label": "Sleep",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "view.delete": {
+      "label": "Delete a view",
+      "params": {
+        "id": {
+          "type": "number",
+          "label": "View id",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "view.go": {
+      "label": "Go to a view",
+      "params": {
+        "id": {
+          "type": "number",
+          "label": "View id",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "view.rename": {
+      "label": "Rename a view",
+      "params": {
+        "id": {
+          "type": "number",
+          "label": "View id",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "step": 1
+        },
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true
+        }
+      },
+      "asleep": "unknown"
+    },
+    "view.save": {
+      "label": "Save a view",
+      "params": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 32,
+          "ascii": true
+        },
+        "pose": {
+          "type": "pose",
+          "label": "Pose",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": {
+            "pan": -150,
+            "tilt": -70,
+            "zoom": 1
+          },
+          "max": {
+            "pan": 150,
+            "tilt": 90,
+            "zoom": 4
+          },
+          "unit": {
+            "pan": "deg",
+            "tilt": "deg",
+            "zoom": "factor"
+          },
+          "precision": {
+            "pan": 0.1,
+            "tilt": 0.1,
+            "zoom": 0.01
+          },
+          "optional": true
+        }
+      },
+      "result": {
+        "id": {
+          "type": "number",
+          "label": "View id",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "step": 1
+        }
+      },
+      "asleep": "ignored"
+    },
+    "wake": {
+      "label": "Wake",
+      "params": {},
+      "asleep": "accepted"
+    },
+    "zone.go_return": {
+      "label": "Go to the zone return pose",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "zone.return_here": {
+      "label": "Set the zone return pose here",
+      "params": {},
+      "asleep": "ignored"
+    },
+    "zoom.move": {
+      "label": "Zoom at a speed",
+      "params": {
+        "factor": {
+          "type": "number",
+          "label": "Zoom",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 1,
+          "max": 4,
+          "unit": "factor",
+          "precision": 0.01
+        },
+        "speed": {
+          "type": "enum",
+          "label": "Speed",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "values": [
+            "slow",
+            "medium",
+            "fast"
+          ],
+          "writable": [
+            "slow",
+            "medium",
+            "fast"
+          ]
+        }
+      },
+      "asleep": "unknown"
+    },
+    "zoom.stop": {
+      "label": "Stop zooming",
+      "params": {},
+      "asleep": "unknown"
+    }
+  },
+  "limits": {
+    "presets": 3
+  }
+}

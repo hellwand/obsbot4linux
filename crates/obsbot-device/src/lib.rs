@@ -3,6 +3,7 @@
 //! Control library for the OBSBOT Tiny 2 Lite.
 
 pub mod contract;
+pub mod descriptions;
 pub mod enumeration;
 pub mod error;
 pub mod family;

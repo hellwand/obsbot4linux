@@ -1,0 +1,289 @@
+{
+  "settings": {
+    "asleep": {
+      "type": "bool",
+      "label": "Asleep",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "beacon.color": {
+      "type": "enum",
+      "label": "Beacon colour",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "accepted",
+      "no_effect": false,
+      "values": [
+        "red",
+        "green",
+        "blue"
+      ],
+      "writable": [
+        "red",
+        "green",
+        "blue"
+      ],
+      "settle_ms": 1000
+    },
+    "beacon.pulse": {
+      "type": "bool",
+      "label": "Beacon pulse",
+      "readonly": false,
+      "nullable": false,
+      "readback": false,
+      "asleep": "unknown",
+      "no_effect": false
+    },
+    "exposure.mode": {
+      "type": "enum",
+      "label": "Exposure",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "auto",
+        "manual"
+      ],
+      "writable": [
+        "auto",
+        "manual"
+      ],
+      "settle_ms": 1000
+    },
+    "exposure.time": {
+      "type": "number",
+      "label": "Exposure time",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 100,
+      "max": 10000,
+      "unit": "us",
+      "precision": 1,
+      "requires": [
+        {
+          "path": "exposure.mode",
+          "equals": "manual"
+        }
+      ],
+      "live": "auto",
+      "settle_ms": 1000
+    },
+    "led.blink": {
+      "type": "bool",
+      "label": "LED blink",
+      "readonly": false,
+      "nullable": false,
+      "readback": false,
+      "asleep": "accepted",
+      "no_effect": false
+    },
+    "led.brightness": {
+      "type": "number",
+      "label": "LED brightness",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "precision": 1,
+      "settle_ms": 1000
+    },
+    "on_air.active": {
+      "type": "bool",
+      "label": "On air",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false
+    },
+    "on_air.apps": {
+      "type": "list",
+      "label": "Applications using the camera",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "item": {
+        "name": {
+          "type": "string",
+          "label": "Process name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 255
+        }
+      }
+    },
+    "presets": {
+      "type": "list",
+      "label": "Presets",
+      "readonly": true,
+      "nullable": false,
+      "readback": true,
+      "no_effect": false,
+      "item": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 16,
+          "ascii": true
+        },
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 4,
+          "step": 1
+        }
+      }
+    },
+    "tracking.mode": {
+      "type": "enum",
+      "label": "Tracking",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "unknown",
+      "no_effect": false,
+      "values": [
+        "off",
+        "person",
+        "desk"
+      ],
+      "writable": [
+        "off",
+        "person",
+        "desk"
+      ],
+      "settle_ms": 1000
+    },
+    "zoom.factor": {
+      "type": "number",
+      "label": "Zoom",
+      "readonly": false,
+      "nullable": false,
+      "readback": true,
+      "asleep": "ignored",
+      "no_effect": false,
+      "min": 1,
+      "max": 2,
+      "unit": "factor",
+      "precision": 0.01,
+      "settle_ms": 1000
+    }
+  },
+  "actions": {
+    "beacon.flash": {
+      "label": "Flash the beacon",
+      "params": {
+        "times": {
+          "type": "number",
+          "label": "Times",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 1,
+          "max": 3,
+          "step": 1
+        }
+      },
+      "asleep": "accepted"
+    },
+    "preset.delete": {
+      "label": "Delete a preset",
+      "params": {
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 4,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.recall": {
+      "label": "Recall a preset",
+      "params": {
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 4,
+          "step": 1
+        }
+      },
+      "asleep": "unknown"
+    },
+    "preset.save": {
+      "label": "Save a preset",
+      "params": {
+        "name": {
+          "type": "string",
+          "label": "Name",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "max_len": 16,
+          "ascii": true,
+          "optional": true
+        },
+        "slot": {
+          "type": "number",
+          "label": "Preset slot",
+          "readonly": false,
+          "nullable": false,
+          "readback": true,
+          "no_effect": false,
+          "min": 0,
+          "max": 4,
+          "step": 1
+        }
+      },
+      "asleep": "ignored"
+    },
+    "sleep": {
+      "label": "Sleep",
+      "params": {},
+      "asleep": "unknown"
+    },
+    "wake": {
+      "label": "Wake",
+      "params": {},
+      "asleep": "accepted"
+    }
+  },
+  "limits": {
+    "presets": 5
+  }
+}
