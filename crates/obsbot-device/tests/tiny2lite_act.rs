@@ -337,6 +337,22 @@ fn the_start_pose_is_set_and_the_block_written_back_unchanged() {
 }
 
 #[test]
+fn a_start_block_with_settings_is_written_back_with_the_settings() {
+    // capture 08b: a block with the start mode and picture settings set
+    let block =
+        hex("feffff010000ff010c32001000ffd80e00000000ffffffff00000000000000000000000000000000");
+    let (mut cam, log) = model(recorded().answer(0x04, 0x3e84, &block));
+    let p = params(json!({"pose": {"pan": 0, "tilt": 0, "zoom": 1}}));
+    cam.act("power_on.set_pose", &p, &state(), &Ctx::none())
+        .unwrap();
+    assert_eq!(
+        payloads(&log)[1],
+        block,
+        "the start mode and the settings stay (4.4)"
+    );
+}
+
+#[test]
 fn a_short_initial_state_block_stops_the_start_pose_before_any_frame() {
     let (mut cam, log) = model(recorded().answer(0x04, 0x3e84, &[0; 10]));
     let p = params(json!({"pose": {"pan": 0, "tilt": 0, "zoom": 1}}));
