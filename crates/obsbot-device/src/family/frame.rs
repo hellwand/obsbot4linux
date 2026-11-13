@@ -81,7 +81,7 @@ pub fn query_frame(receiver: u8, command: u16, sequence: u16) -> [u8; FRAME_SIZE
     header(0x01, receiver, command, sequence)
 }
 
-/// Answer to a query, matched by sequence number only.
+/// Answer to a query, matched by sequence number and command id (both echoed), with good CRCs.
 #[derive(Debug, PartialEq)]
 pub enum Answer<'a> {
     /// Type 0x29: the value, in the format the setter takes.
