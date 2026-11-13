@@ -18,6 +18,5 @@ pub mod device {
     pub use crate::transport::uvc::{CtrlRange, Device};
 }
 
-pub mod commands;
-pub mod presets;
-pub mod status;
+pub mod models;
+pub use models::tiny2lite::{commands, presets, status};
