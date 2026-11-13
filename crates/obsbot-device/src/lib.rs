@@ -8,4 +8,6 @@ pub mod family;
 pub mod legacy;
 pub mod models;
 pub mod registry;
+#[cfg(test)]
+pub(crate) mod scripted;
 pub mod transport;

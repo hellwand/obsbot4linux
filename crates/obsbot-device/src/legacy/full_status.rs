@@ -416,3 +416,102 @@ mod full_status_tests {
         assert!(v["status"].is_object() && v["capabilities"].is_array());
     }
 }
+
+/// `full_status_with` on a scripted camera (no device is opened).
+#[cfg(test)]
+mod scripted_camera_tests {
+    use super::*;
+    use crate::family::exchange::Camera;
+    use crate::family::frame::Sequence;
+    use crate::scripted::{Answer, Scripted};
+    use crate::transport::uvc::Device;
+    use std::sync::OnceLock;
+
+    /// A camera that is awake, with HDR on and the LED in mode 2; it answers the zoom factor
+    /// (2.0), the live pose (pan 25, tilt 10), the microphone volume (55) and the absolute zoom
+    /// control (37). The tracking query gets `tracking`; every other query is rejected.
+    fn camera(tracking: Answer) -> Camera {
+        let mut status = [0u8; 60];
+        status[0x06] = 1;
+        status[0x21] = 2;
+        let mut script = Scripted::new(status);
+        script.answers.insert(0x0104, tracking);
+        script
+            .answers
+            .insert(0x6804, Answer::Value(2.0f32.to_le_bytes().to_vec()));
+        let mut pose = vec![0u8; 12];
+        pose[8..10].copy_from_slice(&(-1000i16).to_le_bytes());
+        pose[10..12].copy_from_slice(&2500i16.to_le_bytes());
+        script.answers.insert(0x0043, Answer::Value(pose));
+        script
+            .answers
+            .insert(0x80c2, Answer::Value(55i16.to_le_bytes().to_vec()));
+        script.ctrls.insert(ZOOM_ABSOLUTE, 37);
+        static SEQ: OnceLock<Sequence> = OnceLock::new();
+        Camera {
+            dev: Device::scripted(script),
+            seq: SEQ.get_or_init(Sequence::new),
+        }
+    }
+
+    /// The zone readbacks and the identity the daemon keeps, so the test asks only for the rest.
+    fn known() -> (Option<ZoneInfo>, Option<Identity>) {
+        (
+            Some(ZoneInfo {
+                zone: None,
+                hand: None,
+                startup: None,
+                framing: None,
+                presets: None,
+            }),
+            Some(Identity {
+                firmware: Some("6.2.8.1".into()),
+                model_info: None,
+            }),
+        )
+    }
+
+    #[test]
+    fn a_rejected_tracking_query_gives_tracking_null_and_the_rest_of_the_status() {
+        // the camera refuses 0x0104: status and the daemon's broadcast must still show
+        // everything else, with `tracking: null`, not fail as a whole
+        let (zones, identity) = known();
+        let full = camera(Answer::Rejected(-3))
+            .full_status_with(zones, identity)
+            .expect("a rejected tracking query does not fail the read");
+        assert!(full.tracking.is_none());
+        assert!(full.status.hdr);
+        assert_eq!(full.status.led, 2);
+        assert_eq!(full.zoom.factor, Some(2.0));
+        assert_eq!(full.zoom.absolute, Some(37));
+        let pose = full
+            .pose
+            .expect("the live pose is read after the tracking query");
+        assert_eq!((pose.pan, pose.tilt), (25.0, 10.0));
+        assert_eq!(full.audio_volume, Some(55));
+        assert_eq!(full.firmware.as_deref(), Some("6.2.8.1"));
+        assert_eq!(full.model, Some("Tiny 2 Lite"));
+    }
+
+    #[test]
+    fn an_answered_tracking_query_is_in_the_status() {
+        // the same script with a real answer: tracking is filled, so the test above sees the
+        // arm and not a camera that never reports tracking
+        let mut answer = vec![0u8; 12];
+        answer[0] = 1; // group
+        answer[10] = 1; // zone tracking
+        let (zones, identity) = known();
+        let full = camera(Answer::Value(answer))
+            .full_status_with(zones, identity)
+            .unwrap();
+        assert!(full.tracking.is_some_and(|t| t.zone_tracking));
+    }
+
+    #[test]
+    fn any_other_tracking_error_fails_the_whole_read() {
+        // only "no answer" and "rejected" are tolerated; a failed write is a broken camera
+        let (zones, identity) = known();
+        let result = camera(Answer::SendFails).full_status_with(zones, identity);
+        assert!(matches!(result, Err(Error::Io(_))), "{result:?}");
+    }
+}

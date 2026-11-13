@@ -77,6 +77,9 @@ pub struct CtrlRange {
 pub struct Device {
     file: Flock<File>,
     detected: Detected,
+    /// Tests only: answers from a table instead of the ioctls.
+    #[cfg(test)]
+    script: Option<crate::scripted::Scripted>,
 }
 
 /// Takes an exclusive flock on `file`, retrying until `wait` has passed.
@@ -112,7 +115,35 @@ impl Device {
     pub fn open() -> Result<Self> {
         let detected = detect().ok_or(Error::NoCamera)?;
         let file = lock_exclusive(File::open(&detected.device)?, LOCK_WAIT)?;
-        Ok(Self { file, detected })
+        Ok(Self {
+            file,
+            detected,
+            #[cfg(test)]
+            script: None,
+        })
+    }
+
+    /// Tests only: a device that answers from `script`. It holds a temporary file for the
+    /// lock and opens no device node.
+    #[cfg(test)]
+    pub(crate) fn scripted(script: crate::scripted::Scripted) -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "o4l-scripted-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let file = lock_exclusive(File::create(&path).unwrap(), LOCK_WAIT).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        Self {
+            file,
+            detected: Detected {
+                model: &crate::registry::MODELS[0],
+                device: "/nonexistent/obsbot-test-video0".into(),
+            },
+            script: Some(script),
+        }
     }
 
     pub fn detected(&self) -> &Detected {
@@ -139,6 +170,10 @@ impl Device {
 
     /// GET_CUR on unit 2, after checking the buffer length like the vendor tools do.
     pub fn xu_get(&self, selector: u8) -> Result<[u8; XU_SIZE]> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.xu_get(selector);
+        }
         check_len(selector, self.xu_len(selector)?)?;
         let mut data = [0u8; XU_SIZE];
         self.xu(selector, UVC_GET_CUR, &mut data)?;
@@ -147,6 +182,10 @@ impl Device {
 
     /// SET_CUR on unit 2 with a zero-padded 60-byte buffer.
     pub fn xu_set(&self, selector: u8, payload: &[u8]) -> Result<()> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.xu_set(selector, payload);
+        }
         if payload.len() > XU_SIZE {
             return Err(Error::Invalid("payload longer than 60 bytes".into()));
         }
@@ -157,6 +196,10 @@ impl Device {
     }
 
     pub fn get_ctrl(&self, id: u32) -> Result<i32> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.get_ctrl(id);
+        }
         let mut c = V4l2Control { id, value: 0 };
         unsafe { vidioc_g_ctrl(self.file.as_raw_fd(), &mut c) }?;
         Ok(c.value)
@@ -170,6 +213,10 @@ impl Device {
 
     /// Range of a control, or None when the camera does not have it (or it is disabled).
     pub fn ctrl_range(&self, id: u32) -> Result<Option<CtrlRange>> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.ctrl_range(id);
+        }
         let mut q = V4l2QueryCtrl {
             id,
             ..Default::default()
