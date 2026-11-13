@@ -180,7 +180,7 @@ fn uvc_leaves_write_their_control_and_no_other() {
 
 #[test]
 fn an_area_axis_sends_min_then_max_in_the_cameras_angles() {
-    // capture 11: zone pan -100..100 and the asymmetric tilt -30..10 (pitch -10..30)
+    // capture 11: zone pan -100..100; the asymmetric tilt -30..10 is pitch -10..30 by the conversion of tilt_to_pitch_range
     let (frames, data) = write("zone.area.pan", json!({"min": -100, "max": 100}));
     assert_eq!(frames, [framed(0x4c04), framed(0x4c84)]);
     assert_eq!(
