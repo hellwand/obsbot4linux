@@ -96,22 +96,39 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal --no-self-update
           cargo "+$msrv" test --locked
 
+  # The CHANGELOG section of the Cargo.toml version, read as release.yml's verify job reads it.
+  # Always runs (it is cheap, and a docs-only change can edit CHANGELOG.md), so a release commit
+  # with a missing or empty section cannot reach main and fail only at the tag.
+  changelog:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          scripts/changelog-section.sh "v$ver" > /dev/null
+
   # The one check the main ruleset requires. Code changes need fmt, clippy, test and msrv to
-  # succeed; docs-only changes need them skipped. Anything else fails.
+  # succeed; docs-only changes need them skipped; the changelog check must succeed either way.
+  # Anything else fails.
   required:
     if: always()
-    needs: [changes, fmt, clippy, test, msrv]
+    needs: [changes, fmt, clippy, test, msrv, changelog]
     runs-on: ubuntu-22.04
     env:
       CHANGES: ${{ needs.changes.result }}
       CODE: ${{ needs.changes.outputs.code }}
+      CHANGELOG: ${{ needs.changelog.result }}
       JOBS: >-
         ${{ needs.fmt.result }} ${{ needs.clippy.result }} ${{ needs.test.result }}
         ${{ needs.msrv.result }}
     steps:
       - run: |
           echo "changes=$CHANGES code=$CODE fmt/clippy/test/msrv=$JOBS"
+          echo "changelog=$CHANGELOG"
           test "$CHANGES" = success
+          test "$CHANGELOG" = success
           case $CODE in
             true) test "$JOBS" = "success success success success" ;;
             false) test "$JOBS" = "skipped skipped skipped skipped" ;;
