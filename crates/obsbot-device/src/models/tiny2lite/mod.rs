@@ -6,5 +6,7 @@ pub mod camera;
 pub mod commands;
 pub mod decode;
 pub mod description;
+pub mod plan;
 pub mod presets;
+pub mod send_table;
 pub mod status;
