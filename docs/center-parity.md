@@ -15,7 +15,7 @@ obsbot4linux does today. It is for discussion, not a plan: nothing here is sched
 - **CN**: the capture log, which records which Center settings were clicked per capture. It is the
   evidence for "in Center UI".
 - **OB**: obsbot4linux 0.13: README, CHANGELOG, `obsbot4linux --help` and the subcommand help,
-  `CAPABILITIES` in `src/camera.rs`.
+  `CAPABILITIES` in `crates/obsbot-device/src/legacy/full_status.rs`.
 
 Columns:
 
@@ -169,7 +169,7 @@ Rows marked "UVC" are plain V4L2 controls on the camera terminal / processing un
 
 ## Fine-grained capabilities
 
-Today `CAPABILITIES` in `src/camera.rs` is one static list that every detected camera reports,
+Today `CAPABILITIES` in `crates/obsbot-device/src/legacy/full_status.rs` is one static list that every detected camera reports,
 whatever it can do. A per-element UI (hide a control the camera lacks) would need names at the
 granularity of the controls, not of the command groups. Names a per-element UI would need; the ones
 marked "exists" are in the list already, the others are not:
