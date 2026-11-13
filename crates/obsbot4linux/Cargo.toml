@@ -18,6 +18,9 @@ path = "src/main.rs"
 [dependencies]
 obsbot-proto.workspace = true
 
+[dev-dependencies]
+obsbot4linuxd.workspace = true
+
 [package.metadata.deb]
 maintainer = "Thomas Kroll <t.kroll@outlook.com>"
 section = "video"
