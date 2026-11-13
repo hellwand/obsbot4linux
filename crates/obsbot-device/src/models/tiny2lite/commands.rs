@@ -320,6 +320,37 @@ fn area(
     let values = [yaw.0, yaw.1, pitch.0, pitch.1];
     Ok([0, 1, 2, 3].map(|i| frame(TRACKING, ids[i], &values[i].to_le_bytes(), seqs[i])))
 }
+/// The frame ids of one axis of an area: the minimum, then the maximum (capture 11).
+pub const ZONE_PAN: [u16; 2] = [0x4c04, 0x4c84];
+pub const ZONE_PITCH: [u16; 2] = [0x4d04, 0x4d84];
+pub const HAND_PAN: [u16; 2] = [0x2044, 0x20c4];
+pub const HAND_PITCH: [u16; 2] = [0x2144, 0x21c4];
+/// The limits of an area's yaw and pitch (the gimbal range in the camera's angles).
+pub const YAW_LIMITS: (f32, f32) = (-GIMBAL_PAN_LIMIT, GIMBAL_PAN_LIMIT);
+pub const PITCH_LIMITS: (f32, f32) = (-GIMBAL_TILT_MAX, -GIMBAL_TILT_MIN);
+
+/// One axis of the zone or hand area: its two frames, minimum then maximum (the order for a
+/// new range wholly beyond the stored one is U-8). The check and the bytes are those of the
+/// axis in [`zone_area`] and [`hand_area`]: finite, minimum below maximum, within `limits`.
+pub fn area_axis(
+    ids: [u16; 2],
+    range: (f32, f32),
+    limits: (f32, f32),
+    seqs: [u16; 2],
+) -> Result<[[u8; FRAME_SIZE]; 2]> {
+    let (lo, hi) = range;
+    if !(lo.is_finite() && hi.is_finite() && lo < hi && lo >= limits.0 && hi <= limits.1) {
+        return Err(invalid(&format!(
+            "area: min must be below max and within {}..{}",
+            limits.0, limits.1
+        )));
+    }
+    Ok([
+        frame(TRACKING, ids[0], &lo.to_le_bytes(), seqs[0]),
+        frame(TRACKING, ids[1], &hi.to_le_bytes(), seqs[1]),
+    ])
+}
+
 /// Sets every bound of the hand tracking area back to the camera's default (-45..45 pan, -30..30
 /// tilt): one frame per bound, no data. The reset ids are `0x25c4`, `0x2604`, `0x2644`, `0x2684`;
 /// libdev's names for them swap min and max against the firmware's, which does not matter when
@@ -702,6 +733,42 @@ mod tests {
         assert!(hand_area((10.0, -10.0), (-30.0, 30.0), [0; 4]).is_err());
         assert!(hand_area((-45.0, 45.0), (-30.0, 90.5), [0; 4]).is_err());
         assert!(hand_area((-45.0, 45.0), (-30.0, 30.0), [0; 4]).is_ok());
+    }
+
+    #[test]
+    fn one_area_axis_is_the_two_frames_of_that_axis() {
+        // capture 11, seq 430-433 (zone) and 397-400 (hand): the same bytes as the whole area
+        let zone = zone_area((-100.0, 100.0), (-30.0, 30.0), [430, 431, 432, 433]).unwrap();
+        assert_eq!(
+            area_axis(ZONE_PAN, (-100.0, 100.0), YAW_LIMITS, [430, 431]).unwrap(),
+            [zone[0], zone[1]]
+        );
+        assert_eq!(
+            area_axis(ZONE_PITCH, (-30.0, 30.0), PITCH_LIMITS, [432, 433]).unwrap(),
+            [zone[2], zone[3]]
+        );
+        let hand = hand_area((-45.0, 45.0), (-30.0, 30.0), [397, 398, 399, 400]).unwrap();
+        assert_eq!(
+            area_axis(HAND_PAN, (-45.0, 45.0), YAW_LIMITS, [397, 398]).unwrap(),
+            [hand[0], hand[1]]
+        );
+        assert_eq!(
+            area_axis(HAND_PITCH, (-30.0, 30.0), PITCH_LIMITS, [399, 400]).unwrap(),
+            [hand[2], hand[3]]
+        );
+        // the checks of the whole area, per axis
+        assert!(
+            area_axis(ZONE_PAN, (10.0, 10.0), YAW_LIMITS, [0, 1]).is_err(),
+            "equal"
+        );
+        assert!(
+            area_axis(ZONE_PAN, (10.0, -10.0), YAW_LIMITS, [0, 1]).is_err(),
+            "inverted"
+        );
+        assert!(area_axis(ZONE_PAN, (-150.5, 0.0), YAW_LIMITS, [0, 1]).is_err());
+        assert!(area_axis(ZONE_PITCH, (-90.0, 70.5), PITCH_LIMITS, [0, 1]).is_err());
+        assert!(area_axis(ZONE_PITCH, (-90.0, 70.0), PITCH_LIMITS, [0, 1]).is_ok());
+        assert!(area_axis(ZONE_PAN, (f32::NAN, 1.0), YAW_LIMITS, [0, 1]).is_err());
     }
 
     #[test]
