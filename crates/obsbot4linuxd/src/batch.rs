@@ -45,6 +45,9 @@ impl Worker {
     pub(crate) fn batch(&mut self, jobs: Vec<Job>, coalesced: Vec<bool>) {
         let _ = coalesced;
         let deadline = self.timing.request_deadline;
+        // The rev of the last state this worker published: read before anything can unplug the
+        // entry, for the answers of a batch the device leaves (5.6).
+        let last_rev = self.table.current(self.plug).map_or(0, |(rev, _)| rev);
         let mut working = self.view();
         let mut touched: BTreeSet<String> = BTreeSet::new();
         let mut written: Vec<Written> = Vec::new();
@@ -190,14 +193,13 @@ impl Worker {
 
         // 5.6 "Unavailable": the device went during the batch.
         if self.queue.is_ended() {
-            let rev = self.table.current(self.plug).map_or(0, |(rev, _)| rev);
             for (job, outcome) in jobs.iter().zip(&outcomes) {
                 match outcome {
                     Outcome::Get(_) => self.table.route(&job.device).answer(job),
                     Outcome::Done(result) => job.answer(ok_line(
                         &job.id,
                         OkBody::Rev(RevOk {
-                            rev,
+                            rev: last_rev,
                             result: result.clone(),
                         }),
                     )),
