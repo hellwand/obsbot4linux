@@ -1,10 +1,11 @@
 # obsbot4linux 1.0: rebuild design
 
-Status: revision 2, draft for review (2026-11-12). Revision 1 (2026-11-01) was agreed with
-Thomas in the brainstorming session of that day. Revision 2 applies the design decisions of
-2026-11-12. They followed a review of revision 1 against the 0.13.2 code, an audit of that
-code, and a second camera model that may arrive soon. Section 15 lists every decision that
-changed, one row each, so that each can be overruled on its own.
+Status: revision 2 (2026-11-12), approved by Thomas on 2026-11-13. Revision 1 (2026-11-01)
+was agreed with Thomas in the brainstorming session of that day. Revision 2 applies the
+design decisions of 2026-11-12. They followed a review of revision 1 against the 0.13.2
+code, an audit of that code, and a second camera model that may arrive soon. Section 15
+lists every decision that changed, one row each, so that each can be overruled on its own;
+section 15.1 lists the changes made after the approval.
 
 Words used with a fixed meaning:
 
@@ -72,10 +73,19 @@ command catalogue. Section 13 lists them.
 - **The daemon owns the device.** No client touches the camera.
 - **One contract.** The socket protocol, the CLI's `--json` output and the schema describe
   the same objects.
-- **Camera features only.** The daemon invents nothing. It never writes a setting the user
-  did not ask for, never switches an automatic control off on its own, and never sends a
-  command sequence as a workaround. Reporting camera state (on-air probe, target flag) is
-  fine.
+- **Camera features only.** The daemon invents nothing. **A request sends exactly what it
+  names: the frames of that setting or action, nothing before them and nothing after them.**
+  The daemon never writes a setting the user did not ask for, never switches an automatic
+  control or a tracking mode off on its own, and never sends a command sequence as a
+  workaround. What the camera then does on its own is camera behaviour: the state shows it as
+  the camera reports it, and where it is not recorded yet it is a camera item (section 14).
+  Two kinds of frames belong to a request and are not additions to it: the frames the
+  camera's protocol defines for the one setting or action asked for (the two bounds of one
+  range, the block a start-pose action writes back), and the stop of a continuing action the
+  daemon was asked to start when nobody can end it any more (its connection closed, the
+  daemon shuts down, the camera fell asleep; 5.6, 5.9). Reads of the camera's state are not
+  commands. Clients follow the same rule: the CLI and the widget never chain a second request
+  to the one the user made. Reporting camera state (on-air probe, target flag) is fine.
 - **Nothing around the camera.** The daemon keeps no file: no state, no names, no keys, no
   remembered settings, no migration. What the camera cannot do or report is not there.
 - **Evidence first.** Only backed fields enter a released description (section 8.5).
@@ -604,11 +614,13 @@ factory_reset {confirm}
 - `gimbal.turn`: at least one of `pan_speed` and `tilt_speed` (°/s, up to 178); a missing
   one is 0. It keeps turning until `gimbal.stop` or speed 0. It stops when the issuing
   connection closes, unless `keep:true`; the CLI sends `keep:true`, so a one-shot call
-  works as `gimbal rate` did in 0.13. The daemon sends the stop when the camera falls asleep
+  keeps turning as `gimbal rate` did in 0.13. The daemon sends the stop when the camera falls asleep
   while a turn runs, and best effort on a clean daemon shutdown (section 5.9).
-- `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move (the
-  tracking would move the gimbal back otherwise); the state after the reply shows the new
-  mode. `zoom.move`, `zoom.stop` and `gimbal.stop` leave the tracking mode alone.
+- `gimbal.move` and `gimbal.turn` send only the move (section 2). They leave `tracking.mode`
+  alone, as `zoom.move`, `zoom.stop` and `gimbal.stop` do, and they are not refused while the
+  tracking is on. What the camera does with a manual move while it tracks is CAM-34; the
+  state after the reply shows what the camera reports. A client that wants the tracking off
+  first sends `set tracking.mode=static` itself, as its own request.
 - `zoom.move`: `speed` is `slow|medium|fast` (`slow` and `fast` are U-12).
 - `preset.save`, `view.save` and `power_on.use_current` without `pose`, and
   `zone.return_here` and `hand.return_here`, take the live pose and the current zoom factor
@@ -767,7 +779,8 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
 - Each worker owns one device queue (FIFO, at most 32 requests; more is `busy`) and applies
   the queue rules of 4.1 rule 9.
 - **Write path:** validate against the description and the current state (`invalid`,
-  `unsupported`, `out_of_range`, `conflict`, `asleep`) → send in the model's apply order →
+  `unsupported`, `out_of_range`, `conflict`, `asleep`) → send the request's frames and no
+  others (section 2), in the model's apply order →
   re-read the groups the model marks as touched by the written leaves and actions → publish
   (new rev, events) → reply.
 - After the re-read, each written leaf with `readback:true` either shows the written value
@@ -1023,6 +1036,9 @@ obsbot4linux watch [--live <topic>…]              hello reply and events as JS
   waits for the reply; Ctrl-C closes the connection, which drops a request the daemon has
   not started (4.1 rule 9).
 - **`gimbal.turn`**: the CLI always sends `keep:true` with it.
+- **One request per command.** Every command sends the one request it maps to and chains no
+  other (section 2): `do gimbal.move` and `do gimbal.turn` leave the tracking as it is, and a
+  user who wants it off first runs `set tracking.mode=static`.
 - **Completions** for bash and zsh cover subcommands, flags, `get`/`describe` paths, `set`
   paths with `=`, enum values after `=`, action names and their parameters. They are
   generated from the CLI definition and the embedded description files
@@ -1082,6 +1098,10 @@ pub trait Camera: Send {
 }
 ```
 
+`touched` names the groups whose values the camera itself changes in response to the leaf or
+action, the leaf's own group included. A request sends only what it names (section 2), so no
+group is touched because of a frame the client did not ask for.
+
 The signatures are fixed in stage W0 and change only by a contract-change PR. The fake
 models implement the same trait, so it is designed against two shapes from the start. The
 model owns its frame codec choice: the family codec when the family's codec tests pass on
@@ -1104,7 +1124,8 @@ its module otherwise. A codec moves into `family` only when a second model uses 
 - No raw send path exists anywhere: not in the daemon, the CLI, the protocol or the fakes.
   Public code and docs name only what is sent.
 - A test drives every setting and action of each model at its boundary values on the replay
-  transport and asserts that every frame is in the send table.
+  transport and asserts that every frame is in the send table, and that each setting and
+  action sends exactly the frames of its ledger row, in that order (section 2).
 - **No probing.** Capabilities come from the model's code, never from trying ids. The
   extension unit is found by the GUID its registry entry declares, in the USB descriptor
   (read from sysfs), never by a request.
@@ -1324,9 +1345,9 @@ M4 is the first model that completes these steps.
   between `exposure.anti_flicker` and `exposure.mode` is CAM-13.
 - **Touched groups:** `tracking.mode` touches tracking and framing; `zoom.field_of_view`
   and the gesture settings touch zoom; `preset.recall` touches zoom and the live pose;
-  `gimbal.move` and `gimbal.turn`
-  touch tracking and framing when they switched the tracking mode; `gimbal.stop`,
-  `zoom.stop` and `zoom.move` touch nothing.
+  `gimbal.move`, `gimbal.turn`, `gimbal.stop`, `zoom.stop` and `zoom.move` touch nothing.
+  The moves touch the tracking group only if CAM-34 shows that the camera changes the
+  tracking mode itself on a manual move; until it is recorded they do not.
 - **Asleep:** `zoom.field_of_view` is `ignored` (measured); `power_on.go` is `ignored`
   (measured, #79: no move, no error); `wake` is `accepted` (capture 13). The
   pose-taking actions of 4.4 are `ignored` until CAM-22. The readbacks of `audio.volume`
@@ -1396,10 +1417,10 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `zoom F`                                                                | `set zoom.factor=F`                                                  |                                                                                                                   |
 | `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10/30/50; U-12; other S is PX-6                                                                                   |
 | `zoom stop`                                                             | `do zoom.stop`                                                       |                                                                                                                   |
-| `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position                                                                                 |
-| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | U-9                                                                                                               |
+| `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position; the tracking stays as it is (12.2)                                             |
+| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | U-9; the tracking stays as it is (12.2)                                                                           |
 | `gimbal stop`                                                           | `do gimbal.stop`                                                     |                                                                                                                   |
-| `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | the CLI sends `keep:true`                                                                                         |
+| `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | the CLI sends `keep:true`; the tracking stays as it is (12.2)                                                     |
 | `gimbal center X Y` (hidden)                                            | –                                                                    | PX-1                                                                                                              |
 | `fov wide\|medium\|narrow`                                              | `set zoom.field_of_view=…`                                           |                                                                                                                   |
 | `led N`                                                                 | `set led.brightness=N`                                               |                                                                                                                   |
@@ -1637,8 +1658,9 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   test passes; every golden file round-trips byte-equal through the proto types; `fake-a`
   and `fake-b` pass a trait conformance test (every described leaf readable; every writable
   leaf shows a valid written value after the touched re-read, or enters `pending`; every
-  writable leaf with a readback in a group with a periodic tier, 5.7); the
-  `cargo metadata` check of section 3 passes.
+  writable leaf with a readback in a group with a periodic tier, 5.7); `fake-a`'s
+  `gimbal.move` and `gimbal.turn` are one operation each and leave `tracking.mode` alone
+  (section 2); the `cargo metadata` check of section 3 passes.
 - **Acceptance with camera:** none.
 
 **Track A: device**
@@ -1659,8 +1681,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   send-table test; the registry test; the serial-format test; each audit defect in carried
   code fixed or named in section 14.
 - **Acceptance with camera (CS-1):** the live tests: CAM-1 to CAM-8, CAM-10, CAM-13 to
-  CAM-20, CAM-22, CAM-23, CAM-25 and CAM-33 (CAM-21 is recorded if it happens and gates
-  nothing).
+  CAM-20, CAM-22, CAM-23, CAM-25, CAM-33 and CAM-34 (CAM-21 is recorded if it happens and
+  gates nothing).
   Results go into the ledger and arrive as contract-change PRs (U-rows removed,
   `settle_ms`, `asleep` values, `focus auto off` mapping).
 
@@ -1689,7 +1711,9 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   nothing sent after it until the device goes; a device-number change handled as unplug plus
   plug; the queue of an unplugged device answered and a new worker on re-plug; a re-added
   `port:` entry starting at rev 1; the wake read of `unread` groups and the retry of a
-  failed `touched` read; an identity series ending at the first complete answer.
+  failed `touched` read; an identity series ending at the first complete answer; a `set`
+  causes one `apply` per leaf and a `do` one `act`, and nothing else reaches the fake
+  (section 2).
 - **Acceptance with camera:** none in this track (W4 covers the real path).
 
 **Track C: client and CLI**
@@ -1721,7 +1745,8 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   and list limits taken from the description, `pending` values shown, live topics only
   while the popup is open, markers for `untested` and `unsupported`, the exit-4 hint, and
   the defaults reset built from `default` values (a `set` patch; which controls it covers is
-  the widget's product choice). Also widget 0.28.0, the last 0.x release, which refuses
+  the widget's product choice). Each control sends its one request and chains none (section
+  2, 12.3). Also widget 0.28.0, the last 0.x release, which refuses
   obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >= 0.7.3, < 1.0`).
 - **Owner files:** the widget repository.
 - **Depends on:** W0 (golden transcripts); B-1 for live tests.
@@ -1883,13 +1908,20 @@ The CHANGELOG of 1.0 carries the migration notes:
   clients no longer start one;
 - `$XDG_STATE_HOME/obsbot4linux/` (it held `state.json` and `daemon.log`) is no longer used
   and can be deleted. Nothing is imported, and nothing set on the camera is lost: the camera
-  stores it.
+  stores it;
+- the 0.13 commands `gimbal [--pan P] [--tilt T]` and `gimbal rate` switched the tracking
+  to static before they moved. `do gimbal.move` and `do gimbal.turn` send only the move and
+  leave the tracking as it is (section 2). A script that relied on the switch runs
+  `obsbot4linux set tracking.mode=static` first, as its own step.
 
 ### 12.3 Widget
 
 Track D (section 10.3) defines widget 1.0 and the last 0.x release. Widget 1.0 settles
 values by `pending` and `rev`; this replaces its own hold of up to 3 s
-(obsbot4linux-dux#89). Its `plugin.json` requires obsbot4linux ≥ 1.0.
+(obsbot4linux-dux#89). Its `plugin.json` requires obsbot4linux ≥ 1.0. Each control sends
+the one request the user made and chains none (section 2): the gimbal controls send
+`gimbal.move` or `gimbal.turn` alone, never a tracking switch before them. A user who wants
+the tracking off uses the tracking control first.
 
 ### 12.4 Desktop app
 
@@ -1967,6 +1999,7 @@ and CAM-29 are recorded only if they happen and gate nothing.
 | CAM-31 | Does the camera keep its USB product id when it renames itself or changes mode (#90)?                                                                                           | after 1.0                      | registry entries                                               |
 | CAM-32 | The status block of a real Tiny 2: do Tiny 2 and Tiny 2 Lite share the layout? (an unverified hypothesis today)                                                                 | when a Tiny 2 is at hand       | onboarding of the Tiny 2                                       |
 | CAM-33 | Do `tracking.speed`, `tracking.profile=headroom` and `framing.*` change the tracking visibly, with a person in view? (Their write and readback are measured, #98.)              | A                              | `no_effect` of those leaves                                    |
+| CAM-34 | With the tracking on (`tracking.mode` not `static`), what do `gimbal.move` and `gimbal.turn` do: move and track on, switch the mode, or nothing? (with a person in view)        | A                              | the text of 4.4; `touched` of the moves (8.8)                  |
 
 **Tiny 3 and Tiny 3 Lite** (stage M4, onboarding steps 0–2 and 7 on the unit in hand;
 everything here is unknown until captures)
@@ -2086,3 +2119,12 @@ them and are not listed.
 | 85  | On-air level                         | ledger level `measured`                                                            | level `daemon`: a Linux fact, given to every supported model, outside the vendor-app rate rule (8.5, 8.7)                                                                                                                                                                                                                                                                                            | it cannot be captured, and no check row measures a read-only leaf                          | the probe on the Tiny 2 Lite (measured, 2026-10-25)                                                                                                    | editor                                                           |
 | 86  | Destructive actions in onboarding    | –                                                                                  | the maintainers' step 7 adds the captured destructive actions and runs `--destructive`; an owner's run leaves it out; a released `untested` description holds none (8.6, 8.7)                                                                                                                                                                                                                        | a model could become `tested` without its restart and destructive rows                     | none: design choice                                                                                                                                    | editor                                                           |
 | 87  | Readbacks the vendor app never polls | –                                                                                  | a writable leaf whose captured readback the idle poll never reads takes the 60 s tier (8.7 step 4)                                                                                                                                                                                                                                                                                                   | 5.7 needs a periodic tier for `pending` to clear                                           | none: design choice                                                                                                                                    | editor (D2)                                                      |
+
+### 15.1 Changes after approval
+
+Revision 2 was approved on 2026-11-13. Each later change has one row; each can be overruled
+on its own.
+
+| #   | Date       | Topic                                  | Approved revision 2                                                                                         | Now                                                                                                                                                                                                                                                                                | Why                                                                                                                                        | Source             |
+| --- | ---------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| 88  | 2026-11-13 | An action sends exactly what was asked | `gimbal.move` and `gimbal.turn` switch `tracking.mode` to `static` before they move, carried over from 0.13 | they send only the move and leave `tracking.mode` alone; section 2 states the rule for every request and names the two kinds of frames that belong to one; the camera's answer to a manual move while it tracks is CAM-34; clients chain no request (2, 4.4, 6.2, 8.8, 12.2, 12.3) | Thomas asked to keep the daemon free of logic of its own; the carried-over switch was such logic and contradicted section 2, so it is gone | Thomas, 2026-11-13 |
