@@ -96,7 +96,9 @@ const LOG_TEXT_CAP: usize = 120;
 
 /// Text the daemon did not write (a client name, a device's answer, a sysfs name) made safe for
 /// ONE log line: every control character (`char::is_control`: line breaks, carriage return,
-/// escape, the C1 range) and the line and paragraph separators U+2028 and U+2029 become `?`,
+/// escape, the C1 range), the line and paragraph separators U+2028 and U+2029 and the
+/// bidirectional formatting characters (U+061C, U+200E, U+200F, U+202A..U+202E,
+/// U+2066..U+2069; they could reorder how a viewer shows the rest of the line) become `?`,
 /// and anything past [`LOG_TEXT_CAP`] characters is cut (never inside a character) and ends in
 /// `…`. Ordinary text comes back unchanged.
 pub fn printable(text: &str) -> String {
@@ -107,13 +109,27 @@ pub fn printable(text: &str) -> String {
             out.push('…');
             break;
         }
-        out.push(if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+        out.push(if c.is_control() || is_line_or_bidi_format(c) {
             '?'
         } else {
             c
         });
     }
     out
+}
+
+/// Characters that are not control characters but break a line or reorder the display of it.
+fn is_line_or_bidi_format(c: char) -> bool {
+    matches!(
+        c,
+        '\u{2028}'
+            | '\u{2029}'
+            | '\u{061C}'
+            | '\u{200E}'
+            | '\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// 5.11: one line for every device that appears: id, model, USB ids, USB path, support level,
@@ -315,6 +331,7 @@ mod tests {
             "a\rb".into(),
             "a\x1b[31mred".into(),
             "a\u{2028}b\u{2029}c\u{85}d".into(),
+            "a\u{202e}b".into(),
             "x".repeat(5000),
         ]
     }
@@ -322,7 +339,7 @@ mod tests {
     /// One line, no control character, and not longer than the fixed text plus the cap.
     fn assert_one_line(line: &str, fixed: usize) {
         assert!(
-            !line.contains(['\n', '\r', '\u{2028}', '\u{2029}'])
+            !line.contains(['\n', '\r', '\u{2028}', '\u{2029}', '\u{202e}'])
                 && !line.chars().any(char::is_control),
             "{line:?}"
         );
@@ -333,8 +350,8 @@ mod tests {
     #[test]
     fn printable_replaces_controls_and_caps_the_length() {
         assert_eq!(
-            printable("a\nb\rc\x1bd\u{2028}e\u{2029}f\u{85}g"),
-            "a?b?c?d?e?f?g"
+            printable("a\nb\rc\x1bd\u{2028}e\u{2029}f\u{85}g\u{202e}h"),
+            "a?b?c?d?e?f?g?h"
         );
         let long = printable(&"x".repeat(5000));
         assert_eq!(long.chars().count(), LOG_TEXT_CAP);
