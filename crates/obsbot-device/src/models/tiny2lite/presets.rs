@@ -7,9 +7,9 @@
 //! degrees positive up. The camera's preset format has tilt positive down, so the sign is
 //! flipped when writing and reading.
 
-use crate::commands::{AiMode, gimbal_angles_ok};
 use crate::error::{Error, Result};
-use crate::frame::{FRAME_SIZE, frame, query_frame_with};
+use crate::family::frame::{FRAME_SIZE, frame, query_frame_with};
+use crate::models::tiny2lite::commands::{AiMode, gimbal_angles_ok};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 

@@ -986,7 +986,7 @@ impl Camera {
 #[cfg(test)]
 mod framing_tests {
     use super::auto_zoom_speed_reading;
-    use crate::commands::AutoZoomSpeed;
+    use crate::models::tiny2lite::commands::AutoZoomSpeed;
 
     #[test]
     fn the_zoom_speed_is_read_as_index_or_as_the_default_speed() {

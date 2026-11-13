@@ -5,7 +5,7 @@
 //!
 //! Offsets are those of the Tiny 2 Lite, see the protocol reference `status-block.md`.
 
-use crate::commands::{
+use crate::models::tiny2lite::commands::{
     AiMode, AutofocusMode, HandSide, NoiseReduction, PickupDistance, SleepBackground, TrackingSpeed,
 };
 use serde::Serialize;

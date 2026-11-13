@@ -10,9 +10,9 @@
 //! lists the changed lines). A move never writes it; every other run compares.
 
 use clap::ValueEnum;
-use obsbot_device::commands::{self as cmd, *};
-use obsbot_device::frame::{self, FRAME_SIZE};
-use obsbot_device::presets::{self, Pose, StartupAi};
+use obsbot_device::family::frame::{self, FRAME_SIZE};
+use obsbot_device::models::tiny2lite::commands::{self as cmd, *};
+use obsbot_device::models::tiny2lite::presets::{self, Pose, StartupAi};
 use std::fmt::Display;
 
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/byte-guard.txt");

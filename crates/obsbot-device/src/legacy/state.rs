@@ -4,8 +4,8 @@
 //! exposure mode. The CLI updates it whenever it sets them, so separate calls stay
 //! consistent. Location: `$XDG_STATE_HOME/obsbot4linux/state.json` (default `~/.local/state`).
 
-use crate::commands::{AiMode, ExposureMode};
 use crate::error::{Error, Result};
+use crate::models::tiny2lite::commands::{AiMode, ExposureMode};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
