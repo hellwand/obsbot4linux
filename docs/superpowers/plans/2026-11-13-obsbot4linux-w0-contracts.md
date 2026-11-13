@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 2024 edition, MSRV 1.88 (CI toolchain 1.99.1), serde 1, serde_json 1 (default features: maps sorted by key), schemars 1.2 (JSON Schema draft 2020-12), jq in CI.
 
-**Spec:** `docs/superpowers/specs/2026-11-01-obsbot4linux-1.0-design.md` (revision 2, approved 2026-11-13), sections 3, 4, 5.1 to 5.3, 5.12, 6, 8, 9.3, 10.3 (W0) and 11; field ledger `docs/field-ledger.md`.
+**Spec:** `docs/superpowers/specs/2026-11-01-obsbot4linux-1.0-design.md` (revision 2, approved 2026-11-13, with the change after approval of its section 15.1), sections 2, 3, 4, 5.1 to 5.3, 5.12, 6, 8, 9.3, 10.3 (W0) and 11; field ledger `docs/field-ledger.md`.
 
 ## Global Constraints
 
@@ -28,6 +28,7 @@
 - "Public enums are `#[non_exhaustive]`, so additive protocol changes do not break Rust callers" (spec 6.1).
 - Fakes: "`fake-a` uses the Tiny 2 Lite's description, for client work; `support: tested`"; "`fake-b` is deliberately different: other enum values, whole groups missing (no `gimbal`, no `views`), a setting and an action under a group no client knows, another preset count (5), `readback:false` leaves, leaves with `asleep: ignored` and `asleep: unknown`, a `requires`, a readback that lags its write by a set time, `support: untested`"; "`unknown` is a device with an unregistered product id of a known vendor id"; "synthetic serials (`sn:FAKEA0000001`)"; test control on `<socket path>.test` with `plug`, `unplug`, `sleep`, `wake`, `fail_next`, "not part of protocol 2 and not in any schema or description" (spec 5.12).
 - "No raw send path exists anywhere: not in the daemon, the CLI, the protocol or the fakes" (spec 8.3).
+- "A request sends exactly what it names: the frames of that setting or action, nothing before them and nothing after them" (spec 2, changed after approval: spec 15.1 row 88). `gimbal.move` and `gimbal.turn` "leave `tracking.mode` alone" (spec 4.4); "`touched` names the groups whose values the camera itself changes in response to the leaf or action" (spec 8.2).
 - Tiny 2 Lite: "`settle_ms`: 3000 for every writable leaf with a readback"; "`readback:false`: `hand.move_gimbal`, `led.blink`"; "`presets`: at most 3 (`limits.presets`)"; "the description written in stage W0 contains the field, value or bound" of every row of 9.3 (spec 8.8, 4.3, 9.3).
 - "Golden files cover protocol 2 and the descriptions. An intentional change updates them in the same PR" (spec 11).
 - Public text (spec 8.5): English; paths, command ids, ranges, units, the model's own USB ids, evidence levels and opaque keys only; no private paths, no vendor-app or firmware names, no serial numbers (the synthetic `EXAMPLE0000001`, `FAKEA…`, `FAKEB…` are allowed).
@@ -65,7 +66,7 @@ The spec leaves these details of the contract open; this plan fixes them. Each c
 2. **Canonical JSON.** Maps are sorted by key (serde_json without `preserve_order`); struct fields keep declaration order; an integral number is written without a fraction (`3`, not `3.0`); `readonly`, `nullable`, `readback` and `no_effect` are always written (a JavaScript client reads a missing `readback` as false); other optional Setting fields are left out when empty; every writable enum carries `writable`. Golden files are in this form.
 3. **Forward compatibility.** `Support`, `SettingType`, `Unit`, `Asleep`, `Warning` and `ErrorCode` have a catch-all `Other(String)`; `Event` has `Unknown`. A newer daemon's additive values parse (spec 4.1 rule 7).
 4. **`trait Camera` signature details** (spec 8.2 shows the shape): `identity`, `read`, `apply` and `act` take a `&Ctx` that the model checks before every frame (the 15 s deadline of 4.1 rule 9; a stop cutting a group read, 5.6); `Ctx::new` takes both at once, because a request's touched re-read has the request's deadline and is also a group read a stop cuts. `identity` takes a `Need` (5.5: send only the missing queries). `act` takes `&Params` (an object) and the published `&State` that `check` saw (a used or empty preset slot, the mirror and invert flags), and returns `Option<Params>`. Spec 8.2's `stops` and `continuing` become one method `motion(action) -> Motion` with `Motion::{None, Move, Continuing { stop }, Stop}`, because the daemon must also know which actions are motion actions: 5.6 "any other motion action of that device clears the record" (4.1 rule 6 lists them). A `Stop` clears the record only when it is the stop the record names. One method is added: `check(action, params, state) -> Result<(), Refusal>`, the model's checks that the description cannot express, run before any frame (an empty slot, an unknown view id, a list in `unread`: `conflict`; `gimbal.move` without an axis: `invalid`). The daemon calls `check` only after `validate_do` passed, so the model's codes rank after every code of the validator (decision 9). A group whose read depends on a condition (the Tiny 2 Lite's target, 8.8) is decided by the model from its own last reads (`read` docs).
-5. **`touched` includes the written leaf's own group.** The conformance check requires it, so the state the reply publishes can show the write (spec 9.4 counts lags "at the touched re-read").
+5. **`touched` includes the written leaf's own group.** The conformance check requires it, so the state the reply publishes can show the write (spec 9.4 counts lags "at the touched re-read"). Beyond that, `touched` names only groups the camera itself changes in response (spec 8.2): no model sends a frame the request did not name (spec 2), so `fake-a`'s `gimbal.move` and `gimbal.turn` touch nothing and leave `tracking.mode` alone. What the fake does on a move while its tracking is on (it moves and keeps its mode) is the fake's own behaviour, not a statement about the camera, which is CAM-34.
 6. **Enumeration seam.** `trait Bus { scan, open }`, `Found`, `ModelEntry` (data only: key, display name, USB pairs, support, identity source `IdentitySource::{UsbSerial, Query, Absent}`, whether a firmware query exists, identity tier, extension-unit GUID, selectors; the two identity fields let the daemon end an identity series and send no attempt for a model with neither query, 5.5), `Registry` with `lookup` and `shared_pairs`, `Lookup`. The fake bus and track A's sysfs bus implement `Bus`, so the daemon has one enumeration path and `unknown` "enters through the same registry lookup as a real device" (spec 5.12). The constructor of a model stays with its bus.
 7. **`trait Transport`** (spec 3.1): `xu_len`, `xu_get`, `xu_set`, `ctrl_get`, `ctrl_set`, `ctrl_range`, `usb` (fresh sysfs facts), `usb_serial`, `on_air`. Track A adds anything else by a contract-change PR.
 8. **Daemon entry point.** `obsbot4linuxd::Config { socket, fake: Option<Arc<FakeBus>>, stop }` and `run(Config) -> std::io::Result<()>`. In-process tests build the `FakeBus` themselves and may use its Rust-only `set_delay`. The test-control socket answers each line with `{"ok":<id or true>}` or `{"error":"<message>"}` (`FakeBus::handle_line`).
@@ -131,7 +132,7 @@ Tasks 7 and 8 each depend on two wave-2 tasks (2 and 5): such a task starts from
 
 `Cargo.lock` changes in Tasks 1, 5, 6 and 11. When a rebase conflicts in it, take `rebuild`'s version and run `cargo build --workspace`; commit the result.
 
-The code of this plan was built and run in a copy of the workspace on 2026-11-13 (rustc 1.99.1), again after the review's fix round: `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` and every test below passed. The code in the steps is that code.
+The code of this plan was built and run in a copy of the workspace on 2026-11-13 (rustc 1.99.1), again after the review's fix round, and again after the change of spec 15.1 row 88 (with stand-ins for stage G's files; the regenerated description files and schema did not change): `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings` and every test below passed. The code in the steps is that code.
 
 ---
 
@@ -4182,7 +4183,9 @@ pub trait Camera: Send {
     ) -> Result<Option<Params>>;
 
     /// The groups to re-read after a leaf was written or an action ran. For a leaf with a
-    /// readback this includes the leaf's own group.
+    /// readback this includes the leaf's own group. Beyond that, only the groups whose values
+    /// the camera itself changes in response: a model sends exactly the frames of the request
+    /// (design spec 2), so no group is touched by a frame of the model's own.
     fn touched(&self, target: Target<'_>) -> Vec<String>;
 
     /// What `action` is to the queue and to the continuing-motion record (4.1 rules 2 and 6,
@@ -6219,6 +6222,9 @@ refusal first.
    There is no rollback.
 6. Motion actions reply when the camera accepted the command; the pose moves through later
    events.
+   An action sends exactly what it names, nothing before and nothing after it: a `gimbal.move`
+   while the tracking is on leaves `tracking.mode` alone. A client that wants the tracking off
+   first sets `tracking.mode` to `static` in its own request.
 7. Additive changes keep protocol 2: fields, actions, models, enum values, live topics, setting
    types, units. Clients ignore unknown fields and event types, show unknown enum values as
    raw text, show settings of an unknown type read-only as text, and treat an unknown error
@@ -6404,7 +6410,7 @@ git commit -m "docs: protocol 2, normative part and path dictionary"
 - Consumes (Task 5): `Camera`, `CameraError`, `Ctx`, `Group`, `Identity`, `IdentitySource`, `LiveTier`, `Motion`, `Need`, `SendTable`, `Target`, `Tier`, `Bus`, `Found`, `Lookup`, `ModelEntry`, `Registry`, `UsbId`; (Task 7) `conformance::check` in the tests; (Task 8) `tiny2lite::description::description`; (Task 1, 2) the proto types, `values::{number, same}`, `validate::Refusal`, `validate::validate_set` in the tests.
 - Produces (module `obsbot_device::models::fake`):
   - `const VENDOR: u16 = 0x3564`, `const UNKNOWN_PRODUCT: u16 = 0xfa00`, `const KEYS: [&str; 3] = ["fake-a", "fake-b", "unknown"]`, `const RESTART: Duration` (1 s), `static REGISTRY: Registry`, `fn description(key: &str) -> Option<Description>`
-  - `mod a`: `const PRODUCT: u16 = 0xfa0a`, `const ENTRY: ModelEntry` (`support: Tested`, `identity: Query`, `firmware_query: true`), `fn description() -> Description`; its `motion` marks are those of the Tiny 2 Lite (4.1 rules 2 and 6): `gimbal.turn` continuing with the stop `gimbal.stop`, `gimbal.stop` and `zoom.stop` stops, `gimbal.move`, `zoom.move`, `preset.recall`, `view.go`, `zone.go_return`, `hand.go_return`, `power_on.go` moves
+  - `mod a`: `const PRODUCT: u16 = 0xfa0a`, `const ENTRY: ModelEntry` (`support: Tested`, `identity: Query`, `firmware_query: true`), `fn description() -> Description`; its `motion` marks are those of the Tiny 2 Lite (4.1 rules 2 and 6): `gimbal.turn` continuing with the stop `gimbal.stop`, `gimbal.stop` and `zoom.stop` stops, `gimbal.move`, `zoom.move`, `preset.recall`, `view.go`, `zone.go_return`, `hand.go_return`, `power_on.go` moves; `gimbal.move` and `gimbal.turn` touch no group and leave `tracking.mode` alone (spec 2, 4.4)
   - `mod b`: `const PRODUCT: u16 = 0xfa0b`, `const ENTRY: ModelEntry` (`support: Untested`, `identity: Query`, `firmware_query: true`; no stop and no continuing action, `preset.recall` a move), `const LAG: Duration` (250 ms), `const SETTLE_MS: u32 = 1000`, `const TIME_STEP: f64 = 100.0`, `fn description() -> Description`
   - `struct FakeBus` with `new(&[&str]) -> Result<FakeBus, String>`, `plug(&str) -> Result<String, String>` (returns the device id), `unplug(&str)`, `sleep(&str)`, `wake(&str)`, `fail_next(&str)` (each `-> Result<(), String>`, ids `sn:` or `port:`), `set_delay(&str, Duration)`, `ops(&str) -> Vec<Op>`, `handle_line(&str) -> String` (the test-control socket of spec 5.12), and `impl Bus for FakeBus`
   - `enum Op { Open, Identity(Need), Read(String), Apply(String, Value), Act(String, Params) }`
@@ -6892,15 +6898,46 @@ fn actions_change_the_state_and_view_save_returns_its_id() {
     .unwrap();
     let state = state_of(&mut *cam);
     assert_eq!(state.at("gimbal.pan"), Some(&json!(20)));
-    assert_eq!(
-        state.at("tracking.mode"),
-        Some(&json!("static")),
-        "4.4: a move switches tracking to static"
-    );
-    assert_eq!(
-        cam.touched(Target::Action("gimbal.move")),
-        ["tracking", "framing"]
-    );
+}
+
+/// Spec 2: an action sends exactly what was asked, nothing before it and nothing after it.
+/// 0.13 switched the tracking to static before a manual move; 1.0 does not, so a move while
+/// the tracking is on is one operation and leaves `tracking.mode` alone. What the camera
+/// itself does then is CAM-34; the fake only moves.
+#[test]
+fn a_move_while_tracking_sends_only_the_move() {
+    let bus = bus();
+    let mut cam = open(&bus, "fa0a");
+    cam.apply("tracking.mode", &json!("normal"), &Ctx::none())
+        .unwrap();
+    for (action, with) in [
+        ("gimbal.move", json!({"pan": 20})),
+        ("gimbal.turn", json!({"pan_speed": 10})),
+    ] {
+        let before = bus.ops("sn:FAKEA0000001").len();
+        cam.act(
+            action,
+            &params(with.clone()),
+            &State::new(true),
+            &Ctx::none(),
+        )
+        .unwrap();
+        assert_eq!(
+            bus.ops("sn:FAKEA0000001")[before..],
+            [Op::Act(action.into(), params(with))],
+            "an action sends exactly what was asked (spec 2): {action} is one command, no tracking switch before or after it"
+        );
+        assert_eq!(
+            read_leaf(&mut *cam, "tracking", "tracking.mode"),
+            json!("normal"),
+            "an action sends exactly what was asked (spec 2): {action} leaves tracking.mode alone"
+        );
+        assert_eq!(
+            cam.touched(Target::Action(action)),
+            Vec::<String>::new(),
+            "{action} touches no group: only the camera could change the tracking, and that is CAM-34"
+        );
+    }
 }
 
 /// 4.1 rules 2 and 6, 5.6: the daemon learns from `motion` which actions jump the queue and
@@ -7607,7 +7644,6 @@ fn touched(target: Target<'_>) -> Vec<&'static str> {
         Target::Leaf(l) if l.starts_with("gestures.") => vec!["zoom"],
         Target::Leaf(_) => vec![],
         Target::Action(a) => match a {
-            "gimbal.move" | "gimbal.turn" => vec!["tracking", "framing"],
             "preset.recall" | "view.go" => vec!["zoom", "gimbal"],
             "preset.save" | "preset.rename" | "preset.delete" => vec!["presets"],
             "power_on.use_preset" => vec!["presets", "power_on"],
@@ -7658,16 +7694,16 @@ fn list(values: &mut Values, path: &str) -> Vec<Value> {
 fn act(values: &mut Values, action: &str, p: &Params) -> Option<Params> {
     let pose = |values: &Values| p.get("pose").cloned().unwrap_or_else(|| live_pose(values));
     match action {
+        // A move sends only the move (spec 2): the fake sets the pose and leaves
+        // `tracking.mode` as it is, whatever the mode. That is the fake's own behaviour, not
+        // the camera's; what the camera does with a move while it tracks is CAM-34.
+        // `gimbal.turn` changes nothing the fake stores (it has no turning pose).
         "gimbal.move" => {
             for (param, leaf) in [("pan", "gimbal.pan"), ("tilt", "gimbal.tilt")] {
                 if let Some(v) = p.get(param) {
                     values.insert(leaf.into(), v.clone());
                 }
             }
-            values.insert("tracking.mode".into(), json!("static"));
-        }
-        "gimbal.turn" => {
-            values.insert("tracking.mode".into(), json!("static"));
         }
         "zoom.move" => {
             values.insert("zoom.factor".into(), p["factor"].clone());
@@ -8343,7 +8379,7 @@ impl Bus for FakeBus {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cargo test -p obsbot-device --test fakes`
-Expected: PASS: `test result: ok. 18 passed` (about 1 s: the restart and lag tests sleep).
+Expected: PASS: `test result: ok. 19 passed` (about 1 s: the restart and lag tests sleep).
 
 Run: `cargo fmt --all --check && cargo clippy -p obsbot-device --all-targets --locked -- -D warnings`
 Expected: no output.
@@ -8678,6 +8714,7 @@ git commit -m "obsbot4linuxd: crate stub with its fixed entry point run(Config)"
 | every golden file round-trips byte-equal through the proto types                                                                                              | Tasks 1 (types), 4 (transcripts), 10 (descriptions)           |
 | `fake-a` and `fake-b` pass a trait conformance test                                                                                                           | Task 9 `fake_a_and_fake_b_pass_the_conformance_check`, Task 7 |
 | every writable leaf with a readback in a group with a periodic tier                                                                                           | Task 7 (`WritableInTouchedGroup` row)                         |
+| `fake-a`'s `gimbal.move` and `gimbal.turn` are one operation each and leave `tracking.mode` alone (spec 2)                                                    | Task 9 `a_move_while_tracking_sends_only_the_move`            |
 | the `cargo metadata` check of section 3 passes                                                                                                                | Task 6                                                        |
 | the four crates as compiling stubs; the 0.13 daemon, client, protocol and CLI removed (the 0.13 `state` module stays in `legacy/` until track A, decision 15) | Tasks 1, 5, 6, 11                                             |
 | the Tiny 2 Lite description as data (every field of 4.3 and 4.4, U-rows included)                                                                             | Task 8                                                        |
