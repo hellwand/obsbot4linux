@@ -268,4 +268,48 @@ mod tests {
             prev = cur;
         }
     }
+
+    #[test]
+    fn a_frame_holds_exactly_44_bytes_of_data() {
+        // 60 bytes in all, 16 of them headers: 44 bytes of data fill the frame to its end
+        assert_eq!(MAX_DATA, 44);
+        let f = frame(0x04, 1, &[0xab; 44], 0);
+        assert!(f[16..].iter().all(|b| *b == 0xab));
+    }
+
+    #[test]
+    #[should_panic(expected = "must not exceed 44 bytes")]
+    fn one_byte_past_the_data_section_is_refused() {
+        frame(0x04, 1, &[0u8; 45], 0);
+    }
+
+    #[test]
+    fn a_rejection_needs_a_16_byte_header_and_the_extension_tag() {
+        // layout: header length at 4..6, the extension `00 02` at 12..14, the i16 code at 14..16
+        let rejected = |header: u16, extension: [u8; 2]| {
+            let mut r = [0u8; 60];
+            r[0] = 0xaa;
+            r[1] = 0x89;
+            r[2..4].copy_from_slice(&7u16.to_le_bytes());
+            r[4..6].copy_from_slice(&header.to_le_bytes());
+            r[12..14].copy_from_slice(&extension);
+            r[14..16].copy_from_slice(&(-3i16).to_le_bytes());
+            parse_answer(&r, 7, 0).map(|a| matches!(a, Answer::Rejected(-3)))
+        };
+        assert_eq!(rejected(16, [0x00, 0x02]), Some(true));
+        assert_eq!(rejected(12, [0x00, 0x02]), Some(false), "12-byte header");
+        assert_eq!(rejected(16, [0x01, 0x02]), Some(false), "another extension");
+    }
+
+    #[test]
+    fn a_reply_must_hold_both_headers_to_be_an_answer() {
+        let full = answer(0x29, 7, &[]);
+        assert_eq!(parse_answer(&full[..12], 7, 0), None, "12 bytes");
+        assert_eq!(parse_answer(&full[..15], 7, 0), None, "one byte short");
+        assert_eq!(
+            parse_answer(&full[..16], 7, 0),
+            Some(Answer::Value(&[])),
+            "both headers and no data"
+        );
+    }
 }

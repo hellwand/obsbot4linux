@@ -6,9 +6,13 @@
 //! compiled in tests only.
 
 use crate::error::{Error, Result};
-use crate::transport::uvc::{CtrlRange, XU_SIZE};
+use crate::family::exchange::Camera;
+use crate::family::frame::Sequence;
+use crate::transport::uvc::{CtrlRange, Device, XU_SIZE};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::sync::OnceLock;
 
 /// How the scripted camera treats a framed query.
 pub(crate) enum Answer {
@@ -20,14 +24,21 @@ pub(crate) enum Answer {
     SendFails,
 }
 
-/// The table behind a scripted [`Device`]. A query that is not in `answers` is rejected (type
-/// 0x89, code -1), so a test never waits out the poll.
+/// The table behind a scripted [`Device`]. For a query that is not in `answers` the double
+/// itself answers with type 0x89 and code -1, so that a test does not wait out the poll; this is
+/// a choice of the double, not a recording of what a camera does.
 pub(crate) struct Scripted {
     /// What a read of selector 6 (the status buffer) returns.
     pub status: [u8; XU_SIZE],
     pub answers: BTreeMap<u16, Answer>,
     /// V4L2 controls the camera has, with their current values.
     pub ctrls: BTreeMap<u32, i32>,
+    /// (minimum, maximum) of a control that has a range of its own; the others have 0 to 100.
+    pub ranges: BTreeMap<u32, (i32, i32)>,
+    /// Every `set_ctrl` call so far, as (control id, value) in call order; a test keeps a clone
+    /// to read it after the table has moved into a device. The double does not change `ctrls`
+    /// for them.
+    pub set_ctrls: Rc<RefCell<Vec<(u32, i32)>>>,
     /// The last frame written to selector 2, which the next read of selector 2 answers.
     last: RefCell<[u8; XU_SIZE]>,
 }
@@ -38,6 +49,8 @@ impl Scripted {
             status,
             answers: BTreeMap::new(),
             ctrls: BTreeMap::new(),
+            ranges: BTreeMap::new(),
+            set_ctrls: Rc::default(),
             last: RefCell::new([0; XU_SIZE]),
         }
     }
@@ -80,13 +93,28 @@ impl Scripted {
             .ok_or_else(|| Error::Invalid(format!("control {id:#x} is not scripted")))
     }
 
+    pub fn set_ctrl(&self, id: u32, value: i32) -> Result<()> {
+        self.set_ctrls.borrow_mut().push((id, value));
+        Ok(())
+    }
+
     pub fn ctrl_range(&self, id: u32) -> Result<Option<CtrlRange>> {
+        let (min, max) = self.ranges.get(&id).copied().unwrap_or((0, 100));
         Ok(self.ctrls.contains_key(&id).then_some(CtrlRange {
-            min: 0,
-            max: 100,
+            min,
+            max,
             step: 1,
             default: 50,
         }))
+    }
+}
+
+/// A [`Camera`] on a scripted device, with one sequence counter for all of them.
+pub(crate) fn camera(script: Scripted) -> Camera {
+    static SEQ: OnceLock<Sequence> = OnceLock::new();
+    Camera {
+        dev: Device::scripted(script),
+        seq: SEQ.get_or_init(Sequence::new),
     }
 }
 

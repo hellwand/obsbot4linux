@@ -206,6 +206,10 @@ impl Device {
     }
 
     pub fn set_ctrl(&self, id: u32, value: i32) -> Result<()> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.set_ctrl(id, value);
+        }
         let mut c = V4l2Control { id, value };
         unsafe { vidioc_s_ctrl(self.file.as_raw_fd(), &mut c) }?;
         Ok(())
@@ -269,5 +273,49 @@ mod tests {
         assert!(check_len(2, XU_SIZE).is_ok());
         assert!(matches!(check_len(2, 32), Err(Error::Unsupported(_))));
         assert!(matches!(check_len(2, 64), Err(Error::Unsupported(_))));
+    }
+
+    /// A device on a plain temporary file: no device node is opened, and the kernel refuses
+    /// every extension-unit and V4L2 ioctl on it, so what these tests see is how the code
+    /// handles a refusal.
+    fn on_a_plain_file() -> Device {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "o4l-plain-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let file = lock_exclusive(File::create(&path).unwrap(), LOCK_WAIT).unwrap();
+        fs::remove_file(&path).unwrap();
+        Device {
+            file,
+            detected: Detected {
+                model: &crate::registry::MODELS[0],
+                device: "/nonexistent/obsbot-test-video0".into(),
+            },
+            script: None,
+        }
+    }
+
+    #[test]
+    fn a_payload_longer_than_the_buffer_is_refused_before_any_ioctl() {
+        let device = on_a_plain_file();
+        let refused = device.xu_set(2, &[0u8; XU_SIZE + 1]);
+        assert!(matches!(refused, Err(Error::Invalid(_))), "{refused:?}");
+        // up to the buffer size it gets as far as the ioctl, which the plain file refuses
+        for len in [XU_SIZE - 1, XU_SIZE] {
+            let result = device.xu_set(2, &vec![0u8; len]);
+            assert!(matches!(result, Err(Error::Ioctl(_))), "{len}: {result:?}");
+        }
+    }
+
+    #[test]
+    fn a_refused_ioctl_is_an_error_not_a_default_value() {
+        let device = on_a_plain_file();
+        assert!(matches!(device.xu_get(2), Err(Error::Ioctl(_))));
+        assert!(matches!(device.get_ctrl(1), Err(Error::Ioctl(_))));
+        assert!(matches!(device.set_ctrl(1, 0), Err(Error::Ioctl(_))));
+        assert!(matches!(device.ctrl_range(1), Err(Error::Ioctl(_))));
     }
 }

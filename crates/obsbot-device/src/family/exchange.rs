@@ -175,4 +175,38 @@ mod tests {
         assert_eq!(result.unwrap(), vec![4, 5, 6]);
         assert_eq!(reads, 3);
     }
+
+    use crate::scripted::{self, Scripted};
+    use std::time::Instant;
+
+    #[test]
+    fn all_cameras_of_a_process_share_one_sequence() {
+        // separate handles must never repeat a number, so there is one counter
+        assert!(std::ptr::eq(sequence(), sequence()));
+    }
+
+    fn frame_of(command: u16) -> [u8; 60] {
+        let mut f = [0u8; 60];
+        f[10..12].copy_from_slice(&command.to_le_bytes());
+        f
+    }
+
+    #[test]
+    fn a_pair_is_sent_with_a_gap_between_its_frames() {
+        // back to back the camera applies neither frame
+        let camera = scripted::camera(Scripted::new([0; XU_SIZE]));
+        let start = Instant::now();
+        camera.pair([frame_of(1), frame_of(2)]).unwrap();
+        assert!(start.elapsed() >= PAIR_GAP);
+    }
+
+    #[test]
+    fn a_pair_fails_when_either_frame_cannot_be_sent() {
+        for failing in [1, 2] {
+            let mut script = Scripted::new([0; XU_SIZE]);
+            script.answers.insert(failing, scripted::Answer::SendFails);
+            let result = scripted::camera(script).pair([frame_of(1), frame_of(2)]);
+            assert!(matches!(result, Err(Error::Io(_))), "{failing}: {result:?}");
+        }
+    }
 }
