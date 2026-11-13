@@ -15,5 +15,7 @@ name = "obsbot4linuxd"
 path = "src/main.rs"
 
 [dependencies]
+nix = { workspace = true, features = ["fs", "signal"] }
 obsbot-device.workspace = true
 obsbot-proto.workspace = true
+serde_json.workspace = true
