@@ -7,7 +7,7 @@ use crate::Timing;
 use crate::daemon::Fatal;
 use crate::identity::{PortReason, Series};
 use crate::names;
-use crate::outbound::{error, error_line, ok_line};
+use crate::outbound::ok_line;
 use crate::pending::Pending;
 use crate::queue::{self, DeviceQueue, Job, Work};
 use crate::schedule::Schedule;
@@ -409,6 +409,7 @@ mod tests {
     use obsbot_device::models::fake::{FakeBus, Op};
     use obsbot_proto::{Description, Hello, Patch, RequestId};
     use serde_json::{Value, json};
+    use std::sync::Mutex;
     use std::sync::mpsc::Receiver;
     use std::time::{Duration, Instant};
 
@@ -746,6 +747,117 @@ mod tests {
             "nothing was sent"
         );
         stop(r);
+    }
+
+    /// Set by the test once the worker is up: the table and queue the camera ends.
+    type Hook = Arc<Mutex<Option<(Arc<Table>, Arc<DeviceQueue>)>>>;
+
+    /// A camera whose `apply` succeeds and then the device goes (the table entry is unplugged,
+    /// the queue ended), as the registry does on unplug.
+    struct Leaving(Box<dyn Camera>, Hook);
+
+    struct LeavingBus(Arc<FakeBus>, Hook);
+
+    impl Bus for LeavingBus {
+        fn scan(&self) -> Vec<Found> {
+            self.0.scan()
+        }
+
+        fn open(&self, found: &Found) -> Result<Box<dyn Camera>, CameraError> {
+            Ok(Box::new(Leaving(self.0.open(found)?, self.1.clone())))
+        }
+    }
+
+    impl Camera for Leaving {
+        fn description(&self) -> &Description {
+            self.0.description()
+        }
+
+        fn identity(
+            &mut self,
+            need: Need,
+            ctx: &Ctx,
+        ) -> Result<obsbot_device::contract::Identity, CameraError> {
+            self.0.identity(need, ctx)
+        }
+
+        fn poll_plan(&self) -> &[Group] {
+            self.0.poll_plan()
+        }
+
+        fn read(&mut self, group: &str, ctx: &Ctx) -> Result<obsbot_proto::Values, CameraError> {
+            self.0.read(group, ctx)
+        }
+
+        fn order(&self, leaves: &[&str]) -> Vec<String> {
+            self.0.order(leaves)
+        }
+
+        fn apply(&mut self, leaf: &str, value: &Value, ctx: &Ctx) -> Result<(), CameraError> {
+            self.0.apply(leaf, value, ctx)?;
+            if let Some((table, queue)) = self.1.lock().unwrap().as_ref() {
+                table.unplug(1);
+                queue.end();
+            }
+            Ok(())
+        }
+
+        fn check(
+            &self,
+            action: &str,
+            params: &obsbot_proto::Params,
+            state: &State,
+        ) -> Result<(), obsbot_proto::validate::Refusal> {
+            self.0.check(action, params, state)
+        }
+
+        fn act(
+            &mut self,
+            action: &str,
+            params: &obsbot_proto::Params,
+            state: &State,
+            ctx: &Ctx,
+        ) -> Result<Option<obsbot_proto::Params>, CameraError> {
+            self.0.act(action, params, state, ctx)
+        }
+
+        fn touched(&self, target: obsbot_device::contract::Target<'_>) -> Vec<String> {
+            self.0.touched(target)
+        }
+
+        fn motion(&self, action: &str) -> Motion {
+            self.0.motion(action)
+        }
+
+        fn send_table(&self) -> &obsbot_device::contract::SendTable {
+            self.0.send_table()
+        }
+    }
+
+    /// 5.6: the device goes after a request was sent and before the groups are re-read: the
+    /// request is answered `ok` with the rev of the last state published before (not 0, which
+    /// no state ever had).
+    #[test]
+    fn an_ok_after_the_device_went_carries_the_last_published_rev() {
+        let slot = Arc::new(Mutex::new(None));
+        let hook = slot.clone();
+        let r = rig_over("fake-b", |_| {}, move |bus| Arc::new(LeavingBus(bus, hook)));
+        let st = until(&r.events, |v| v["event"] == "state");
+        let published = st["rev"].as_u64().unwrap();
+        assert!(published > 0);
+        *slot.lock().unwrap() = Some((r.table.clone(), r.queue.clone()));
+        r.queue
+            .push(job(
+                &r,
+                6,
+                "sn:FAKEB0000001",
+                Work::Set(Patch::new().leaf("led.brightness", 3)),
+            ))
+            .ok()
+            .unwrap();
+        r.handle.join().unwrap();
+        let reply = next(&r.replies);
+        assert_eq!(reply["ok"]["rev"], published, "{reply}");
     }
 
     /// A worker over one fake device, not started.
