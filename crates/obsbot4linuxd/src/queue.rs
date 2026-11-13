@@ -2,10 +2,9 @@
 
 //! The queue of one supported device (4.1 rules 2 and 9, 5.6): at most `MAX_QUEUED` requests,
 //! FIFO, except that a stop is taken before every queued request and is accepted whatever the
-//! length. Connection readers push,
-//! the device's worker takes batches, the deadline sweeper removes requests not started within
-//! `REQUEST_DEADLINE`. The queue also holds the continuing-motion record (5.6) and the flags
-//! that cut a camera operation short.
+//! length. Connection readers push, the device's worker takes batches, the deadline sweeper
+//! removes requests not started within `REQUEST_DEADLINE`. The queue also holds the
+//! continuing-motion record (5.6) and the flags that cut a camera operation short.
 
 use crate::MAX_QUEUED;
 use crate::outbound::{ConnId, Outbound, error, error_line};
