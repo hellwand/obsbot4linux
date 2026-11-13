@@ -1,0 +1,13 @@
+# One reply per error code the daemon sends, in the order of the table in 4.1.
+< {"id":null,"error":{"code":"protocol","message":"the first message must be hello","supported":[2]}}
+< {"id":2,"error":{"code":"invalid","message":"led.brightness: expected a number"}}
+< {"id":3,"error":{"code":"unknown_device","message":"no device sn:EXAMPLE0000009"}}
+< {"id":4,"error":{"code":"unsupported","message":"tracking.mode is not a setting of this device"}}
+< {"id":5,"error":{"code":"unsupported_device","message":"port:3-2.4 is not supported by obsbot4linux"}}
+< {"id":6,"error":{"code":"out_of_range","message":"led.brightness: 4 is above the maximum 3"}}
+< {"id":7,"error":{"code":"conflict","message":"preset slot 2 is empty"}}
+< {"id":8,"error":{"code":"unavailable","message":"sn:EXAMPLE0000001 is unplugged"}}
+< {"id":9,"error":{"code":"asleep","message":"the camera is asleep and ignores zoom.field_of_view"}}
+< {"id":10,"error":{"code":"busy","message":"32 requests are queued for sn:EXAMPLE0000001"}}
+< {"id":11,"error":{"code":"camera","message":"the camera did not answer","rev":9,"applied":["exposure.mode"],"failed":"exposure.time"}}
+< {"id":12,"error":{"code":"internal","message":"a frame outside the send table was refused"}}
