@@ -91,6 +91,14 @@ impl ReadHalf {
             }
         }
     }
+
+    /// A second handle on the socket, to shut it down from another thread.
+    pub(crate) fn stream(&self) -> Result<UnixStream, ClientError> {
+        self.reader
+            .get_ref()
+            .try_clone()
+            .map_err(|e| ClientError::Disconnected(Some(e)))
+    }
 }
 
 /// One connection to the daemon. [`Client`](crate::client::Client) builds on it; `watch`
@@ -157,6 +165,10 @@ impl Connection {
         let line = self.read_line(Some(self.reply_timeout))?;
         let ok = hello_reply(&line, &id)?;
         Ok(HelloReply { ok, line })
+    }
+
+    pub(crate) fn into_halves(self) -> (WriteHalf, ReadHalf) {
+        (self.w, self.r)
     }
 }
 
