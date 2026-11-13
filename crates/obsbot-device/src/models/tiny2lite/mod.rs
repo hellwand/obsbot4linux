@@ -4,6 +4,7 @@
 
 pub mod camera;
 pub mod commands;
+pub mod decode;
 pub mod description;
 pub mod presets;
 pub mod status;
