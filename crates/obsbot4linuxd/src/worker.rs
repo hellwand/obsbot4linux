@@ -15,9 +15,9 @@ use crate::table::{Cause, PlugId, Table};
 use obsbot_device::contract::{
     Bus, Camera, CameraError, Ctx, Found, Group, ModelEntry, Motion, Need, Tier,
 };
-use obsbot_proto::validate::validate_get;
+use obsbot_proto::validate::{Fit, check_value, leaves, validate_get};
 use obsbot_proto::values::is_raw;
-use obsbot_proto::{Description, OkBody, RevState, State, port_id};
+use obsbot_proto::{Description, OkBody, Patch, RevState, State, port_id};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -389,7 +389,15 @@ impl Worker {
     /// Plans one batch of the queued requests and runs it; the requests the plan does not take
     /// go back to the front of the queue.
     fn serve(&mut self, mut jobs: Vec<Job>) {
-        let plan = queue::plan(&jobs, |_| false, |_| None);
+        let desc = &self.desc;
+        // 4.1 rule 9: the one leaf of a `set` whose value the setting can take.
+        let single_leaf = |patch: &Patch| {
+            let mut found = leaves(desc, patch).ok()?;
+            let (leaf, value) = found.pop().filter(|_| found.is_empty())?;
+            let setting = desc.settings.get(&leaf)?;
+            (!setting.readonly && check_value(setting, &value, Fit::Write).is_ok()).then_some(leaf)
+        };
+        let plan = queue::plan(&jobs, |_| false, single_leaf);
         if plan.take == 0 {
             return;
         }
