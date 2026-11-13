@@ -1,0 +1,1001 @@
+{
+  "$defs": {
+    "Action": {
+      "description": "One action of a device (4.2).",
+      "properties": {
+        "asleep": {
+          "$ref": "#/$defs/Asleep"
+        },
+        "label": {
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Setting"
+          },
+          "default": {},
+          "description": "Parameter name → setting; empty for an action without parameters.",
+          "type": "object"
+        },
+        "requires": {
+          "items": {
+            "$ref": "#/$defs/Requirement"
+          },
+          "type": "array"
+        },
+        "result": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Setting"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "warning": {
+          "items": {
+            "$ref": "#/$defs/Warning"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "asleep"
+      ],
+      "type": "object"
+    },
+    "Asleep": {
+      "anyOf": [
+        {
+          "enum": [
+            "accepted",
+            "ignored",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Bound": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        }
+      ],
+      "description": "A bound, step or precision: one number for `number`; for `range`, `pose`, `point` and\n`box` an object of the same shape as the value, one number per component."
+    },
+    "Description": {
+      "description": "What a model offers (4.2): the part of a `Device` that `descriptions/<model>.json` holds.",
+      "properties": {
+        "actions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Action"
+          },
+          "description": "Action name → action.",
+          "type": "object"
+        },
+        "limits": {
+          "additionalProperties": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "List path → maximum item count, where the camera has one.",
+          "type": "object"
+        },
+        "settings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Setting"
+          },
+          "description": "Leaf path → setting.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "settings",
+        "actions",
+        "limits"
+      ],
+      "type": "object"
+    },
+    "Device": {
+      "description": "One entry of the device list (4.2).",
+      "properties": {
+        "actions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Action"
+          },
+          "description": "Action name → action.",
+          "type": "object"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "firmware": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`sn:<serial>` or `port:<usb path>` (5.5).",
+          "type": "string"
+        },
+        "limits": {
+          "additionalProperties": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "List path → maximum item count, where the camera has one.",
+          "type": "object"
+        },
+        "model": {
+          "description": "The model key (`tiny2lite`, `fake-a`, `fake-b`), or `unknown` for an unsupported device.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "replaced_by": {
+          "description": "Set only on the old `port:` entry during an identity hand-over (5.5).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serial": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Setting"
+          },
+          "description": "Leaf path → setting.",
+          "type": "object"
+        },
+        "support": {
+          "$ref": "#/$defs/Support"
+        },
+        "usb": {
+          "$ref": "#/$defs/Usb"
+        },
+        "video_node": {
+          "description": "`/dev/videoN` of the video node with sysfs index 0.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "model",
+        "support",
+        "available",
+        "usb",
+        "settings",
+        "actions",
+        "limits"
+      ],
+      "type": "object"
+    },
+    "Empty": {
+      "type": "object"
+    },
+    "ErrorBody": {
+      "description": "The `error` payload (4.1, Errors).",
+      "properties": {
+        "applied": {
+          "description": "`camera`: the leaf paths written before the failure.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "failed": {
+          "description": "`camera`: the leaf path or action that failed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "English, for logs.",
+          "type": "string"
+        },
+        "rev": {
+          "description": "Present whenever the daemon re-read the device before answering.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "supported": {
+          "description": "`protocol`: the protocol numbers the daemon speaks.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "anyOf": [
+        {
+          "enum": [
+            "protocol",
+            "invalid",
+            "unknown_device",
+            "unsupported",
+            "unsupported_device",
+            "out_of_range",
+            "conflict",
+            "unavailable",
+            "asleep",
+            "busy",
+            "camera",
+            "internal"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "The error codes the daemon sends (4.1). A code this crate does not know parses as\n`Other`; clients treat it as `internal` (4.1 rule 7)."
+    },
+    "Event": {
+      "description": "An event (only on connections with `subscribe: true`).",
+      "oneOf": [
+        {
+          "description": "The full state of one device.",
+          "properties": {
+            "device": {
+              "type": "string"
+            },
+            "event": {
+              "const": "state",
+              "type": "string"
+            },
+            "rev": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "$ref": "#/$defs/State"
+            }
+          },
+          "required": [
+            "event",
+            "device",
+            "rev",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The full device list.",
+          "properties": {
+            "devices": {
+              "items": {
+                "$ref": "#/$defs/Device"
+              },
+              "type": "array"
+            },
+            "event": {
+              "const": "devices",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "devices"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ExtensionUnit": {
+      "properties": {
+        "controls": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "guid": {
+          "description": "Lower-case `8-4-4-4-12` form.",
+          "type": "string"
+        },
+        "unit": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "unit",
+        "guid",
+        "controls"
+      ],
+      "type": "object"
+    },
+    "Hello": {
+      "description": "The `hello` verb.",
+      "properties": {
+        "client": {
+          "description": "`\"<name> <version>\"` of the client.",
+          "type": "string"
+        },
+        "live": {
+          "default": [],
+          "description": "Live topics (4.1 rule 8); empty when left out.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "protocol": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "subscribe": {
+          "default": true,
+          "description": "Events for this connection; `true` when left out on the wire.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "protocol",
+        "client"
+      ],
+      "type": "object"
+    },
+    "HelloOk": {
+      "properties": {
+        "daemon": {
+          "description": "The daemon's version.",
+          "type": "string"
+        },
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/Device"
+          },
+          "type": "array"
+        },
+        "protocol": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RevState"
+          },
+          "description": "Device id → its rev and state.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "protocol",
+        "daemon",
+        "devices",
+        "states"
+      ],
+      "type": "object"
+    },
+    "OkBody": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HelloOk",
+          "description": "The reply to `hello`."
+        },
+        {
+          "$ref": "#/$defs/RevState",
+          "description": "The reply to `get`."
+        },
+        {
+          "$ref": "#/$defs/RevOk",
+          "description": "The reply to `set` and `do`."
+        },
+        {
+          "$ref": "#/$defs/Empty",
+          "description": "The reply to `live`."
+        }
+      ],
+      "description": "The `ok` payload. Its shape follows the verb it answers."
+    },
+    "Patch": {
+      "additionalProperties": true,
+      "description": "The payload of `set`: leaf paths, nested (`{\"zoom\":{\"factor\":2}}`) or dotted\n(`{\"zoom.factor\":2}`). [`crate::validate::leaves`] turns it into leaves.",
+      "type": "object"
+    },
+    "Reply": {
+      "description": "A reply: `{\"id\":…,\"ok\":{…}}` or `{\"id\":…,\"error\":{…}}`.",
+      "oneOf": [
+        {
+          "properties": {
+            "ok": {
+              "$ref": "#/$defs/OkBody"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ErrorBody"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The request's id; `null` only for a `protocol` or `invalid` error without a usable id."
+        }
+      },
+      "type": "object"
+    },
+    "Request": {
+      "description": "One request line: `id` and exactly one verb (`hello`, `get`, `set`, `do`, `live`). `get`, `set` and `do` name a `device`; `with` holds the parameters of `do`.",
+      "properties": {
+        "device": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "do": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "get": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "hello": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hello"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "live": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "set": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Patch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "with": {
+          "additionalProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RequestId": {
+      "anyOf": [
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "The `id` of a request: an integer or a string, echoed verbatim in its reply."
+    },
+    "Requirement": {
+      "description": "A condition on another path, checked against the current state with the patch applied.",
+      "properties": {
+        "equals": true,
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "equals"
+      ],
+      "type": "object"
+    },
+    "RevOk": {
+      "properties": {
+        "result": {
+          "additionalProperties": true,
+          "description": "An action's result, when its description declares one.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "rev": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rev"
+      ],
+      "type": "object"
+    },
+    "RevState": {
+      "properties": {
+        "rev": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "rev",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ServerMessage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Event"
+        },
+        {
+          "$ref": "#/$defs/Reply"
+        }
+      ],
+      "description": "One line from the daemon: an event (it has `event`) or a reply."
+    },
+    "Setting": {
+      "description": "One leaf of the state, or one action parameter or result field (4.2).",
+      "properties": {
+        "ascii": {
+          "description": "string: printable ASCII only (0x20 to 0x7e).",
+          "type": "boolean"
+        },
+        "asleep": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Asleep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present on every writable leaf; absent on read-only leaves and parameters."
+        },
+        "default": {
+          "description": "The camera's own default as it reports it (UVC)."
+        },
+        "item": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Setting"
+          },
+          "description": "list: the fields of one item.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "live": {
+          "description": "The live topic of a volatile leaf.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_len": {
+          "description": "string: the maximum length in characters.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "no_effect": {
+          "default": false,
+          "type": "boolean"
+        },
+        "nullable": {
+          "default": false,
+          "type": "boolean"
+        },
+        "optional": {
+          "description": "Action parameters only: the parameter may be left out.",
+          "type": "boolean"
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "readback": {
+          "default": true,
+          "description": "`false`: the camera accepts the setting but cannot report it.",
+          "type": "boolean"
+        },
+        "readonly": {
+          "default": false,
+          "type": "boolean"
+        },
+        "requires": {
+          "items": {
+            "$ref": "#/$defs/Requirement"
+          },
+          "type": "array"
+        },
+        "settle_ms": {
+          "description": "The longest time the readback may lag a write of this leaf (4.1 rule 4).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/SettingType"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "description": "enum: every value a state may show.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "warning": {
+          "items": {
+            "$ref": "#/$defs/Warning"
+          },
+          "type": "array"
+        },
+        "writable": {
+          "description": "enum: the values a `set` accepts. Present on every writable enum, absent on read-only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "label"
+      ],
+      "type": "object"
+    },
+    "SettingType": {
+      "anyOf": [
+        {
+          "enum": [
+            "bool",
+            "enum",
+            "number",
+            "string"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "range",
+          "description": "`{min, max}`",
+          "type": "string"
+        },
+        {
+          "const": "pose",
+          "description": "`{pan, tilt, zoom}`",
+          "type": "string"
+        },
+        {
+          "const": "point",
+          "description": "`{x, y}`",
+          "type": "string"
+        },
+        {
+          "const": "box",
+          "description": "`{left, top, right, bottom}`",
+          "type": "string"
+        },
+        {
+          "const": "list",
+          "description": "A read-only list of objects; `item` describes their fields.",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "State": {
+      "additionalProperties": true,
+      "description": "The published state of one device.",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "pending": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Leaf path → the value written; the camera accepted it but does not show it yet.",
+          "type": "object"
+        },
+        "unread": {
+          "default": [],
+          "description": "Leaf paths never read since the device last became available, or whose last read failed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "type": "object"
+    },
+    "Support": {
+      "anyOf": [
+        {
+          "enum": [
+            "tested",
+            "untested",
+            "unsupported"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A level this crate does not know (a newer daemon).",
+          "type": "string"
+        }
+      ]
+    },
+    "Unit": {
+      "anyOf": [
+        {
+          "enum": [
+            "deg",
+            "deg/s",
+            "factor",
+            "us",
+            "K",
+            "percent",
+            "s",
+            "fraction",
+            "fps"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "The closed unit list of 4.2; absent for a raw camera value. New units are additive."
+    },
+    "UnitSpec": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Unit"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/Unit"
+          },
+          "type": "object"
+        }
+      ],
+      "description": "A unit: one for the whole value, or one per component (a `pose` has degrees and a factor)."
+    },
+    "Usb": {
+      "description": "The USB facts of a device, read from sysfs at enumeration (4.2). Never holds the serial.",
+      "properties": {
+        "bcd_device": {
+          "type": "string"
+        },
+        "extension_units": {
+          "items": {
+            "$ref": "#/$defs/ExtensionUnit"
+          },
+          "type": "array"
+        },
+        "interfaces": {
+          "description": "Interface classes in interface order, two lower-case hex digits (`\"0e\"`, `\"01\"`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "The USB device name in sysfs (`\"3-2.1\"`).",
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "product_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serial_present": {
+          "type": "boolean"
+        },
+        "vendor": {
+          "description": "Four lower-case hex digits (`\"3564\"`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "product",
+        "bcd_device",
+        "path",
+        "serial_present",
+        "interfaces",
+        "extension_units"
+      ],
+      "type": "object"
+    },
+    "Warning": {
+      "anyOf": [
+        {
+          "enum": [
+            "restart",
+            "destructive"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One JSON object per line on the socket: a Request from a client, or a ServerMessage (a Reply or an Event) from the daemon. Description is the content of descriptions/<model>.json.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Request"
+    },
+    {
+      "$ref": "#/$defs/ServerMessage"
+    }
+  ],
+  "title": "obsbot4linux protocol 2"
+}
