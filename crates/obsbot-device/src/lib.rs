@@ -9,8 +9,14 @@ pub mod state;
 pub mod family;
 pub use family::{frame, streaming};
 
-pub mod device;
+pub mod enumeration;
 pub mod registry;
+pub mod transport;
+/// The 0.13 path of the device module, until Task 7 of the groundwork plan removes it.
+pub mod device {
+    pub use crate::enumeration::{Detected, detect};
+    pub use crate::transport::uvc::{CtrlRange, Device};
+}
 
 pub mod commands;
 pub mod presets;
