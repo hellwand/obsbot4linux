@@ -6,18 +6,16 @@
 modules at their final paths in `crates/obsbot-device` and the 0.13 daemon and CLI unchanged on
 top of them, without changing one byte sent to the camera or one line of CLI output.
 
-**Architecture:** Pure moves on the branch `rebuild`, in eight pull requests. Task 1 adds guards
-to the 0.13 layout (a byte guard over every command builder, a CLI help guard, a package
-contents check, a test-name list and a move check). Task 2 makes the workspace with the files
-moved flat. Tasks 3 to 5 move the carried modules into `family`, `transport` and
-`models/tiny2lite` in parallel, keeping the old module paths alive through re-exports. Task 6
-splits `camera.rs`, Task 7 switches every path to the final one and removes the re-exports,
-Task 8 runs one mutation pass. Every task leaves a green build and passes every guard.
+**Architecture:** Eight pull requests: Task 1 adds guards (byte guard, CLI help guard, package
+contents, test names, move check) to the 0.13 layout on `main`; Tasks 2 to 7 are pure moves on
+`rebuild` into the workspace, the carried modules going to `family`, `transport`,
+`models/tiny2lite` and `legacy` behind re-exports that Task 7 removes; Task 8 runs one mutation
+pass. Every task leaves a green build and passes every guard.
 
 **Tech Stack:** Rust (edition 2024, `rust-version` 1.88, CI toolchain 1.99.1), cargo workspace
 (resolver 3), clap 4, nix 0.31, serde; GitHub Actions (`ci.yml`, `release.yml`); cargo-deb
 3.8.0, cargo-generate-rpm 0.21.1, makepkg in an Arch container; cargo-mutants 27.1.0; bash,
-bsdtar, jq, python3 (only for the two one-off split scripts).
+bsdtar, file, jq, python3 (only for the two split scripts).
 
 **Spec:** `docs/superpowers/specs/2026-11-01-obsbot4linux-1.0-design.md` (revision 2), sections
 3 (architecture), 3.2 (carry-over), 3.3 (licence), 10.1 (branches and rules), 10.2 (stage G),
@@ -40,9 +38,11 @@ bsdtar, jq, python3 (only for the two one-off split scripts).
   artifacts." "There is no libudev dependency." "Packages do not enable the socket unit."
   (spec 12.1). The package name stays `obsbot4linux` in every format.
 - The 0.13 daemon and CLI keep working on top of the workspace (spec 10.2).
-- `main` is not touched by this plan. Every task is one pull request into `rebuild` with the
-  `required` check green and a review by someone other than its author (spec 10.1). When `main`
-  moves, `rebuild` is rebased onto it between pull requests (spec 10.1).
+- Task 1 is one pull request into `main`: tests and CI, the class of change spec 10.1 sends to
+  `main` first. Every other task is one pull request into `rebuild`. Each has the `required`
+  check green and a review by someone other than its author (spec 10.1). When `main` moves,
+  `rebuild` is rebased onto it while no pull request into `rebuild` is open (spec 10.1), by the
+  procedure of "Before Task 1", P4; nobody working on a task force-pushes.
 - No camera I/O. Nothing in this plan runs the binary except with `--help` or `--version`. The
   camera smoke test (CS-0) comes after the tasks and gates the release, not a task.
 - Commits are signed; messages are written through a quoted heredoc and end with the
@@ -59,20 +59,29 @@ bsdtar, jq, python3 (only for the two one-off split scripts).
 1. **Timing constants and the one sequence counter across the `camera.rs` split.** A reply gap
    of 50 ms, 20 reply attempts, a pair gap of 100 ms, a lock wait of 5 s and exactly one
    process-wide `static SEQ` must survive the split; no unit test sees a changed gap or a second
-   counter. Pinned by the move check (G6) and by Task 6, Step 7 (grep counts).
+   counter. Pinned by the move check (G6) and by Task 6, Step 7 (grep counts: a grep, not a
+   test, which is enough for a move).
 2. **ioctl definitions and `#[repr(C)]` layouts moved between `transport/uvc.rs` and
    `enumeration.rs`.** A copy instead of a move, or a changed number, compiles and passes the
    tests. Pinned by G6 and Task 4, Step 6 (each of the five ioctls and four layouts exists
-   exactly once, with its 0.13 numbers).
+   exactly once, with its 0.13 numbers; a grep, not a test).
 3. **The release profile.** `[profile.release] strip = true` must move to the workspace root;
    in a member manifest cargo ignores it and the packages ship an unstripped binary with the
-   same file list. Pinned by Task 2, Step 12 (`file` says `stripped`).
+   same file list. Pinned by Task 2, Step 12 (`file -b` ends in `, stripped`, not
+   `not stripped`) and by the `contents` job of every release run (G5), which checks the binary
+   in each of the eight packages.
 4. **Dependency versions and features.** Two crates unify features differently than one; the
-   lock file must resolve the same crates at the same versions. Pinned by Task 2, Step 11
-   (`cargo metadata` before and after).
+   lock file must resolve the same crates at the same versions with the same features. Pinned
+   by Task 2, Step 11 (`cargo metadata` and `cargo tree -e features` before and after).
 5. **Package names and metadata.** The deb and rpm name, description, licence and asset paths
    come from the binary crate's manifest after the move. Pinned by Task 2, Step 11 (package
    metadata before and after) and by the `contents` job of the release dry run (G5).
+6. **An order change inside a `Camera` flow.** The move check compares lines as a multiset: two
+   swapped statements of a flow (a write and its `sleep(PAIR_GAP)`), a line moved from one
+   function into another, or two swapped lines of a frame array or a `match` pass G1 to G6, and
+   no test drives a flow. Pinned by G6b (the splits of Tasks 4 and 6 are made by committed
+   scripts that copy contiguous line ranges, and the reviewer reproduces their output) and by
+   reading the rest of the diff with `--color-moved` (G7).
 
 ---
 
@@ -101,13 +110,56 @@ These are not tasks of this plan; the coordinator checks them before the first p
 
 - **P2. CI on `rebuild`.** `ci.yml` and `release.yml` already run for pull requests into
   `rebuild` (checked on `origin/main` 66287b5). Nothing to do.
-- **P3. Camera-free fixes in carried code land on `main` first** (spec 10.1, 10.2 "Depends
-  on"). Tasks 1 to 7 can start before they land; each later rebase of `rebuild` onto `main` then
-  carries them (git follows the renames; a `main` change to `camera.rs` after Task 6 has to be
-  ported by hand into the split file, noted in the tracking issue). Task 8's named mutants need
-  three of them (Task 8, Step 5): a test seam for the answer poll (rejected, empty, no answer,
-  read error), a test for "a rejected tracking query gives `tracking: null`, not a failed read",
-  and the tilt negation of `gimbal` as a tested pure function. They are not filed yet.
+- **P3. Camera-free fixes in carried code land on `main` first** (spec 3.2, 10.1, 10.2
+  "Depends on", 10.5). The coordinator files every item below that has no issue yet before
+  Task 1 starts and lists them all in the tracking issue of the stage. File names are those of
+  the 0.13 layout.
+
+  | Fix                                                                                                             | Issue   | Touches                                               |
+  | --------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------- |
+  | Two tests that cannot fail; daemon paths without tests                                                          | #47     | `daemon.rs`, `streaming.rs`                           |
+  | Answers: check the command id and the header CRC                                                                | #61     | `frame.rs` (`camera.rs` if the `answer` call changes) |
+  | The answer poll fails at once on a read error instead of treating it as "not ready"                             | to file | `camera.rs` (`answer`)                                |
+  | The image setter does not write white-balance temperature or absolute focus while their automatic control is on | to file | `camera.rs` (`set_image`)                             |
+  | The on-air state and its applications come from one sample                                                      | to file | `camera.rs` (`full_status_with`), `daemon.rs`         |
+  | A short preset list is a failed read                                                                            | to file | `camera.rs` (`presets`)                               |
+  | "The current pose" is the live pose                                                                             | to file | `camera.rs` (`current_pose`, `save_preset`)           |
+  | `preset save` validates the name before it sends the pose                                                       | to file | `camera.rs` (`save_preset`)                           |
+  | Test seam for the answer poll (rejected, empty, no answer, read error)                                          | to file | `camera.rs` (`answer`)                                |
+  | Test: a rejected tracking query gives `tracking: null`, not a failed read                                       | to file | `camera.rs` (`full_status_with`)                      |
+  | The tilt negation of `gimbal` as a tested pure function                                                         | to file | `camera.rs` (`gimbal`)                                |
+
+  Tasks 1 to 5 may start before these land; each rebase of `rebuild` onto `main` (P4) carries
+  them through the renames. **Task 6 starts only when every fix above that touches `camera.rs`
+  is on `main` and `rebuild` has been rebased onto it**, so the split copies the fixed code and
+  nothing is ported by hand into the split files. If `main` changes `camera.rs` after Task 6 has
+  landed anyway (a 0.13.x patch), the rebase stops at Task 6's commit; the coordinator then
+  redoes Task 6 on the rebased base (Step 2 with the anchors of the committed script corrected,
+  G6b repeated) instead of porting the change by hand. Task 8's named mutants (Task 8, Step 5)
+  need the last three rows.
+
+  Fixture rule: Task 1 lands on `main`, so a pull request on `main` that changes on purpose what
+  a builder sends or a help text re-records the fixture in the same pull request
+  (`BYTE_GUARD_BLESS=1` or `CLI_SURFACE_BLESS=1`) and lists the changed lines in its
+  description; the rebase carries the new fixture into `rebuild`. On `rebuild` no task
+  re-records a fixture.
+
+- **P4. Who rebases `rebuild`.** Every move of `main` (Task 1 itself, each fix of P3, any 0.13.x
+  patch) is followed by a rebase of `rebuild` onto `main` (spec 10.1). That replaces a shared,
+  protected branch, which is a force push, and nobody working on a task of this plan
+  force-pushes. Before `main` first moves, Thomas decides who pushes the rebased branch and the
+  decision goes into the tracking issue; until then `rebuild` is not rebased and Task 2 does not
+  start. Proposed procedure: when no pull request into `rebuild` is open, the coordinator
+  rebases in its own worktree, checks `git range-diff <old main>..<old tip> <new main>..<new tip>`
+  (only the commits of `main` are new, the `rebuild` commits differ only where a fix of `main`
+  shows through) and runs the gate of the Guards section on the new tip; then the decided person
+  runs `git push --force-with-lease=rebuild:<old tip> origin <new tip>:rebuild`, and the
+  coordinator writes old tip, new tip and the reason into the tracking issue.
+
+- **P5. Shellcheck findings in the old scripts.** `shellcheck` reports SC2086 in
+  `scripts/build-arch.sh` and SC2086 and SC2034 in `scripts/check-readback.sh` on 66287b5. The
+  gate of this plan checks only the scripts it adds; the coordinator files an issue on `main`
+  for the old ones.
 
 ## Decisions
 
@@ -136,19 +188,33 @@ Engineering decisions for this stage, with the short reason.
    version comes from `CARGO_PKG_VERSION` of the same package (now inherited). The 0.13 library
    target `obsbot4linux` disappears: its modules are `obsbot_device` now. Nothing outside the
    repository links that library (checked).
-4. **0.13 code that 1.0 does not carry goes to `obsbot_device::legacy`.** `state.rs` (spec 3.2:
-   dropped), the 0.13 status shape (`FullStatus`, `CAPABILITIES`, `LIMITS`, `StateView`,
-   `ZoneInfo`, `Zoom`, `zone_info`, `full_status`, `full_status_with`) and `current_pose`
-   (spec 3.2: not carried). The carried flows still call `State` (remembered gimbal pose and
-   exposure mode), so `legacy` has to live in the device crate during this stage. Stage W0 or
-   track A deletes `legacy` together with the 0.13 daemon and CLI; nothing in `legacy` is a
-   final path.
+4. **0.13 code whose shape 1.0 does not carry goes to `obsbot_device::legacy`.** `state.rs`
+   (spec 3.2: dropped), `current_pose` (spec 3.2: not carried) and the 0.13 status
+   (`FullStatus`, `CAPABILITIES`, `LIMITS`, `StateView`, `ZoneInfo`, `Zoom`, `zone_info`,
+   `full_status`, `full_status_with`). The carried flows still call `State` (remembered gimbal
+   pose and exposure mode), so `legacy` has to live in the device crate during this stage. Spec
+   3.1 has no such module: it exists only while the 0.13 daemon and CLI do. `legacy/full_status.rs`
+   is not shape alone: `zone_info` and `full_status_with` hold carried read logic (spec 3.2,
+   "`camera.rs` sequencing … carry over the logic"): tracking is `None` when the camera rejects
+   or does not answer the tracking query, audio volume and focus are not asked while the camera
+   sleeps, the target is not asked in static mode, and the status, zoom, pose and image reads
+   that make up a full read. Track A ports that logic into the Tiny 2 Lite's `trait Camera`
+   reads before `legacy` is deleted with the 0.13 daemon and CLI, and the file stays in the
+   mutation scope (Task 8). Keeping the two functions in `models/tiny2lite/camera.rs` instead
+   would put the 0.13 output types into the model's final module; not taken. Nothing in `legacy`
+   is a final path.
+   Module dependencies this creates: `models::tiny2lite::camera` uses `legacy::state`, and
+   `legacy::{state, full_status, current_pose}` use `models::tiny2lite`. Per file there is no
+   cycle (`legacy/state.rs` uses only `commands`); per module, `models` and `legacy` depend on
+   each other. Rust accepts this; W0 and track A should know it is there.
 5. **File names.** `models.rs` becomes `registry.rs` and the detection half of `device.rs`
    becomes `enumeration.rs`, the names of spec 3.1. The device half of `device.rs` becomes
    `transport/uvc.rs` ("one implementation talks to USB UVC devices", spec 3.1). The exchange
    part of `camera.rs` (short and framed writes, answer polling, the sequence counter) becomes
    `family/exchange.rs`: it depends only on `transport` and `family::frame`, which is the
    direction of 1.0. `frame.rs` and `streaming.rs` keep their file names under `family/`.
+   `transport::uvc` uses `enumeration` (`Device::open` calls `detect`), so the dependency runs
+   from `transport` to `enumeration`; W0 should know it is there.
 6. **Old module paths during the parallel wave.** Tasks 3 to 5 keep every old path valid with a
    re-export in `lib.rs` (`pub use family::{frame, streaming};`, an inline `pub mod device`,
    `pub use models::tiny2lite::{commands, presets, status};`), so none of them edits a file of
@@ -166,7 +232,9 @@ Engineering decisions for this stage, with the short reason.
    not change, which is what the test-name guard compares.
 8. **Mutation pass** (spec 10.2 and 11): its own last task, Task 8. Tool
    cargo-mutants 27.1.0, in place, over `obsbot-device` without `legacy/state.rs` and
-   `legacy/current_pose.rs` (not carried), with the whole workspace's tests. Survivors are
+   `legacy/current_pose.rs` (not carried), with the whole workspace's tests except the byte
+   guard: it records what the code emits, so it would kill builder mutants that no real test
+   catches, and the pass exists to find exactly those (Task 8, Step 3). Survivors are
    killed by new tests in that pull request (test modules only) or documented in its
    description; a survivor in a function without I/O must be killed or shown equivalent. Not a
    CI gate.
@@ -230,15 +298,41 @@ Defined in Task 1, named in every task. "Base" is the commit the pull request st
   `cargo clippy --workspace --all-targets --locked -- -D warnings`; the CI job `msrv`
   (Rust 1.88) green. Locally the MSRV build needs rustup and is optional; CI is the check.
 - **G5 Packaging.** The release dry run of `release.yml` on the pull request is green,
-  including the job `contents` (the file list of all eight packages equals
-  `packaging/contents.txt`). It runs when the pull request touches
-  `.github/workflows/release.yml`, `packaging/**`, `scripts/**`, a `Cargo.toml`, `Cargo.lock`, `README.md`,
-  `CHANGELOG.md`, `LICENSE` or `renovate.json`: Tasks 1 and 2. The tag run of 0.14.0 runs it
-  again on the final tree.
+  including the job `contents` (the binary in each of the eight packages is stripped, and the
+  file list of all eight packages equals `packaging/contents.txt`). It runs when the pull
+  request touches `.github/workflows/release.yml`, `packaging/**`, `scripts/**`, a
+  `Cargo.toml`, `Cargo.lock`, `README.md`, `CHANGELOG.md`, `LICENSE` or `renovate.json`: Tasks
+  1, 2, 4 and 6 (Tasks 4 and 6 add a split script under `scripts/`). The tag run of 0.14.0 runs
+  it again on the final tree.
 - **G6 Move check.** `scripts/groundwork/move-check.sh <base> HEAD` prints only the lines the
-  task lists under "Expected move check".
+  task lists under "Expected move check". It compares lines as a multiset, so it sees a dropped,
+  copied or changed line but not an order change; G6b covers that for the two splits.
+- **G6b Scripted split (Tasks 4 and 6).** The split is made by a committed script that copies
+  contiguous line ranges of the 0.13 file (`scripts/groundwork/split-device.py`,
+  `scripts/groundwork/split-camera.py`), so the order inside a block cannot change and the
+  reviewer reproduces the files it writes. `<files>` are the files the task's script writes,
+  `<git mv lines>` the `mkdir` and `git mv` lines of the task's Step 2:
+
+  ```bash
+  REPO=$(git rev-parse --show-toplevel)
+  git worktree add --detach "$SCRATCH/g6b" <base>
+  cd "$SCRATCH/g6b"
+  <git mv lines>
+  git show <head>:scripts/groundwork/<script> > "$SCRATCH/split.py"
+  python3 -I "$SCRATCH/split.py"
+  rustfmt --edition 2024 <files>
+  for f in <files>; do git show "<head>:$f" | diff -u - "$f"; done
+  cd "$REPO"
+  git worktree remove --force "$SCRATCH/g6b"
+  ```
+
+  Expected: the loop prints nothing. What is left to read by eye is the script's block list
+  (which ranges go where, in which order) and the few hand edits the task lists.
+
 - **G7 Review.** `git diff -M --stat <base> HEAD` shows the moves as renames; the reviewer reads
-  every changed line outside a pure rename.
+  every changed line outside a pure rename, with
+  `git diff -M --color-moved=zebra --color-moved-ws=allow-indentation-change <base> HEAD`, so
+  that moved blocks show as moved and anything else stands out.
 
 The gate a builder runs before every push:
 
@@ -247,28 +341,33 @@ export CARGO_TARGET_DIR="$SCRATCH/target-<task key>"
 nice -n 19 cargo fmt --check
 nice -n 19 cargo clippy --workspace --all-targets --locked -j 3 -- -D warnings
 nice -n 19 cargo test --workspace --locked -j 3
-shellcheck scripts/*.sh scripts/groundwork/*.sh
+shellcheck scripts/groundwork/*.sh scripts/package-contents.sh
 actionlint .github/workflows/*.yml
 ```
 
+(The older scripts in `scripts/` have shellcheck findings of their own, P5; a pure move does not
+touch them.)
+
 ## Order and parallel work
 
-| Task                        | Key                            | Wave | Starts from                       | Depends on |
-| --------------------------- | ------------------------------ | ---- | --------------------------------- | ---------- |
-| 1 Guards                    | `groundwork-guards`            | 1    | `origin/rebuild`                  | –          |
-| 2 Workspace                 | `groundwork-workspace`         | 2    | branch of Task 1                  | 1          |
-| 3 family                    | `groundwork-family`            | 3    | branch of Task 2                  | 2          |
-| 4 transport and enumeration | `groundwork-transport`         | 3    | branch of Task 2                  | 2          |
-| 5 tiny2lite modules         | `groundwork-tiny2lite-modules` | 3    | branch of Task 2                  | 2          |
-| 6 Split `camera.rs`         | `groundwork-camera-split`      | 4    | `origin/rebuild` after 1–5 landed | 3, 4, 5    |
-| 7 Final paths               | `groundwork-final-paths`       | 5    | branch of Task 6                  | 6          |
-| 8 Mutation pass             | `groundwork-mutants`           | 6    | branch of Task 7                  | 7          |
+| Task                        | Key                            | Wave | Starts from                                                       | Depends on |
+| --------------------------- | ------------------------------ | ---- | ----------------------------------------------------------------- | ---------- |
+| 1 Guards                    | `groundwork-guards`            | 1    | `origin/main`; pull request into `main`                           | –          |
+| 2 Workspace                 | `groundwork-workspace`         | 2    | `origin/rebuild` after it was rebased onto Task 1 (P4)            | 1          |
+| 3 family                    | `groundwork-family`            | 3    | branch of Task 2                                                  | 2          |
+| 4 transport and enumeration | `groundwork-transport`         | 3    | branch of Task 2                                                  | 2          |
+| 5 tiny2lite modules         | `groundwork-tiny2lite-modules` | 3    | branch of Task 2                                                  | 2          |
+| 6 Split `camera.rs`         | `groundwork-camera-split`      | 4    | `origin/rebuild` after 1–5 landed and the `camera.rs` fixes of P3 | 3, 4, 5    |
+| 7 Final paths               | `groundwork-final-paths`       | 5    | branch of Task 6                                                  | 6          |
+| 8 Mutation pass             | `groundwork-mutants`           | 6    | branch of Task 7                                                  | 7          |
 
 Tasks 3, 4 and 5 run side by side: they own disjoint files and one blank-line separated group
 of `lib.rs` each. Everything else is stacked, because each task moves files the next one
 needs. The camera split cannot run beside the wave-3 tasks: it needs the directories they
-create. Landing is a fast-forward of `rebuild` in key order (1, 2, 3, 4, 5, then 6, 7, 8);
-Tasks 3 to 5 rebase onto each other without conflict in any order. Branch names:
+create, and it waits for the fixes of P3 that touch `camera.rs`. Task 1 lands on `main` the way
+pull requests into `main` land, and `rebuild` is then rebased onto it (P4). The other tasks land
+as a fast-forward of `rebuild` in key order (2, 3, 4, 5, then 6, 7, 8); Tasks 3 to 5 rebase
+onto each other without conflict in any order. Branch names:
 `groundwork/<key without the "groundwork-" prefix>`.
 
 ---
@@ -283,22 +382,26 @@ Tasks 3 to 5 rebase onto each other without conflict in any order. Branch names:
   `scripts/package-contents.sh`, `packaging/contents.txt` (generated from the dry run)
 - Modify: `.github/workflows/release.yml` (new job `contents`; `release` needs it)
 
+This task is a pull request into `main` (tests and CI, spec 10.1), so that a later fix on `main`
+that changes a builder re-records the fixture in the 0.13 layout (P3, fixture rule).
+
 **Interfaces:**
 
 - Consumes: the 0.13 library paths `obsbot4linux::commands`, `obsbot4linux::frame`,
   `obsbot4linux::presets`; the binary `obsbot4linux`.
 - Produces: integration tests `byte_guard::builders_emit_the_recorded_bytes`,
   `cli_surface::help_texts_are_unchanged`, `cli_surface::version_is_the_package_version`;
-  environment switches `BYTE_GUARD_BLESS` and `CLI_SURFACE_BLESS` (only this task sets them);
+  environment switches `BYTE_GUARD_BLESS` and `CLI_SURFACE_BLESS` (set by this task, and on
+  `main` only by a change that alters a builder or a help text on purpose; never on `rebuild`);
   `scripts/groundwork/test-names.sh REV`, `scripts/groundwork/move-check.sh OLD_REV [NEW_REV]`,
-  `scripts/package-contents.sh DIR X.Y.Z`; the `release.yml` job `contents` comparing with
-  `packaging/contents.txt`.
+  `scripts/package-contents.sh DIR X.Y.Z`; the `release.yml` job `contents` checking that the
+  packaged binaries are stripped and comparing with `packaging/contents.txt`.
 
 - [ ] **Step 1: Branch**
 
 ```bash
 git fetch origin
-git switch -c groundwork/guards origin/rebuild
+git switch -c groundwork/guards origin/main
 ```
 
 - [ ] **Step 2: Write the byte guard** (`tests/byte_guard.rs`; `cargo fmt` formats it in Step 4)
@@ -311,8 +414,9 @@ git switch -c groundwork/guards origin/rebuild
 //! `tests/fixtures/byte-guard.txt`. That file was written from the 0.13 code before the
 //! workspace move, so a move that changes one byte that would go to the camera fails here.
 //!
-//! Only the task that adds this test writes the file:
-//! `BYTE_GUARD_BLESS=1 cargo test --test byte_guard`. Every later run compares.
+//! `BYTE_GUARD_BLESS=1 cargo test --test byte_guard` writes the file: once when this test is
+//! added, and on `main` in a change that alters what a builder sends on purpose (that change
+//! lists the changed lines). A move never writes it; every other run compares.
 
 use clap::ValueEnum;
 use obsbot4linux::commands::{self as cmd, *};
@@ -708,8 +812,9 @@ Expected: `left: "cmd::hdr(false) = 010101"`, `right: "cmd::hdr(false) = 010100"
 //! written from the 0.13 code before the workspace move, and `--version`. Only `--help` and
 //! `--version` run: nothing opens a device or a socket.
 //!
-//! Only the task that adds this test writes the file:
-//! `CLI_SURFACE_BLESS=1 cargo test --test cli_surface`. Every later run compares.
+//! `CLI_SURFACE_BLESS=1 cargo test --test cli_surface` writes the file: once when this test is
+//! added, and on `main` in a change that alters a help text on purpose. A move never writes it;
+//! every other run compares.
 
 use std::process::Command;
 
@@ -880,53 +985,74 @@ done | sed -e "s/$ver/VERSION/g" -e 's/x86_64\|aarch64\|amd64\|arm64/ARCH/g' | L
 
 ```bash
 chmod +x scripts/groundwork/test-names.sh scripts/groundwork/move-check.sh scripts/package-contents.sh
-shellcheck scripts/*.sh scripts/groundwork/*.sh
+shellcheck scripts/groundwork/*.sh scripts/package-contents.sh
 ```
 
-Expected: shellcheck prints nothing.
+Expected: shellcheck prints nothing (checked on these three scripts). The older scripts in
+`scripts/` are left alone (P5).
 
 - [ ] **Step 10: Add the job `contents` to `.github/workflows/release.yml`**
 
 Insert the job `contents` before the job `release`, and add `contents` to the `needs` of
 `release`. The end of the file's job list then reads (the job `release` keeps all its other
-lines):
+lines; shown from the job level, so in `release.yml` every line is indented by two more
+spaces):
 
 ```yaml
-  # Lists the files of every package and compares the list with packaging/contents.txt, so that
-  # a change to what a package holds shows up in review. A release needs it too.
-  contents:
-    needs: [version, binary, deb, rpm, arch]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          path: dist
-          pattern: dist-*
-          merge-multiple: true
-      - run: sudo apt-get install -y --no-install-recommends libarchive-tools
-      - name: Compare the package contents
-        env:
-          VER: ${{ needs.version.outputs.ver }}
-        run: |
-          scripts/package-contents.sh dist "$VER" > contents.txt
-          cat contents.txt
-          diff -u packaging/contents.txt contents.txt
-      # the list itself, also when it differs, to update packaging/contents.txt from
-      - if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: package-contents
-          path: contents.txt
-          if-no-files-found: error
+# Lists the files of every package and compares the list with packaging/contents.txt, so that
+# a change to what a package holds shows up in review. A release needs it too.
+contents:
+  needs: [version, binary, deb, rpm, arch]
+  runs-on: ubuntu-22.04
+  timeout-minutes: 10
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        path: dist
+        pattern: dist-*
+        merge-multiple: true
+    - run: sudo apt-get install -y --no-install-recommends libarchive-tools
+    # [profile.release] strip = true must reach every package (cargo ignores a member
+    # manifest's profile, and the file list alone would not show it)
+    - name: The packaged binaries are stripped
+      run: |
+        for pkg in dist/obsbot4linux*; do
+          case $pkg in
+          *.deb) bsdtar -xOf "$pkg" 'data.tar*' > payload ;;
+          *) cp "$pkg" payload ;;
+          esac
+          bin=$(bsdtar -tf payload | grep -E '(usr/bin|-linux)/obsbot4linux$')
+          bsdtar -xOf payload "$bin" > obsbot4linux.bin
+          info=$(file -b obsbot4linux.bin)
+          echo "$pkg: $info"
+          case $info in
+          *', stripped') ;;
+          *) echo "::error::$pkg ships an unstripped binary"; exit 1 ;;
+          esac
+        done
+        rm -f payload obsbot4linux.bin
+    - name: Compare the package contents
+      env:
+        VER: ${{ needs.version.outputs.ver }}
+      run: |
+        scripts/package-contents.sh dist "$VER" > contents.txt
+        cat contents.txt
+        diff -u packaging/contents.txt contents.txt
+    # the list itself, also when it differs, to update packaging/contents.txt from
+    - if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: package-contents
+        path: contents.txt
+        if-no-files-found: error
 
-  # Tags only: a pull request builds the packages above and publishes nothing.
-  release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [binary, deb, rpm, arch, contents]
+# Tags only: a pull request builds the packages above and publishes nothing.
+release:
+  if: startsWith(github.ref, 'refs/tags/')
+  needs: [binary, deb, rpm, arch, contents]
 ```
 
 Run: `actionlint .github/workflows/*.yml`
@@ -960,7 +1086,7 @@ the files of every package. The workspace move must leave all three unchanged.
 
 Co-Authored-By: <model of this session> <noreply@anthropic.com>
 EOF
-scripts/groundwork/test-names.sh origin/rebuild > "$SCRATCH/names-base.txt"
+scripts/groundwork/test-names.sh origin/main > "$SCRATCH/names-base.txt"
 scripts/groundwork/test-names.sh HEAD > "$SCRATCH/names-head.txt"
 LC_ALL=C comm -3 "$SCRATCH/names-base.txt" "$SCRATCH/names-head.txt"
 ```
@@ -969,24 +1095,49 @@ Expected from `comm`: exactly three lines, each indented by one tab (only in hea
 `builders_emit_the_recorded_bytes`, `help_texts_are_unchanged`,
 `version_is_the_package_version`.
 
-- [ ] **Step 13: Push, open the pull request into `rebuild`, record the package list**
+- [ ] **Step 13: Push, open the pull request into `main`, record the package list**
 
 ```bash
+cat > "$SCRATCH/pr-body.md" <<'EOF'
+Part of the groundwork stage of the 1.0 rebuild: Task 1 of
+`docs/superpowers/plans/2026-11-13-obsbot4linux-groundwork.md` (on the branch `rebuild`).
+Tests and CI only; no behaviour change.
+
+- `tests/byte_guard.rs` records every frame and short command the builders emit for a fixed
+  list of calls in `tests/fixtures/byte-guard.txt` (831 lines).
+- `tests/cli_surface.rs` records the `--help` text of the CLI and of every subcommand in
+  `tests/fixtures/cli-surface.txt` (88 texts) and checks `--version`.
+- The release dry run gets the job `contents`: it checks that the binary in every package is
+  stripped and compares the file list of all eight packages with `packaging/contents.txt`.
+- `scripts/groundwork/test-names.sh` and `scripts/groundwork/move-check.sh` are the test-name
+  and move checks of the later groundwork tasks.
+
+From now on, a pull request that changes on purpose what a builder sends or a help text
+re-records the fixture with `BYTE_GUARD_BLESS=1` or `CLI_SURFACE_BLESS=1` and lists the changed
+lines in its description.
+EOF
 git push -u origin groundwork/guards
-gh pr create -R hellwand/obsbot4linux --base rebuild --head groundwork/guards \
+gh pr create -R hellwand/obsbot4linux --base main --head groundwork/guards \
   --title "Groundwork: guards for the workspace move" --body-file "$SCRATCH/pr-body.md"
 ```
 
-The body says: part of the groundwork stage, Task 1 of
-`docs/superpowers/plans/2026-11-13-obsbot4linux-groundwork.md`; no behaviour change; what each
-guard records. The release dry run starts (the pull request touches `release.yml` and
-`scripts/`). Its job `contents` fails the first time: `packaging/contents.txt` does not exist
-yet. The job uploads the list it made as the artifact `package-contents`; take it from there:
+The release dry run starts (the pull request touches `release.yml` and `scripts/`). Its job
+`contents` fails the first time: `packaging/contents.txt` does not exist yet. The job uploads
+the list it made as the artifact `package-contents`; take it from there. The run can take a
+moment to appear, so its id is polled with a bound:
 
 ```bash
-run=$(gh run list -R hellwand/obsbot4linux --workflow release.yml --branch groundwork/guards \
-  --limit 1 --json databaseId --jq '.[0].databaseId')
-timeout 3600 gh run watch "$run" -R hellwand/obsbot4linux --interval 30 > /dev/null || true
+run=$(timeout 300 bash -c 'while :; do
+  id=$(gh run list -R hellwand/obsbot4linux --workflow release.yml --branch groundwork/guards \
+    --event pull_request --limit 1 --json databaseId --jq ".[0].databaseId // empty")
+  if [ -n "$id" ]; then echo "$id"; exit 0; fi
+  sleep 10
+done')
+echo "run: ${run:-none after 5 minutes, stop here}"
+timeout 3600 gh run watch "$run" -R hellwand/obsbot4linux --interval 30 > /dev/null \
+  || echo "watch failed or timed out: stop here"
+gh run view "$run" -R hellwand/obsbot4linux --json jobs \
+  --jq '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name) \(.conclusion)"'
 gh run download "$run" -R hellwand/obsbot4linux -n package-contents -D "$SCRATCH/contents"
 cp "$SCRATCH/contents/contents.txt" packaging/contents.txt
 cut -d' ' -f1 packaging/contents.txt | sort -u | wc -l
@@ -994,7 +1145,10 @@ grep -c 'obsbot4linux_VERSION_ARCH.deb' packaging/contents.txt
 grep 'VERSION-1.ARCH.rpm' packaging/contents.txt | sort -u
 ```
 
-Expected: `4` (each normalised package name stands for its two architectures); 28 deb lines (14 per architecture); the rpm
+Expected: a run id; `gh run view` prints exactly `contents failure` (any other job failing
+means stop: fix it first), and in that job the step "The packaged binaries are stripped" passed
+with eight lines ending in `, stripped`; then `4` (each normalised package name stands for its
+two architectures); 28 deb lines (14 per architecture); the rpm
 lines (each twice in the file, once per architecture):
 
 ```text
@@ -1012,6 +1166,31 @@ push, and wait for the checks: `timeout 3600 gh pr checks <PR> -R hellwand/obsbo
 
 **Expected move check:** none (nothing moves). **Guards:** G1 (three names added), G2 and G3
 (created here), G4, G5 (`contents` green), G7.
+
+**Review (G7) also:** the reviewer re-records both fixtures from the base code in a scratch copy
+and compares them with the committed ones; that is the proof they come from the 0.13 code.
+
+```bash
+git diff --stat <base> <head> -- src Cargo.toml Cargo.lock   # prints nothing: the code is the base's
+REPO=$(git rev-parse --show-toplevel)
+work=$(mktemp -d)
+git archive <head> | tar -x -C "$work"
+cd "$work"
+rm tests/fixtures/byte-guard.txt tests/fixtures/cli-surface.txt
+BYTE_GUARD_BLESS=1 CLI_SURFACE_BLESS=1 CARGO_TARGET_DIR="$work/target" \
+  nice -n 19 cargo test --locked -j 3 --test byte_guard --test cli_surface 2>&1 | grep 'test result'
+for f in byte-guard.txt cli-surface.txt; do
+  git -C "$REPO" show "<head>:tests/fixtures/$f" | cmp - "tests/fixtures/$f"
+done
+sha256sum tests/fixtures/byte-guard.txt tests/fixtures/cli-surface.txt
+cd "$REPO"
+rm -rf "$work"
+```
+
+Expected: `cmp` prints nothing; on 66287b5 the hashes are
+`0e4a70c8ea39ee7d6574bcda3b340863f751654d9cbf892d200d46e4efe0605a` (`byte-guard.txt`) and
+`3eceb47a17a6dd5570006fa69a9dcbbd5b45c26081cf8e8776d6e674001a867c` (`cli-surface.txt`); on
+another base (a fix of P3 landed first) only the `cmp` counts.
 
 ---
 
@@ -1036,18 +1215,21 @@ push, and wait for the checks: `timeout 3600 gh pr checks <PR> -R hellwand/obsbo
 
 - Consumes: Task 1's guards and scripts.
 - Produces: package `obsbot-device` with the flat modules `obsbot_device::{camera, commands,
-  device, error, frame, presets, registry, state, status, streaming}`; package `obsbot4linux`
+device, error, frame, presets, registry, state, status, streaming}`; package `obsbot4linux`
   (binary only); `lib.rs` in four blank-line separated groups that Tasks 3, 4, 5 and 6 each
   edit alone.
 
-- [ ] **Step 1: Branch from Task 1 and record the before state**
+- [ ] **Step 1: Branch from `rebuild` (rebased onto `main` with Task 1, P4) and record the
+      before state**
 
 ```bash
-git switch -c groundwork/workspace origin/groundwork/guards
+git fetch origin
+git switch -c groundwork/workspace origin/rebuild
 export CARGO_TARGET_DIR="$SCRATCH/target-groundwork-workspace"
 scripts/groundwork/test-names.sh HEAD > "$SCRATCH/names-base.txt"
 cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.source != null) | "\(.name) \(.version)"' | sort > "$SCRATCH/deps-base.txt"
 cargo metadata --no-deps --format-version 1 --locked | jq -c '.packages[] | select(.name == "obsbot4linux") | {name, version, license, description, homepage, repository, authors, edition, rust_version}' > "$SCRATCH/meta-base.txt"
+cargo tree -e normal,build,features -p obsbot4linux --locked --prefix none | grep -v '^obsbot' | sed 's/ (\*)$//' | LC_ALL=C sort -u > "$SCRATCH/features-base.txt"
 git rev-parse HEAD > "$SCRATCH/base-rev.txt"
 ```
 
@@ -1288,18 +1470,24 @@ Expected: no fmt or clippy output; `118 passed`, `1 passed` (byte_guard), `25 pa
 ```bash
 cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.source != null) | "\(.name) \(.version)"' | sort | diff "$SCRATCH/deps-base.txt" -
 cargo metadata --no-deps --format-version 1 --locked | jq -c '.packages[] | select(.name == "obsbot4linux") | {name, version, license, description, homepage, repository, authors, edition, rust_version}' | diff "$SCRATCH/meta-base.txt" -
+cargo tree -e normal,build,features -p obsbot4linux --locked --prefix none | grep -v '^obsbot' | sed 's/ (\*)$//' | LC_ALL=C sort -u | diff "$SCRATCH/features-base.txt" -
 ```
 
-Expected: both diffs print nothing.
+Expected: the three diffs print nothing. The third compares every external crate and every
+feature the binary is built with (normal and build edges, so the test-only `hex` does not
+count; the `obsbot` packages themselves are set aside). Checked in a scratch copy: 97 lines on
+66287b5 and after this task, and adding one feature to `clap` in the workspace makes it print
+`clap feature "env"` and `clap_builder feature "env"`.
 
 - [ ] **Step 12: The release binary is still stripped**
 
 ```bash
 nice -n 19 cargo build --release --locked -j 3
-file "$CARGO_TARGET_DIR/release/obsbot4linux" | grep -o 'stripped$'
+file -b "$CARGO_TARGET_DIR/release/obsbot4linux" | grep -q ', stripped$' && echo stripped
 ```
 
-Expected: `stripped`. The packages themselves are built by the release dry run of the pull
+Expected: `stripped`. (`file` ends the line of an unstripped binary with `not stripped`, so the
+pattern needs the comma; without `strip = true` at the workspace root this prints nothing.) The packages themselves are built by the release dry run of the pull
 request (G5).
 
 - [ ] **Step 13: Commit, guards, pull request**
@@ -1340,8 +1528,8 @@ shows every moved file as a rename (`{src => crates/obsbot-device/src}/frame.rs 
 ```
 
 (`lib.rs` changes only `mod` lines, which the check sets aside; its doc line stays.) Push,
-pull request into `rebuild` titled "Groundwork: make the source a cargo workspace", stacked on
-Task 1's pull request; wait for the checks as in Task 1, Step 13.
+pull request into `rebuild` titled "Groundwork: make the source a cargo workspace"; wait for
+the checks with `timeout 3600 gh pr checks <PR> -R hellwand/obsbot4linux --watch --interval 30`.
 **Guards:** G1, G2, G3, G4, G5 (the dry run runs: `Cargo.toml` changed; `contents` green with
 the unchanged `packaging/contents.txt`), G6, G7.
 
@@ -1440,7 +1628,9 @@ packaging input changes).
 **Files:**
 
 - Move: `crates/obsbot-device/src/device.rs` → `crates/obsbot-device/src/transport/uvc.rs`
-- Create: `crates/obsbot-device/src/transport/mod.rs`, `crates/obsbot-device/src/enumeration.rs`
+- Create: `crates/obsbot-device/src/transport/mod.rs`, `crates/obsbot-device/src/enumeration.rs`,
+  `scripts/groundwork/split-device.py` (the split script, committed so that the reviewer can
+  run it again: G6b)
 - Modify: `crates/obsbot-device/src/lib.rs` (the group `pub mod device; pub mod registry;`
   only)
 
@@ -1461,19 +1651,24 @@ git rev-parse HEAD > "$SCRATCH/base-rev.txt"
 scripts/groundwork/test-names.sh HEAD > "$SCRATCH/names-base.txt"
 ```
 
-- [ ] **Step 2: Move and split.** Save the script below as `$SCRATCH/split-device.py` (not in
-      the repository) and run it from the repository root.
+- [ ] **Step 2: Move and split.** Write the script below as
+      `scripts/groundwork/split-device.py` (it is committed with this task) and run it from the
+      repository root; `rustfmt` then removes the doubled blank lines the split leaves in
+      `uvc.rs` (three places).
 
 ```bash
 mkdir -p crates/obsbot-device/src/transport
 git mv crates/obsbot-device/src/device.rs crates/obsbot-device/src/transport/uvc.rs
-python3 -I "$SCRATCH/split-device.py"
+python3 -I scripts/groundwork/split-device.py
+rustfmt --edition 2024 crates/obsbot-device/src/transport/uvc.rs crates/obsbot-device/src/enumeration.rs
 ```
 
 ```python
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Splits crates/obsbot-device/src/transport/uvc.rs (the 0.13 device.rs, moved there with git
 mv) into uvc.rs (the device and its ioctls) and enumeration.rs (finding the camera). Every
-block is copied unchanged. Run from the repository root: python3 -I split-device.py"""
+block is copied unchanged. Run from the repository root:
+python3 -I scripts/groundwork/split-device.py"""
 
 D = "crates/obsbot-device/src"
 UVC = D + "/transport/uvc.rs"
@@ -1577,7 +1772,8 @@ open(UVC, "w").write(text)
 ```
 
 Expected: no output (every anchor matched). If an assertion fails, `main` changed `device.rs`:
-find the anchors with `grep -n`, correct the numbers and say so in the pull request.
+find the anchors with `grep -n`, correct the numbers in the committed script and say so in the
+pull request; the reviewer reruns the corrected script (G6b), nothing is edited by hand.
 
 - [ ] **Step 3: Write `crates/obsbot-device/src/transport/mod.rs`**
 
@@ -1667,7 +1863,10 @@ Expected: `comm` prints nothing. **Expected move check:**
 ```
 
 Pull request into `rebuild` titled "Groundwork: split device.rs into transport and
-enumeration", stacked on Task 2's. **Guards:** G1, G2, G3, G4, G6, G7.
+enumeration", stacked on Task 2's. **Guards:** G1, G2, G3, G4, G5 (the dry run runs: the script
+is under `scripts/`), G6, G6b with
+`<files>` = `crates/obsbot-device/src/transport/uvc.rs crates/obsbot-device/src/enumeration.rs`
+and `<script>` = `split-device.py`, G7.
 
 ---
 
@@ -1680,7 +1879,7 @@ enumeration", stacked on Task 2's. **Guards:** G1, G2, G3, G4, G6, G7.
 - Create: `crates/obsbot-device/src/models/mod.rs`,
   `crates/obsbot-device/src/models/tiny2lite/mod.rs`
 - Modify: `crates/obsbot-device/src/lib.rs` (the group `pub mod commands; pub mod presets;
-  pub mod status;` only)
+pub mod status;` only)
 
 **Interfaces:**
 
@@ -1776,7 +1975,8 @@ models/tiny2lite", stacked on Task 2's. **Guards:** G1, G2, G3, G4, G6, G7.
 
 ### Task 6: Split `camera.rs`
 
-Starts after Tasks 1 to 5 have landed on `rebuild`.
+Starts after Tasks 1 to 5 have landed on `rebuild` and every fix of "Before Task 1", P3, that
+touches `camera.rs` is on `main` with `rebuild` rebased onto it (P4).
 
 **Files:**
 
@@ -1785,9 +1985,10 @@ Starts after Tasks 1 to 5 have landed on `rebuild`.
   `crates/obsbot-device/src/legacy/state.rs`
 - Create: `crates/obsbot-device/src/family/exchange.rs`,
   `crates/obsbot-device/src/legacy/mod.rs`, `crates/obsbot-device/src/legacy/full_status.rs`,
-  `crates/obsbot-device/src/legacy/current_pose.rs`
+  `crates/obsbot-device/src/legacy/current_pose.rs`, `scripts/groundwork/split-camera.py` (the
+  split script, committed so that the reviewer can run it again: G6b)
 - Modify: `crates/obsbot-device/src/lib.rs` (the group `pub mod camera; pub mod error; pub mod
-  state;`), `crates/obsbot-device/src/family/mod.rs`,
+state;`), `crates/obsbot-device/src/family/mod.rs`,
   `crates/obsbot-device/src/models/tiny2lite/mod.rs`, `crates/obsbot4linux/src/cli.rs` and
   `crates/obsbot4linux/src/daemon.rs` (the `use` lines that name `camera`),
   `docs/center-parity.md` (two paths)
@@ -1796,16 +1997,16 @@ Starts after Tasks 1 to 5 have landed on `rebuild`.
 
 - Consumes: `crate::family::frame::{Answer, Sequence, parse_answer, query_frame}`,
   `crate::transport::uvc::{Device, CtrlRange}`, `crate::models::tiny2lite::{commands, presets,
-  status}`, `crate::family::streaming` (Tasks 3 to 5).
+status}`, `crate::family::streaming` (Tasks 3 to 5).
 - Produces: `obsbot_device::family::exchange::{Camera, PAIR_GAP}` (`Camera::open() ->
-  Result<Camera>`; `pub(crate)` fields `dev: Device`, `seq: &'static Sequence`; `pub(crate)`
+Result<Camera>`; `pub(crate)` fields `dev: Device`, `seq: &'static Sequence`; `pub(crate)`
   methods `short(&self, &[u8]) -> Result<()>`, `framed(&self, &[u8]) -> Result<()>`,
   `pair(&self, [[u8; 60]; 2]) -> Result<()>`, `query(&self, u16) -> Result<Vec<u8>>`,
   `query_to(&self, u8, u16) -> Result<Vec<u8>>`, `answer(&self, u16, u16) -> Result<Vec<u8>>`);
   `obsbot_device::models::tiny2lite::camera::{Identity, LivePose, Zone, Hand, HandArea,
-  Framing, Offset, ImageControl, IMAGE_CONTROLS, ZOOM_ABSOLUTE}` and every flow method of
+Framing, Offset, ImageControl, IMAGE_CONTROLS, ZOOM_ABSOLUTE}` and every flow method of
   `Camera`; `obsbot_device::legacy::full_status::{CAPABILITIES, FullStatus, Limits, LIMITS,
-  StateView, ZoneInfo, Zoom}` with `Camera::{zone_info, full_status, full_status_with}`;
+StateView, ZoneInfo, Zoom}` with `Camera::{zone_info, full_status, full_status_with}`;
   `obsbot_device::legacy::current_pose` with `Camera::current_pose` (`pub(crate)`);
   `obsbot_device::legacy::state` (old path `obsbot_device::state` kept as a re-export until
   Task 7).
@@ -1820,20 +2021,25 @@ git rev-parse HEAD > "$SCRATCH/base-rev.txt"
 scripts/groundwork/test-names.sh HEAD > "$SCRATCH/names-base.txt"
 ```
 
-- [ ] **Step 2: Move, then split.** Save the script below as `$SCRATCH/split-camera.py` (not
-      in the repository) and run it from the repository root.
+- [ ] **Step 2: Move, then split.** Write the script below as
+      `scripts/groundwork/split-camera.py` (it is committed with this task) and run it from the
+      repository root. `rustfmt` changes nothing here (checked on 66287b5); it runs so that the
+      step is the one G6b repeats.
 
 ```bash
 mkdir -p crates/obsbot-device/src/legacy
 git mv crates/obsbot-device/src/state.rs crates/obsbot-device/src/legacy/state.rs
 git mv crates/obsbot-device/src/camera.rs crates/obsbot-device/src/models/tiny2lite/camera.rs
-python3 -I "$SCRATCH/split-camera.py"
+python3 -I scripts/groundwork/split-camera.py
+rustfmt --edition 2024 crates/obsbot-device/src/family/exchange.rs crates/obsbot-device/src/legacy/full_status.rs crates/obsbot-device/src/legacy/current_pose.rs crates/obsbot-device/src/models/tiny2lite/camera.rs
 ```
 
 ```python
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Splits crates/obsbot-device/src/models/tiny2lite/camera.rs (the 0.13 camera.rs, moved there
 with git mv) into four files. Every block is copied unchanged; the only edits are the visibility
-widenings listed in VIS. Run from the repository root: python3 -I split-camera.py"""
+widenings listed in VIS. Run from the repository root:
+python3 -I scripts/groundwork/split-camera.py"""
 
 import os
 
@@ -2085,8 +2291,10 @@ write(
 )
 ```
 
-Expected: no output. If an assertion fails, `main` changed `camera.rs`: find the anchors with
-`grep -n`, correct the numbers and say so in the pull request.
+Expected: no output. If an assertion fails, `main` changed `camera.rs` (the fixes of P3 will
+have): find the anchors with `grep -n`, correct the numbers in `ANCHORS` and the block lists of
+the committed script and say so in the pull request; the reviewer reruns the corrected script
+(G6b), nothing is edited by hand. Every block stays a contiguous range of the 0.13 file.
 
 - [ ] **Step 3: Write `crates/obsbot-device/src/legacy/mod.rs`**
 
@@ -2218,7 +2426,10 @@ Expected: `comm` prints nothing; the stat shows `{ => legacy}/state.rs | 0` and
 ```
 
 Pull request into `rebuild` titled "Groundwork: split camera.rs". **Guards:** G1, G2, G3, G4,
-G6, G7.
+G5 (the dry run runs: the script is under `scripts/`), G6, G6b with `<files>` = the four files
+of the `rustfmt` line of Step 2 and `<script>` = `split-camera.py`, G7. The reviewer reads the
+script's block lists against the 0.13 `camera.rs` and the hand edits of Steps 3 to 5; Review
+Focus 1 and 6 are the points to look for.
 
 ---
 
@@ -2227,7 +2438,7 @@ G6, G7.
 **Files:**
 
 - Modify: `crates/obsbot-device/src/lib.rs`, `crates/obsbot-device/src/models/tiny2lite/
-  {commands,presets,status,camera}.rs`, `crates/obsbot-device/src/legacy/state.rs`,
+{commands,presets,status,camera}.rs`, `crates/obsbot-device/src/legacy/state.rs`,
   `crates/obsbot-device/src/registry.rs` (doc comment),
   `crates/obsbot-device/tests/byte_guard.rs`, `crates/obsbot4linux/src/{cli,client,daemon}.rs`
 
@@ -2235,7 +2446,7 @@ G6, G7.
 
 - Consumes: the paths of Tasks 3 to 6.
 - Produces: the final module tree of "Target layout"; the old paths `obsbot_device::{frame,
-  streaming, device, commands, presets, status, state}` no longer exist.
+streaming, device, commands, presets, status, state}` no longer exist.
 
 - [ ] **Step 1: Branch from Task 6, record the base**
 
@@ -2388,18 +2599,30 @@ Expected on top of 66287b5: `847`; per file: `enumeration.rs` 16, `family/exchan
 `models/tiny2lite/presets.rs` 169, `models/tiny2lite/status.rs` 81, `registry.rs` 5,
 `transport/uvc.rs` 36 (other numbers if `main` added code; the run records what it found).
 
-- [ ] **Step 3: Run the pass** (in place, one job, low priority: in-place mutation needs a
-      clean tree and touches only this worktree; about 20 minutes)
+- [ ] **Step 3: Run the pass** (in place, one mutant at a time, builds with three jobs and low
+      priority: in-place mutation needs a clean tree and touches only this worktree; about 20 to
+      30 minutes)
+
+The byte guard is skipped (`SKIP`, passed through `cargo test` to the test binaries): it
+records what the builders emit, so it would kill builder mutants that no real test catches.
+Measured on the tree of Task 7 over `frame.rs`, `commands.rs` and `presets.rs`: 27 missed
+without it, 18 with it; the nine it hides are range bounds of builders and sign handling in
+`gimbal_rate`, exactly what this pass is meant to find. The pull request records the skip.
 
 ```bash
+SKIP=(-- -- --skip builders_emit_the_recorded_bytes)
+export CARGO_BUILD_JOBS=3
 git status --short   # must print nothing
-timeout 7200 nice -n 19 cargo mutants "${SCOPE[@]}" --in-place --output "$SCRATCH/mutants" 2>&1 | tail -n 1
+timeout 7200 nice -n 19 cargo mutants "${SCOPE[@]}" --in-place --output "$SCRATCH/mutants" \
+  "${SKIP[@]}" 2>&1 | tail -n 1
 git status --short   # must print nothing again
 ```
 
 Expected: the baseline test run passes, then a last line
 `847 mutants tested in …: N missed, M caught, U unviable` (and timeouts if any). The lists
-are in `$SCRATCH/mutants/mutants.out/{missed,caught,timeout,unviable}.txt`.
+are in `$SCRATCH/mutants/mutants.out/{missed,caught,timeout,unviable}.txt`. If `timeout` ends
+the run, the tree can stay mutated: `git checkout -- crates`, then `git status --short` must
+print nothing; a cut-off run is not the pass and is started again.
 
 - [ ] **Step 4: Give every missed mutant a disposition**
 
@@ -2408,7 +2631,7 @@ Each line of `missed.txt` gets exactly one:
 - **K, killed here:** a new test in the module's existing test module. Expected bytes come from
   a recording (cite "capture N") or from the layout the code documents, never from running the
   code. Rerun that mutant to show it is caught:
-  `cargo mutants "${SCOPE[@]}" --in-place -F '<regex matching only that line of missed.txt>'`
+  `cargo mutants "${SCOPE[@]}" --in-place -F '<regex matching only that line of missed.txt>' "${SKIP[@]}"`
   → `1 mutant tested …: 1 caught` (escape `( ) [ ] { } * + . ?` in the regex).
 - **D, needs the device:** a method of `Camera` or `Device` whose effect is an extension-unit
   or V4L2 call, or an ioctl structure field. Track A's replay transport covers these.
@@ -2470,7 +2693,8 @@ EOF
 ```
 
 The pull request ("Groundwork: mutation pass over the carried modules", stacked on Task 7's)
-records: the command line, the tool version, the commit, the last line of the run, a table of
+records: the command line (with the skip of the byte guard and the reason), the tool version,
+the commit, the last line of the run, a table of
 dispositions with counts (K, D, L, E, M), the full `missed.txt` in a collapsed section with the
 disposition at the end of each line, and the three named items with their state. If no
 survivor is K, there is no code change and no pull request: the same record goes into the
@@ -2496,21 +2720,27 @@ Not tasks of this plan; listed so that nobody releases early.
 - **Spec coverage (10.2 content):** workspace with `[workspace.package]` and
   `[workspace.dependencies]` – Task 2; `crates/obsbot-device` with `transport`, `family`,
   `models/tiny2lite`, `registry` as plain modules – Tasks 2 to 5 and 7; `camera.rs` split into
-  transport-side exchange and Tiny 2 Lite flows – Task 6; the 0.13 daemon and CLI unchanged in
+  the exchange and the Tiny 2 Lite flows – Task 6 (spec 10.2 calls the exchange part
+  "transport"; spec 3.1 puts answer matching and the short-command write in `family`, so it
+  goes to `family/exchange.rs`, on top of `transport/uvc.rs`); the 0.13 daemon and CLI unchanged in
   `crates/obsbot4linux` – Tasks 2, 6, 7 and G3; byte tests moved with their code – every task,
   G1; CI and packaging for the workspace, package metadata in the binary crate – Task 2, G5;
   one mutation pass, survivors fixed or documented – Task 8. Acceptance without camera: every
-  0.13.2 test present – G1; the diff shows renames and module paths only – G6, G7; `--help`
+  0.13.2 test present – G1; the diff shows renames and module paths only – G6, G6b, G7; `--help`
   equals 0.13.2's – G3; eight artifacts with the 0.13 binary – G5; the named mutants – Task 8,
   Step 5 (open until P3). Acceptance with camera – "After the tasks". Spec 3.3 licence notes –
   the split scripts write the EUPL note into every file that receives code from a noted file
   (`enumeration.rs`, `exchange.rs`, `full_status.rs`, `current_pose.rs`, `camera.rs`).
 - **Placeholder scan:** the only filled-in values left to the builder are the model name in
-  the `Co-Authored-By` line, the pull request number in `gh pr checks`, and the regex of a K
-  rerun, each defined where it appears.
+  the `Co-Authored-By` line, the pull request number in `gh pr checks`, the regex of a K
+  rerun, `<base>`, `<head>`, `<files>` and `<script>` of a review check, and the tips of a
+  rebase (P4), each defined where it appears.
 - **Type and name consistency:** the module paths of each task's "Produces" are the ones the
   next task's "Consumes" and `sed` lines use (checked by building the whole sequence once in a
   scratch copy of `rebuild`: every task's gate, G1, G2, G3 and G6 gave the outputs written
-  here).
-- **Review Focus:** each of the five items has its check in the owning task (Task 6 Step 7,
-  Task 4 Step 6, Task 2 Steps 11 and 12, G5).
+  here). The commands added after review were run once on 66287b5 as well: the shellcheck line
+  of the gate, the strip check (it fails on an unstripped binary, also inside a deb), the
+  feature-tree diff (empty across Task 2, not empty after a feature change) and the two split
+  scripts followed by `rustfmt`.
+- **Review Focus:** each of the six items has its check in the owning task (Task 6 Step 7,
+  Task 4 Step 6, Task 2 Steps 11 and 12 with the `contents` job, G5, G6b).
