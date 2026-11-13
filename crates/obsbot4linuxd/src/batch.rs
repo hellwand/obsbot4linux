@@ -23,6 +23,9 @@ enum Outcome {
     Skip,
     Get(Option<Vec<String>>),
     Done(Option<Params>),
+    /// A single-leaf `set` answered `ok` without being sent: a later one of the same
+    /// connection names the same leaf (4.1 rule 9).
+    Coalesced,
     Refused(Refusal),
     /// The camera failed midway: the leaves applied before it, and the one that failed.
     Failed {
@@ -43,7 +46,6 @@ struct Written {
 impl Worker {
     /// Runs one batch (the plan's `take` requests, in order).
     pub(crate) fn batch(&mut self, jobs: Vec<Job>, coalesced: Vec<bool>) {
-        let _ = coalesced;
         let deadline = self.timing.request_deadline;
         // The rev of the last state this worker published: read before anything can unplug the
         // entry, for the answers of a batch the device leaves (5.6).
@@ -83,6 +85,10 @@ impl Worker {
                             continue;
                         }
                     };
+                    if coalesced[i] {
+                        outcomes.push(Outcome::Coalesced);
+                        continue;
+                    }
                     deadlines.push(job.arrived + deadline);
                     let ctx =
                         Ctx::new(Some(job.arrived + deadline), Some(self.queue.ended.clone()));
@@ -203,6 +209,13 @@ impl Worker {
                             result: result.clone(),
                         }),
                     )),
+                    Outcome::Coalesced => job.answer(ok_line(
+                        &job.id,
+                        OkBody::Rev(RevOk {
+                            rev: last_rev,
+                            result: None,
+                        }),
+                    )),
                     Outcome::Refused(r) => {
                         job.answer(error_line(Some(&job.id), error(r.code.clone(), &r.message)));
                     }
@@ -273,6 +286,9 @@ impl Worker {
                 }
                 Outcome::Done(result) => {
                     job.answer(ok_line(&job.id, OkBody::Rev(RevOk { rev, result })));
+                }
+                Outcome::Coalesced => {
+                    job.answer(ok_line(&job.id, OkBody::Rev(RevOk { rev, result: None })));
                 }
                 Outcome::Refused(r) => {
                     job.answer(error_line(Some(&job.id), error(r.code.clone(), &r.message)));
