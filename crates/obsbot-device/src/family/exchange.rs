@@ -98,23 +98,9 @@ mod tests {
     const COMMAND: u16 = 0x1344;
     const SEQ: u16 = 7;
 
-    /// A selector-2 reply of the given type for `SEQ`, as `parse_answer` reads it: header
-    /// length 16, an optional error code in the header extension, an optional data section.
+    /// A selector-2 reply of the given type for `SEQ`, in the recorded layout.
     fn reply(kind: u8, command: u16, code: Option<i16>, data: &[u8]) -> [u8; XU_SIZE] {
-        let mut r = [0u8; XU_SIZE];
-        r[0] = 0xaa;
-        r[1] = kind;
-        r[2..4].copy_from_slice(&SEQ.to_le_bytes());
-        r[4..6].copy_from_slice(&16u16.to_le_bytes());
-        r[10..12].copy_from_slice(&command.to_le_bytes());
-        if let Some(code) = code {
-            r[12..14].copy_from_slice(&[0x00, 0x02]);
-            r[14..16].copy_from_slice(&code.to_le_bytes());
-        } else {
-            r[12..14].copy_from_slice(&(data.len() as u16).to_le_bytes());
-        }
-        r[16..16 + data.len()].copy_from_slice(data);
-        r
+        crate::transport::replay::answer_frame(kind, SEQ, 0x04, command, code, data)
     }
 
     /// Polls with scripted reads, no waiting; returns the result and the number of reads taken.
