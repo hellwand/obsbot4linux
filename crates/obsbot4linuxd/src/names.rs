@@ -91,16 +91,41 @@ fn support_text(support: &Support) -> String {
         .unwrap_or_default()
 }
 
+/// The longest foreign text a log line carries, in characters, the cut marker included.
+const LOG_TEXT_CAP: usize = 120;
+
+/// Text the daemon did not write (a client name, a device's answer, a sysfs name) made safe for
+/// ONE log line: every control character (`char::is_control`: line breaks, carriage return,
+/// escape, the C1 range) and the line and paragraph separators U+2028 and U+2029 become `?`,
+/// and anything past [`LOG_TEXT_CAP`] characters is cut (never inside a character) and ends in
+/// `…`. Ordinary text comes back unchanged.
+pub fn printable(text: &str) -> String {
+    let mut out = String::new();
+    for (count, c) in text.chars().enumerate() {
+        if count == LOG_TEXT_CAP {
+            out.pop();
+            out.push('…');
+            break;
+        }
+        out.push(if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+            '?'
+        } else {
+            c
+        });
+    }
+    out
+}
+
 /// 5.11: one line for every device that appears: id, model, USB ids, USB path, support level,
 /// and for a `port:` id of a supported model the reason.
 pub fn log_appeared(device: &Device, reason: Option<PortReason>) -> String {
     let mut line = format!(
         "obsbot4linuxd: device {} appeared: model {}, USB {}:{}, path {}, support {}",
-        short_id(&device.id),
+        printable(&short_id(&device.id)),
         device.model,
-        device.usb.vendor,
-        device.usb.product,
-        device.usb.path,
+        printable(&device.usb.vendor),
+        printable(&device.usb.product),
+        printable(&device.usb.path),
         support_text(&device.support)
     );
     if let Some(r) = reason {
@@ -113,29 +138,35 @@ pub fn log_appeared(device: &Device, reason: Option<PortReason>) -> String {
 pub fn log_handover(old: &str, new: &str) -> String {
     format!(
         "obsbot4linuxd: device {} is now {}",
-        short_id(old),
-        short_id(new)
+        printable(&short_id(old)),
+        printable(&short_id(new))
     )
 }
 
 /// 5.11: one line for a device that goes.
 pub fn log_gone(id: &str) -> String {
-    format!("obsbot4linuxd: device {} went away", short_id(id))
+    format!(
+        "obsbot4linuxd: device {} went away",
+        printable(&short_id(id))
+    )
 }
 
 /// A device whose camera could not be opened (it stays listed, every leaf unread).
 pub fn log_open_failed(id: &str, error: &str) -> String {
     format!(
-        "obsbot4linuxd: device {} could not be opened: {error}",
-        short_id(id)
+        "obsbot4linuxd: device {} could not be opened: {}",
+        printable(&short_id(id)),
+        printable(error)
     )
 }
 
 /// 4.2: a camera value the model cannot decode, logged once per device and value.
 pub fn log_raw(id: &str, leaf: &str, value: &str) -> String {
     format!(
-        "obsbot4linuxd: device {} reported {leaf} = {value}, which its model cannot decode",
-        short_id(id)
+        "obsbot4linuxd: device {} reported {} = {}, which its model cannot decode",
+        printable(&short_id(id)),
+        printable(leaf),
+        printable(value)
     )
 }
 
@@ -143,8 +174,9 @@ pub fn log_raw(id: &str, leaf: &str, value: &str) -> String {
 /// (`CameraError::NotInSendTable`); the request is answered `internal`.
 pub fn log_refused_frame(id: &str, message: &str) -> String {
     format!(
-        "obsbot4linuxd: device {}: a frame outside the send table was refused and not sent: {message}",
-        short_id(id)
+        "obsbot4linuxd: device {}: a frame outside the send table was refused and not sent: {}",
+        printable(&short_id(id)),
+        printable(message)
     )
 }
 
@@ -273,5 +305,91 @@ mod tests {
             log_appeared(&unknown, None),
             "obsbot4linuxd: device port:9-3 appeared: model unknown, USB 3564:fa00, path 9-3, support unsupported"
         );
+    }
+
+    /// Foreign text that would break a log line: line breaks, a carriage return, an escape
+    /// sequence, U+2028, and a string far past the cap.
+    fn hostile() -> Vec<String> {
+        vec![
+            "a\nb".into(),
+            "a\rb".into(),
+            "a\x1b[31mred".into(),
+            "a\u{2028}b\u{2029}c\u{85}d".into(),
+            "x".repeat(5000),
+        ]
+    }
+
+    /// One line, no control character, and not longer than the fixed text plus the cap.
+    fn assert_one_line(line: &str, fixed: usize) {
+        assert!(
+            !line.contains(['\n', '\r', '\u{2028}', '\u{2029}'])
+                && !line.chars().any(char::is_control),
+            "{line:?}"
+        );
+        assert!(line.chars().count() <= fixed + 5 * LOG_TEXT_CAP, "{line:?}");
+    }
+
+    /// The point of the issue: foreign text must not add lines or escape sequences to the log.
+    #[test]
+    fn printable_replaces_controls_and_caps_the_length() {
+        assert_eq!(
+            printable("a\nb\rc\x1bd\u{2028}e\u{2029}f\u{85}g"),
+            "a?b?c?d?e?f?g"
+        );
+        let long = printable(&"x".repeat(5000));
+        assert_eq!(long.chars().count(), LOG_TEXT_CAP);
+        assert!(long.ends_with('…'));
+        // Exactly at the cap nothing is cut; multi-byte characters are never split.
+        assert_eq!(
+            printable(&"x".repeat(LOG_TEXT_CAP)),
+            "x".repeat(LOG_TEXT_CAP)
+        );
+        let wide = printable(&"ä".repeat(500));
+        assert_eq!(wide.chars().count(), LOG_TEXT_CAP);
+    }
+
+    #[test]
+    fn ordinary_text_is_unchanged() {
+        for t in [
+            "widget 1.0",
+            "tracking.mode",
+            "raw:9",
+            "port:3-2.1",
+            "Größe …0001",
+        ] {
+            assert_eq!(printable(t), t);
+        }
+    }
+
+    #[test]
+    fn foreign_text_in_log_lines_stays_on_one_line() {
+        for h in hostile() {
+            assert_one_line(&log_open_failed("sn:FAKEA0000001", &h), 120);
+            assert_one_line(&log_raw("sn:FAKEA0000001", &h, "v"), 120);
+            assert_one_line(&log_raw("sn:FAKEA0000001", "leaf", &h), 120);
+            assert_one_line(&log_raw("sn:FAKEA0000001", &h, &h), 120);
+            assert_one_line(&log_refused_frame("sn:FAKEA0000001", &h), 120);
+            // A port id carries the sysfs path, so the id is foreign too.
+            let port = format!("port:{h}");
+            assert_one_line(&log_gone(&port), 120);
+            assert_one_line(&log_handover(&port, &port), 120);
+            assert_one_line(&log_open_failed(&port, "e"), 120);
+            assert_one_line(&log_raw(&port, "l", "v"), 120);
+            assert_one_line(&log_refused_frame(&port, "m"), 120);
+            // A device entry from sysfs: path, vendor and product are read, not written.
+            let mut found = scan().remove(0);
+            found.usb.path = h.clone();
+            found.usb.vendor = h.clone();
+            found.usb.product = h.clone();
+            let d = supported_device(
+                &found,
+                found.model.unwrap(),
+                Description::default(),
+                &format!("port:{h}"),
+                None,
+                None,
+            );
+            assert_one_line(&log_appeared(&d, Some(PortReason::NoSerial)), 160);
+        }
     }
 }

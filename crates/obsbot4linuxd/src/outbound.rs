@@ -144,6 +144,7 @@ pub fn log_full(conn: ConnId, client: &str) -> String {
     } else {
         client
     };
+    let client = crate::names::printable(client);
     format!("obsbot4linuxd: closed connection {conn} ({client}): its outbound queue was full")
 }
 
@@ -203,6 +204,27 @@ mod tests {
             log_full(4, ""),
             "obsbot4linuxd: closed connection 4 (no hello): its outbound queue was full"
         );
+    }
+
+    /// A client name is foreign text: one line, no control character, capped, whatever the
+    /// `hello` held.
+    #[test]
+    fn the_client_name_cannot_add_lines_to_the_log() {
+        let fixed = log_full(3, "").chars().count();
+        for name in [
+            "a\nb",
+            "a\rb",
+            "a\x1b[31mred",
+            "a\u{2028}b",
+            &"x".repeat(5000),
+        ] {
+            let line = log_full(3, name);
+            assert!(
+                !line.chars().any(|c| c.is_control() || c == '\u{2028}'),
+                "{line:?}"
+            );
+            assert!(line.chars().count() <= fixed + 120, "{line:?}");
+        }
     }
 
     /// The golden lines of `errors.jsonl` and `session.jsonl` come out byte for byte.
