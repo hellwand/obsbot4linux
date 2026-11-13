@@ -2715,7 +2715,9 @@ tracking issue of the stage, and the task ends there.
 Not tasks of this plan; listed so that nobody releases early.
 
 1. The named mutants of Task 8, Step 5 are all caught (needs P3 on the branch the pass runs on;
-   it is on `rebuild`).
+   it is on `rebuild`). One open item from that pass stays: the call site of `tilt_to_pitch` in
+   `Camera::gimbal` (the mutant `let tilt_wire = tilt;` survives, because no test calls
+   `Camera::gimbal`); it needs a seam for the state path or the replay transport of Track A.
 2. The camera smoke test CS-0 (spec 10.2, CAM-30) on the real Tiny 2 Lite with a build of the
    tip of `rebuild`: `status`, one setting set and read back, one gimbal move, `preset list`.
 3. A release pull request into `rebuild`: workspace version 0.14.0, `Cargo.lock`, PKGBUILD

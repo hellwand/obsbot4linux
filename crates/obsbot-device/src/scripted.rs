@@ -2,8 +2,8 @@
 
 //! A scripted camera for tests: a [`Device`](crate::transport::uvc::Device) that answers from a
 //! table instead of ioctls, so the flows of `Camera` run without a camera. It sits behind the
-//! same four methods the real device uses (`xu_get`, `xu_set`, `get_ctrl`, `ctrl_range`) and is
-//! compiled in tests only.
+//! same five methods the real device uses (`xu_get`, `xu_set`, `get_ctrl`, `set_ctrl`,
+//! `ctrl_range`) and is compiled in tests only.
 
 use crate::error::{Error, Result};
 use crate::family::exchange::Camera;
