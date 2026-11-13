@@ -22,6 +22,7 @@ on:
       - scripts/**
       - Cargo.toml
       - Cargo.lock
+      - crates/*/Cargo.toml
       - README.md
       - CHANGELOG.md
       - LICENSE
@@ -115,13 +116,13 @@ jobs:
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
           --component rustfmt --component clippy --no-self-update
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo test --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
       - run: |
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
           test -n "$msrv"
           rustup toolchain install "$msrv" --profile minimal --no-self-update
-          cargo "+$msrv" test --locked
+          cargo "+$msrv" test --workspace --locked
 
   # One job per package format and architecture: a failure reruns only that job.
   binary:
@@ -200,7 +201,7 @@ jobs:
           mkdir dist
           # no rebuild: package the binary from the binary job (artifacts drop the mode)
           chmod +x target/release/obsbot4linux
-          cargo deb --no-build --deb-revision "" -o "dist/obsbot4linux_${ver}_$DEB.deb"
+          cargo deb -p obsbot4linux --no-build --deb-revision "" -o "dist/obsbot4linux_${ver}_$DEB.deb"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-deb-${{ matrix.arch }}
@@ -237,7 +238,7 @@ jobs:
           ver=$VER
           mkdir dist
           chmod +x target/release/obsbot4linux
-          cargo generate-rpm -o "dist/obsbot4linux-$ver-1.$ARCH.rpm"
+          cargo generate-rpm -p crates/obsbot4linux -o "dist/obsbot4linux-$ver-1.$ARCH.rpm"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-rpm-${{ matrix.arch }}
