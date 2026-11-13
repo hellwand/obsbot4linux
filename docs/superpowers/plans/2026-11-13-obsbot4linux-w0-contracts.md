@@ -6222,9 +6222,10 @@ refusal first.
    There is no rollback.
 6. Motion actions reply when the camera accepted the command; the pose moves through later
    events.
-   An action sends exactly what it names, nothing before and nothing after it: a `gimbal.move`
-   while the tracking is on leaves `tracking.mode` alone. A client that wants the tracking off
-   first sets `tracking.mode` to `static` in its own request.
+   An action sends exactly what it names, nothing before and nothing after it: the daemon
+   sends no `tracking.mode` write with a `gimbal.move`; what the camera then does with its
+   tracking shows in the state. A client that wants the tracking off first sets
+   `tracking.mode` to `static` in its own request.
 7. Additive changes keep protocol 2: fields, actions, models, enum values, live topics, setting
    types, units. Clients ignore unknown fields and event types, show unknown enum values as
    raw text, show settings of an unknown type read-only as text, and treat an unknown error
@@ -8725,7 +8726,7 @@ git commit -m "obsbot4linuxd: crate stub with its fixed entry point run(Config)"
 
 ## Self-review
 
-1. **Spec coverage.** Section 3: crates, dependency direction and its CI check (Tasks 1, 5, 6, 11), `schema/` and `descriptions/` and `scripts/regenerate.sh` (3, 10). Section 4.1: every verb, reply, event and error code as a type (1), the ordering rules as transcript checks where a transcript can show them (4); the rest is daemon behaviour (track B). Section 4.2: every Device, Setting and Action field (1), the rules leaves, one meaning per path, naming, absent vs null, `unread`, `raw:<n>`, precision, identity shortening (1, 2, 12). Sections 4.3 and 4.4: every leaf and action (8), checked against the field ledger's rows. Sections 5.1 to 5.3: the enumeration seam `Bus`/`Found`/`Registry` (5) and the fakes' plug, unplug and re-enumeration (9); threads and start-up are track B. Section 5.12: the fakes and the test control (9). Section 6: the client is track C (decision 14); the CLI crate's dependency rule (6). Section 8.1 to 8.3: registry, `trait Camera`, send table types (5). Section 9.3: every row marked (8). Section 10.3 W0: the acceptance table above. Section 11: golden files and stale tests (1, 3, 4, 10). Not in W0 by the spec: daemon behaviour, the transports, the CLI commands, the widget.
+1. **Spec coverage.** Section 2 (a request sends exactly what it names): the fakes, Task 9 `a_move_while_tracking_sends_only_the_move`. Section 3: crates, dependency direction and its CI check (Tasks 1, 5, 6, 11), `schema/` and `descriptions/` and `scripts/regenerate.sh` (3, 10). Section 4.1: every verb, reply, event and error code as a type (1), the ordering rules as transcript checks where a transcript can show them (4); the rest is daemon behaviour (track B). Section 4.2: every Device, Setting and Action field (1), the rules leaves, one meaning per path, naming, absent vs null, `unread`, `raw:<n>`, precision, identity shortening (1, 2, 12). Sections 4.3 and 4.4: every leaf and action (8), checked against the field ledger's rows. Sections 5.1 to 5.3: the enumeration seam `Bus`/`Found`/`Registry` (5) and the fakes' plug, unplug and re-enumeration (9); threads and start-up are track B. Section 5.12: the fakes and the test control (9). Section 6: the client is track C (decision 14); the CLI crate's dependency rule (6). Section 8.1 to 8.3: registry, `trait Camera`, send table types (5). Section 9.3: every row marked (8). Section 10.3 W0: the acceptance table above. Section 11: golden files and stale tests (1, 3, 4, 10). Not in W0 by the spec: daemon behaviour, the transports, the CLI commands, the widget.
 2. **Placeholder scan.** Every code step holds the whole file or the exact lines; the stubs of Tasks 1, 5 and 11 are complete files whose content later tasks replace.
 3. **Type consistency.** The names in every Interfaces block were compiled together in one workspace: `Refusal` lives in `obsbot_proto::validate` from Task 1 on; `Ctx`, `Motion`, `Need`, `Target`, `Group`, `Tier`, `LiveTier`, `SendTable`, `IdentitySource`, `ModelEntry` in `obsbot_device::contract`; `act` takes `&State` everywhere it is called or implemented (Tasks 5, 7, 9); `FakeBus` in `obsbot_device::models::fake`; `Config` in `obsbot4linuxd`.
 4. **Review Focus.** Five uncovered input classes, each with its test in the owning task (Tasks 1 and 2).
