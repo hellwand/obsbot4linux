@@ -45,12 +45,12 @@ sleep 1
 # 0x0104 gesture switches (and the status block's target lock), both directions
 for v in on off on; do
 	b=$([ $v = on ] && echo true || echo false)
-	try tracking.target_lock $v $b .tracking.target_lock gesture set target-lock $v
+	try tracking.target_lock $v "$b" .tracking.target_lock gesture set target-lock $v
 	sleep 1.5 # the status block follows the 0x0104 readback about 1 s late
-	chk status.gesture_target_lock $v $b .status.gesture_target_lock
-	try tracking.zoom_gesture $v $b .tracking.zoom_gesture gesture set zoom $v
-	try tracking.dynamic_zoom $v $b .tracking.dynamic_zoom gesture set dynamic-zoom $v
-	try tracking.direction_change $v $b .tracking.direction_change gesture set direction-change $v
+	chk status.gesture_target_lock $v "$b" .status.gesture_target_lock
+	try tracking.zoom_gesture $v "$b" .tracking.zoom_gesture gesture set zoom $v
+	try tracking.dynamic_zoom $v "$b" .tracking.dynamic_zoom gesture set dynamic-zoom $v
+	try tracking.direction_change $v "$b" .tracking.direction_change gesture set direction-change $v
 done
 for r in 1.0 1.5 3.0 4.0 2.0; do
 	try tracking.gesture_zoom_ratio $r $r .tracking.gesture_zoom_ratio gesture zoom-ratio $r
@@ -59,8 +59,8 @@ done
 # status block: audio and auto-sleep
 for v in on off on; do
 	b=$([ $v = on ] && echo true || echo false)
-	try status.auto_gain $v $b .status.auto_gain audio gain $v
-	try status.mic_in_sleep $v $b .status.mic_in_sleep audio sleep-mic $v
+	try status.auto_gain $v "$b" .status.auto_gain audio gain $v
+	try status.mic_in_sleep $v "$b" .status.mic_in_sleep audio sleep-mic $v
 done
 for d in near standard far near; do
 	try status.pickup_distance $d "\"$d\"" .status.pickup_distance audio distance $d
@@ -83,7 +83,7 @@ done
 # Status block and 0x0104 must both show the mode; a gesture can switch it, retry once
 for m in normal upper-body close-up headless lower-body hand group static; do
 	j=${m//-/_}
-	for attempt in 1 2; do
+	for _ in 1 2; do
 		t tracking $m >/dev/null
 		sleep 2
 		now=$(st | jq -c '[.status.ai_mode, .tracking.ai_mode]')
