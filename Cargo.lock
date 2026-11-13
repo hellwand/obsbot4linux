@@ -198,6 +198,7 @@ version = "0.14.0"
 dependencies = [
  "clap",
  "nix",
+ "obsbot-device",
  "obsbot-proto",
  "obsbot4linuxd",
  "serde",
