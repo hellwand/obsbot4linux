@@ -3,7 +3,7 @@
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "timezone": "Europe/Berlin",
   "schedule": ["* 0-5 * * 1"],
-  "dependencyDashboard": { "enabled": true },
+  "dependencyDashboard": true,
   "automerge": false,
   "enabledManagers": ["cargo", "github-actions", "custom.regex"],
   "lockFileMaintenance": {
