@@ -1,0 +1,26 @@
+…0001  Fake B 0001  fake-b  untested
+firmware: 0.9.1
+video node: /dev/video104
+usb: 3564:fa0b Fake B, path 9-2
+settings:
+  asleep: bool, read-only (Asleep)
+  beacon.color: enum red|green|blue, asleep accepted, settle 1000 ms (Beacon colour)
+  beacon.pulse: bool, no readback, asleep unknown (Beacon pulse)
+  exposure.mode: enum auto|manual, asleep unknown, settle 1000 ms (Exposure)
+  exposure.time: number 100..10000, unit us, asleep unknown, requires exposure.mode=manual, live auto, settle 1000 ms (Exposure time)
+  led.blink: bool, no readback, asleep accepted (LED blink)
+  led.brightness: number 0..5, step 1, asleep unknown, settle 1000 ms (LED brightness)
+  on_air.active: bool, read-only (On air)
+  on_air.apps: list of name, read-only (Applications using the camera)
+  presets: list of name, slot, read-only (Presets)
+  tracking.mode: enum off|person|desk, asleep unknown, settle 1000 ms (Tracking)
+  zoom.factor: number 1..2, unit factor, asleep ignored, settle 1000 ms (Zoom)
+actions:
+  beacon.flash: times (number 1..3, step 1), asleep accepted (Flash the beacon)
+  preset.delete: slot (number 0..4, step 1), asleep unknown (Delete a preset)
+  preset.recall: slot (number 0..4, step 1), asleep unknown (Recall a preset)
+  preset.save: name (string of at most 16 characters, printable ASCII, optional), slot (number 0..4, step 1), asleep ignored (Save a preset)
+  sleep: no parameters, asleep unknown (Sleep)
+  wake: no parameters, asleep accepted (Wake)
+limits:
+  presets: 5

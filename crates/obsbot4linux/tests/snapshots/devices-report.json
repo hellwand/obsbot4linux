@@ -1,0 +1,63 @@
+{
+  "devices": [
+    {
+      "model": "fake-a",
+      "support": "tested",
+      "firmware": "1.0.0.0",
+      "video_node": "/dev/video102",
+      "usb": {
+        "vendor": "3564",
+        "product": "fa0a",
+        "product_name": "Fake A",
+        "bcd_device": "0100",
+        "path": "9-1",
+        "serial_present": false,
+        "interfaces": [
+          "0e",
+          "0e",
+          "01",
+          "01"
+        ],
+        "extension_units": []
+      }
+    },
+    {
+      "model": "fake-b",
+      "support": "untested",
+      "firmware": "0.9.1",
+      "video_node": "/dev/video104",
+      "usb": {
+        "vendor": "3564",
+        "product": "fa0b",
+        "product_name": "Fake B",
+        "bcd_device": "0100",
+        "path": "9-2",
+        "serial_present": false,
+        "interfaces": [
+          "0e",
+          "0e"
+        ],
+        "extension_units": []
+      }
+    },
+    {
+      "model": "unknown",
+      "support": "unsupported",
+      "firmware": null,
+      "video_node": "/dev/video106",
+      "usb": {
+        "vendor": "3564",
+        "product": "fa00",
+        "product_name": "Unknown Camera",
+        "bcd_device": "0100",
+        "path": "9-3",
+        "serial_present": false,
+        "interfaces": [
+          "0e",
+          "0e"
+        ],
+        "extension_units": []
+      }
+    }
+  ]
+}

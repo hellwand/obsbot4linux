@@ -1,0 +1,101 @@
+…0001  Fake A 0001  fake-a
+available: yes
+asleep: no
+audio
+  auto_gain: off
+  enabled: off
+  in_sleep: off
+  noise_reduction: off
+  volume: 0%
+exposure
+  anti_flicker: off
+  compensation: 9.0
+  gain: 1.0
+  hdr: off
+  mode: auto
+  region: face
+  time: 33000 µs
+focus
+  mode: continuous
+  position: 0.0
+  region: face
+framing
+  auto_zoom: off
+  offset.x: 0
+  offset.y: 0
+  part: normal
+  size: long_shot
+  zoom_speed: slow
+gestures
+  direction_change: off
+  dynamic_zoom: off
+  target_lock: off
+  zoom: off
+  zoom_ratio: 1×
+gimbal
+  invert: off
+  pan: 0°
+  tilt: 0°
+hand
+  area.pan: min -150° max 150°
+  area.tilt: min -70° max 90°
+  axes.pan: off
+  axes.tilt: off
+  move_gimbal: –
+  return: –
+  return_after: 0 s
+  side: left
+image
+  brightness: 50.0
+  contrast: 50.0
+  frame_rate: 30 fps
+  hue: 50.0
+  mirror: off
+  saturation: 50.0
+  sharpness: 50.0
+  white_balance.auto: on
+  white_balance.temperature: 5000 K
+led
+  blink: –
+  brightness: 0
+on_air
+  active: no
+  apps: (none)
+power_on
+  mode: static
+  settings.auto_exposure: –
+  settings.autofocus: –
+  settings.contrast: –
+  settings.exposure_compensation: 0
+  settings.hue: –
+  settings.saturation: –
+  settings.sharpness: –
+  settings.tracking_speed: –
+  settings.white_balance_mode: –
+  settings.white_balance_temperature: –
+  start.mode: static
+  start.pose: pan 0° tilt 0° zoom 1×
+  start.source: own
+presets: (none)
+sleep
+  auto.enabled: off
+  auto.seconds: 1 s
+  background: black
+  background_mirror: off
+  wake_zoom: 1×
+tracking
+  mode: static
+  profile: standard
+  speed: lazy
+  target.box: –
+  target.detected: no
+views: (none)
+zone
+  area.pan: min -150° max 150°
+  area.tilt: min -70° max 90°
+  enabled: off
+  follow: off
+  return: pan 0° tilt 0° zoom 1×
+zoom
+  factor: 1×
+  field_of_view: wide
