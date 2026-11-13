@@ -2,10 +2,18 @@ name: Release
 
 # A tag push builds and publishes the release. A pull request that touches the release path
 # runs the same build jobs as a dry run: nothing is published, release is skipped and verify
-# runs only its toolchain check.
+# checks the toolchain and the CHANGELOG section of the Cargo.toml version.
+# workflow_dispatch is a dry run of the tag checks on `sha` (default: the head of the ref):
+# on main and green as a pull request. It builds, publishes and deploys nothing.
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Dry run: the commit to check (default: the head of the ref). Publishes nothing."
+        required: false
+        type: string
   pull_request:
     branches: [main, rebuild]
     paths:
@@ -49,29 +57,49 @@ jobs:
           test -n "$ver"
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
-  # Fails at once unless the tagged commit is on main, Cargo.toml, PKGBUILD and CHANGELOG.md
-  # match the tag and ci.yml tests with the same toolchain. On a pull request only the
-  # toolchain check runs. The job itself must not be skipped: GitHub then skips every job
-  # that depends on it, directly or not.
+  # Fails at once unless the tagged commit is on main, was green as a pull request
+  # (scripts/release-green.sh), Cargo.toml, PKGBUILD and CHANGELOG.md match the tag and ci.yml
+  # tests with the same toolchain. On a pull request it checks the toolchain and the section of
+  # the Cargo.toml version, so a release commit is checked before its tag exists. The job itself
+  # must not be skipped: GitHub then skips every job that depends on it, directly or not.
   verify:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # the run behind the required check
+      checks: read # the required check run
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - if: startsWith(github.ref, 'refs/tags/')
-        run: git merge-base --is-ancestor HEAD origin/main
+      - if: github.event_name != 'pull_request'
+        run: |
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "$(git rev-parse HEAD) is not on main" >&2
+            exit 1
+          }
+      - if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release-green.sh "$(git rev-parse HEAD)"
       - if: startsWith(github.ref, 'refs/tags/')
         run: scripts/changelog-section.sh "$GITHUB_REF_NAME" > /dev/null
+      - if: github.event_name == 'pull_request'
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          scripts/changelog-section.sh "v$ver" > /dev/null
       - run: |
           grep -qxF -e "  RUSTUP_TOOLCHAIN: '$RUSTUP_TOOLCHAIN'" \
             -e "  RUSTUP_TOOLCHAIN: \"$RUSTUP_TOOLCHAIN\"" .github/workflows/ci.yml
 
-  # The fmt, clippy, test and msrv steps of ci.yml.
+  # The fmt, clippy, test and msrv steps of ci.yml. Skipped on a dry run, and with it every
+  # build job below.
   test:
     needs: verify
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
