@@ -107,6 +107,11 @@ impl Daemon {
         Client::connect(&self.socket)
     }
 
+    /// Like `connect`, but a refused connect is `None`.
+    pub fn try_connect(&self) -> Option<Client> {
+        Client::try_connect(&self.socket)
+    }
+
     /// A connection after `hello`; returns it and the `ok` payload of the reply.
     pub fn hello(&self, subscribe: bool, live: &[&str]) -> (Client, Value) {
         let mut c = self.connect();
@@ -186,6 +191,23 @@ impl Client {
             events: Vec::new(),
             next: 100,
         }
+    }
+
+    /// Like `connect`, but a refused connect is `None`.
+    pub fn try_connect(path: &std::path::Path) -> Option<Client> {
+        let stream = UnixStream::connect(path).ok()?;
+        let reader = BufReader::new(stream.try_clone().ok()?);
+        Some(Client {
+            stream,
+            reader,
+            events: Vec::new(),
+            next: 100,
+        })
+    }
+
+    /// Like `send`, but a refused write (EPIPE, reset) is `false`, never a panic.
+    pub fn try_send(&mut self, v: &Value) -> bool {
+        self.stream.write_all(format!("{v}\n").as_bytes()).is_ok()
     }
 
     /// A fresh request id.
