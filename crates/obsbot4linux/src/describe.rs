@@ -5,6 +5,7 @@
 //! the protocol objects instead and never goes through this module.
 
 use crate::errors::device_line;
+use crate::escape::escape;
 use obsbot_proto::{Action, Bound, Device, Setting, SettingType, UnitSpec};
 use serde::Serialize;
 use serde_json::Value;
@@ -150,7 +151,7 @@ fn plain(v: &Value) -> String {
 
 /// A setting on one line, its label last.
 pub fn setting_text(s: &Setting) -> String {
-    format!("{} ({})", setting_core(s), s.label)
+    escape(&format!("{} ({})", setting_core(s), s.label)).into_owned()
 }
 
 /// An action on one line: its parameters, asleep behaviour, conditions, warnings and result,
@@ -175,13 +176,13 @@ pub fn action_text(a: &Action) -> String {
             parts.push(format!("result {name} ({})", setting_core(r)));
         }
     }
-    format!("{} ({})", parts.join(", "), a.label)
+    escape(&format!("{} ({})", parts.join(", "), a.label)).into_owned()
 }
 
 /// The device entry: its line, firmware, video node, USB facts, then every setting, action
 /// and limit.
 pub fn device_text(d: &Device) -> String {
-    let dash = |v: &Option<String>| v.clone().unwrap_or_else(|| "–".into());
+    let dash = |v: &Option<String>| v.as_deref().map_or("–".into(), |s| escape(s).into_owned());
     let mut out = format!("{}\n", device_line(d));
     out.push_str(&format!("firmware: {}\n", dash(&d.firmware)));
     out.push_str(&format!("video node: {}\n", dash(&d.video_node)));
@@ -190,7 +191,7 @@ pub fn device_text(d: &Device) -> String {
         d.usb.vendor,
         d.usb.product,
         dash(&d.usb.product_name),
-        d.usb.path
+        escape(&d.usb.path)
     ));
     let desc = &d.description;
     if desc.settings.is_empty() {
@@ -198,7 +199,7 @@ pub fn device_text(d: &Device) -> String {
     } else {
         out.push_str("settings:\n");
         for (path, s) in &desc.settings {
-            out.push_str(&format!("  {path}: {}\n", setting_text(s)));
+            out.push_str(&format!("  {}: {}\n", escape(path), setting_text(s)));
         }
     }
     if desc.actions.is_empty() {
@@ -206,13 +207,13 @@ pub fn device_text(d: &Device) -> String {
     } else {
         out.push_str("actions:\n");
         for (name, a) in &desc.actions {
-            out.push_str(&format!("  {name}: {}\n", action_text(a)));
+            out.push_str(&format!("  {}: {}\n", escape(name), action_text(a)));
         }
     }
     if !desc.limits.is_empty() {
         out.push_str("limits:\n");
         for (path, n) in &desc.limits {
-            out.push_str(&format!("  {path}: {n}\n"));
+            out.push_str(&format!("  {}: {n}\n", escape(path)));
         }
     }
     out

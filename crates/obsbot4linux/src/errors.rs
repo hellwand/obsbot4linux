@@ -4,6 +4,7 @@
 //! An error the daemon sent keeps its code; `usage`, `ambiguous_device`, `no_device` and
 //! `daemon` exist only here and are never sent by the daemon.
 
+use crate::escape::escape;
 use obsbot_proto::{Device, ErrorBody, ErrorCode, Support, short_id};
 use serde_json::{Value, json};
 use std::io::Write;
@@ -132,20 +133,20 @@ impl CliError {
 
     /// The lines human output prints on stderr.
     pub fn human(&self) -> String {
-        let mut out = format!("obsbot4linux: {}\n", self.message);
+        let mut out = format!("obsbot4linux: {}\n", escape(&self.message));
         for d in &self.devices {
             out.push_str(&format!("  {}\n", device_line(d)));
         }
         if let Some(body) = &self.body {
             if let Some(applied) = &body.applied {
-                out.push_str(&format!("  applied: {}\n", applied.join(", ")));
+                out.push_str(&format!("  applied: {}\n", escape(&applied.join(", "))));
             }
             if let Some(failed) = &body.failed {
-                out.push_str(&format!("  failed: {failed}\n"));
+                out.push_str(&format!("  failed: {}\n", escape(failed)));
             }
         }
         if let Some(hint) = &self.hint {
-            out.push_str(&format!("{hint}\n"));
+            out.push_str(&format!("{}\n", escape(hint)));
         }
         out
     }
@@ -164,7 +165,7 @@ pub fn device_line(d: &Device) -> String {
     if !d.available {
         line.push_str("  unavailable");
     }
-    line
+    escape(&line).into_owned()
 }
 
 /// The wire name of a support level, a level this client does not know included.

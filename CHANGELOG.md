@@ -19,6 +19,7 @@ All notable changes to OBSBot4Linux. The format follows
 
 ### Fixed
 
+- The new command line shows text it received from the daemon (preset and device names, string values, error texts) with control characters, line and paragraph separators and bidirectional formatting characters replaced by visible escapes (`\x1b`, `\u{202e}`), so such text cannot change what the terminal shows; `--json` output is unchanged (#250).
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
   leaves the repository clean; a local build is labelled with the release version (#120).
 - `docs/center-parity.md` describes obsbot4linux 0.13 instead of 0.6.0: hand area, auto zoom,

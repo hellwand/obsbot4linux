@@ -8,6 +8,7 @@ pub mod args;
 pub mod completions;
 pub mod describe;
 pub mod errors;
+pub mod escape;
 pub mod read;
 pub mod render;
 pub mod select;

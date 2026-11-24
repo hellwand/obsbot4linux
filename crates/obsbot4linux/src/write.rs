@@ -5,6 +5,7 @@
 //! tracking as it is, and a user who wants it off runs `set tracking.mode=static` first.
 
 use crate::errors::CliError;
+use crate::escape::escape;
 use crate::{Ctx, render, session, value};
 use obsbot_proto::{Action, Params, RevOk};
 use serde_json::Value;
@@ -73,7 +74,7 @@ pub fn act(ctx: &mut Ctx, action: &str, args: &[String]) -> Result<(), CliError>
                 Some(setting) => render::value_text(setting, v),
                 None => v.to_string(),
             };
-            let _ = writeln!(ctx.out, "{name}: {text}");
+            let _ = writeln!(ctx.out, "{}: {}", escape(name), escape(&text));
         }
     }
     Ok(())
