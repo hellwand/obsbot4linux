@@ -121,10 +121,12 @@ impl Pending {
             .collect()
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.waits.is_empty()
     }
 
+    #[cfg(test)]
     pub fn contains(&self, leaf: &str) -> bool {
         self.waits.contains_key(leaf)
     }
@@ -185,6 +187,7 @@ impl Pending {
     }
 
     /// The device became unavailable: `pending` is emptied (4.1 rule 4).
+    #[cfg(test)]
     pub fn clear(&mut self) {
         self.waits.clear();
     }

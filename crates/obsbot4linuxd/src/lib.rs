@@ -7,10 +7,6 @@
 //! command id, no offset and no selector of any model: everything model-specific comes through
 //! `trait Camera` and `trait Bus` (section 5, 8.2).
 
-// Removed by task b-14-tests-hotplug-process, the last task that wires a worker feature;
-// until then the stubs of the skeleton and the features still to come leave items unused.
-#![allow(dead_code, unused_variables, unused_imports)]
-
 mod batch;
 mod conn;
 mod control;

@@ -88,13 +88,6 @@ impl Outbound {
         }
     }
 
-    /// Closes the connection: no further line is queued, and the socket is shut down in both
-    /// directions, which ends its reader and writer threads.
-    pub fn close(&self) {
-        self.shared.closed.store(true, Ordering::SeqCst);
-        self.shutdown();
-    }
-
     /// Marks the connection closed without touching its socket: no further line is queued,
     /// and a worker skips every request of this connection it has not started, also one it
     /// has already taken into a batch (4.1 rule 9). The writer still sends what is queued, so

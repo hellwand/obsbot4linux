@@ -715,6 +715,7 @@ impl Table {
     }
 
     /// The listed devices, for tests and logs.
+    #[cfg(test)]
     pub fn devices(&self) -> Vec<Device> {
         self.lock().listed()
     }

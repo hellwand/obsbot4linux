@@ -373,6 +373,11 @@ impl Worker {
     fn tick(&mut self, tier: Tier) {
         let was_asleep = self.state.asleep();
         let topics = self.table.topics();
+        if tier == self.model.identity_tier
+            && let Some(need) = self.series.at_tick(!was_asleep)
+        {
+            self.attempt(need);
+        }
         for name in self.schedule.groups(&self.plan, tier, &topics, was_asleep) {
             // A device that went or a daemon that stops serves nothing more: the loop of `run`
             // answers the queue (5.6 "Unavailable").
@@ -401,6 +406,9 @@ impl Worker {
     /// The camera woke (5.7 "Wake and retries"): every group with a leaf in `unread` is read
     /// now, the `touched` ones included, and the next tick of each tier read counts from here.
     pub(crate) fn wake(&mut self) {
+        if let Some(need) = self.series.at_wake() {
+            self.attempt(need);
+        }
         let groups = Schedule::wake_groups(&self.plan, &self.state.unread);
         for name in &groups {
             if self.queue.halt.load(Ordering::SeqCst) {
