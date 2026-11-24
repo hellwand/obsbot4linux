@@ -22,13 +22,14 @@ chmod -R a+rwX "$work"
 # calling user (HOST_UID/HOST_GID): their uids differ on CI runners, and without the
 # chown the cleanup trap above cannot delete the files (and /tmp is sticky).
 # PKGEXT is set because Arch Linux ARM's makepkg.conf still defaults to .pkg.tar.xz.
-# Arch does not support partial upgrades, so installing cargo needs -Syu. That pulls the
+# Arch does not support partial upgrades, so installing cargo (and jq, which the tests of
+# check() need: scripts/check-model.sh) needs -Syu. That pulls the
 # current packages from the mirrors: the image digest pins only the starting point, the
 # build is not reproducible.
 docker run --rm -v "$work:/work" -e VER="$ver" -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   "$image" sh -ec '
   trap "chown -R \$HOST_UID:\$HOST_GID /work" EXIT
-  pacman -Syu --noconfirm --needed --disable-sandbox cargo
+  pacman -Syu --noconfirm --needed --disable-sandbox cargo jq
   useradd -m builder
   chown -R builder /work
   su builder -c "cd /work && OBSBOT4LINUX_TARBALL=/work/obsbot4linux-$VER.tar.gz PKGDEST=/work/out PKGEXT=.pkg.tar.zst makepkg --noconfirm"
