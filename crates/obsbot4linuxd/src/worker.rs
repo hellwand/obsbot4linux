@@ -17,7 +17,7 @@ use obsbot_device::contract::{
 };
 use obsbot_proto::validate::{Fit, check_value, leaves, validate_get};
 use obsbot_proto::values::is_raw;
-use obsbot_proto::{Description, OkBody, Patch, RevState, State, port_id};
+use obsbot_proto::{Description, OkBody, Patch, RevState, State, Warning, port_id};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -108,6 +108,13 @@ pub fn run(p: Plugged) {
             drop(w.queue.take_all());
             w.queue.close();
             return;
+        }
+        if let Some(until) = w.quiet_until {
+            if until > Instant::now() {
+                w.queue.wait_quiet(until);
+                continue;
+            }
+            w.quiet_until = None;
         }
         if w.queue.len() > 0 {
             let jobs = w.queue.take_all();
@@ -364,6 +371,28 @@ impl Worker {
         }
         self.schedule.ticked(tier, Instant::now(), &self.timing);
         self.publish(Cause::Poll);
+        if was_asleep && !self.state.asleep() {
+            self.wake();
+        }
+    }
+
+    /// The camera woke (5.7 "Wake and retries"): every group with a leaf in `unread` is read
+    /// now, the `touched` ones included, and the next tick of each tier read counts from here.
+    pub(crate) fn wake(&mut self) {
+        let groups = Schedule::wake_groups(&self.plan, &self.state.unread);
+        for name in &groups {
+            if self.queue.halt.load(Ordering::SeqCst) {
+                break;
+            }
+            let ok = self.read_group(name, &self.poll_ctx());
+            if self.group(name).is_some_and(|g| g.tier == Tier::Touched) {
+                self.schedule.touched_read(name, ok);
+            }
+        }
+        let topics = self.table.topics();
+        self.schedule
+            .woke(&self.plan, &groups, &topics, Instant::now(), &self.timing);
+        self.publish(Cause::Poll);
     }
 
     /// One identity attempt (5.5).
@@ -397,7 +426,23 @@ impl Worker {
             let setting = desc.settings.get(&leaf)?;
             (!setting.readonly && check_value(setting, &value, Fit::Write).is_ok()).then_some(leaf)
         };
-        let plan = queue::plan(&jobs, |_| false, single_leaf);
+        // 5.6 "Restart": a `set` with a leaf whose setting warns `restart`, or a `do` whose
+        // action does.
+        let restarts = |job: &Job| match &job.work {
+            Work::Set(patch) => leaves(desc, patch).is_ok_and(|found| {
+                found.iter().any(|(leaf, _)| {
+                    desc.settings
+                        .get(leaf)
+                        .is_some_and(|s| s.warning.contains(&Warning::Restart))
+                })
+            }),
+            Work::Do { action, .. } => desc
+                .actions
+                .get(action)
+                .is_some_and(|a| a.warning.contains(&Warning::Restart)),
+            Work::Get(_) => false,
+        };
+        let plan = queue::plan(&jobs, restarts, single_leaf);
         if plan.take == 0 {
             return;
         }
