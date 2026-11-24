@@ -52,11 +52,26 @@ fn a_new_device_number_is_an_unplug_and_a_plug() {
     let (mut c, _) = d.hello(true, &[]);
     d.control(&format!("{{\"unplug\":\"{A}\"}}"));
     d.control("{\"plug\":\"fake-a\"}");
+    // The old worker's 100 ms poll may publish one more `available: true` state event after the
+    // unplug and before the scan reports it; the series starts at the first `devices` event and
+    // ends at the first `available: true` event that follows an `available: false` one.
+    let seen_off = std::cell::Cell::new(false);
     let events = collect_until(&mut c, |e| {
-        state_of(A)(e) && e["state"]["available"] == true
+        if !state_of(A)(e) {
+            return false;
+        }
+        match e["state"]["available"] {
+            Value::Bool(false) => {
+                seen_off.set(true);
+                false
+            }
+            Value::Bool(true) => seen_off.get(),
+            _ => false,
+        }
     });
+    let first = events.iter().position(devices).expect("a devices event");
     assert_eq!(
-        summary(&events, A),
+        summary(&events[first..], A),
         [
             format!("devices {A}!,{B},{UNKNOWN}"),
             "state false".to_string(),

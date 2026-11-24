@@ -15,6 +15,17 @@ use std::time::Duration;
 
 const T: Duration = Duration::from_secs(5);
 
+/// A child process that is killed and reaped when the guard drops, so a failing assertion leaves
+/// no daemon running.
+struct KillOnDrop(std::process::Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// 5.9: a second daemon on the same socket path exits with a message naming the lock file.
 #[test]
 fn a_second_daemon_on_the_same_socket_is_refused_by_the_lock() {
@@ -56,17 +67,23 @@ fn socket_activation_serves_the_inherited_socket() {
     ])
     .env("OBSBOT4LINUX_SOCKET", &socket)
     .stdin(Stdio::null());
-    // SAFETY: dup2 is async-signal-safe; it gives the child the listener as fd 3, as systemd
-    // does, and clears close-on-exec on the copy.
+    // SAFETY: dup2 and fcntl are async-signal-safe; they give the child the listener as fd 3, as
+    // systemd does, with close-on-exec cleared. When the listener already is fd 3, dup2 does
+    // nothing and leaves close-on-exec set, so that case clears the flag itself.
     unsafe {
         cmd.pre_exec(move || {
-            if nix::libc::dup2(fd, 3) < 0 {
+            let done = if fd == 3 {
+                nix::libc::fcntl(3, nix::libc::F_SETFD, 0)
+            } else {
+                nix::libc::dup2(fd, 3)
+            };
+            if done < 0 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
         });
     }
-    let mut child = cmd.spawn().unwrap();
+    let mut child = KillOnDrop(cmd.spawn().unwrap());
     let mut c = Client::connect(&socket);
     let ok = c.hello(false, &[]);
     assert_eq!(ids(&ok["devices"]), [A]);
@@ -75,11 +92,11 @@ fn socket_activation_serves_the_inherited_socket() {
         "the lock is taken for an inherited socket too"
     );
     nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(child.id() as i32),
+        nix::unistd::Pid::from_raw(child.0.id() as i32),
         nix::sys::signal::Signal::SIGTERM,
     )
     .unwrap();
-    assert_eq!(child.wait().unwrap().code(), Some(0));
+    assert_eq!(child.0.wait().unwrap().code(), Some(0));
     assert!(socket.exists(), "an inherited socket file is systemd's");
     drop(listener);
     let _ = std::fs::remove_dir_all(dir);
