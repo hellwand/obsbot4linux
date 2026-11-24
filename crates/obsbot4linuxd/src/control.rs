@@ -72,9 +72,7 @@ mod tests {
 
     #[test]
     fn control_lines_reach_the_fake_bus() {
-        let dir = std::env::temp_dir().join(format!("o4ld-ctl-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_dir("ctl");
         let socket = dir.join("s.sock");
         // The daemon adds `.lock` and `.test`; a Unix socket path holds at most 107 bytes.
         assert!(

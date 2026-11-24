@@ -10,8 +10,7 @@ fn the_test_timing_shortens_only_tiers_and_scans() {
     let t = common::fast();
     assert_eq!(t.request_deadline, obsbot_proto::REQUEST_DEADLINE);
     assert!(t.second < t.five_seconds && t.five_seconds < t.minute);
-    assert_eq!(
-        common::temp_dir().parent(),
-        Some(std::env::temp_dir().as_path())
-    );
+    // under $TMPDIR, or under /tmp when $TMPDIR is too long for a socket path
+    let parent = common::temp_dir().parent().unwrap().to_path_buf();
+    assert!(parent == std::env::temp_dir() || parent == std::path::Path::new("/tmp"));
 }

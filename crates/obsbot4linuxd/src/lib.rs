@@ -24,6 +24,22 @@ mod socket;
 mod table;
 mod worker;
 
+/// A fresh, empty directory for one unit test's sockets: `$TMPDIR/o4ld-<name>-<pid>`, or
+/// `/tmp/...` when that would make `s.sock` (plus the `.lock` and `.test` the daemon adds)
+/// too long for a Unix socket, which holds at most 107 bytes. The tests then do not depend
+/// on the length of `$TMPDIR` (a package build's is long).
+#[cfg(test)]
+fn test_dir(name: &str) -> std::path::PathBuf {
+    let dir = format!("o4ld-{name}-{}", std::process::id());
+    let mut path = std::env::temp_dir().join(&dir);
+    if path.join("obsbot4linux.sock").as_os_str().len() > 100 {
+        path = std::path::PathBuf::from("/tmp").join(dir);
+    }
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+    path
+}
+
 #[doc(hidden)]
 pub mod args;
 
@@ -156,9 +172,7 @@ mod tests {
         use std::os::unix::net::UnixStream;
         use std::sync::atomic::Ordering;
         use std::time::Instant;
-        let dir = std::env::temp_dir().join(format!("o4ld-on-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = test_dir("on");
         let socket = dir.join("s.sock");
         let config = Config::new(socket.clone());
         let stop = config.stop.clone();
