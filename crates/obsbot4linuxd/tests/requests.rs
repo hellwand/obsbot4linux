@@ -8,7 +8,8 @@
 mod common;
 
 use common::*;
-use obsbot_device::models::fake::Op;
+use obsbot_device::models::fake::{KEYS, Op};
+use obsbot4linuxd::Timing;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -46,10 +47,15 @@ fn pipelined_requests_are_answered_in_request_order() {
 }
 
 /// 4.1 rule 9 and 10.3: N pipelined sets on one connection cause at most two re-reads
-/// (fake-b's `beacon` group is read only every 60 s, so every read of it here is a re-read).
+/// (the `minute` tier is set to 60 s here, so no periodic read of fake-b's `beacon` group
+/// happens during the test and every read of it is a re-read).
 #[test]
 fn pipelined_sets_share_at_most_two_rereads() {
-    let d = Daemon::start();
+    let timing = Timing {
+        minute: Duration::from_secs(60),
+        ..fast()
+    };
+    let d = Daemon::start_with(&KEYS, timing, |_| {});
     let (mut c, _) = d.hello(false, &[]);
     let skip = d.ops(B).len();
     // A slow first operation keeps the worker busy while all eight requests arrive, so the
