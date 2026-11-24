@@ -1784,7 +1784,7 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
   the widget's product choice). Each control sends its one request and chains none (section
   2, 12.3). Also widget 0.29.2, the last 0.x release, which refuses
   obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >= 0.7.3, < 1.0`); 0.28.0 to 0.29.1 are
-  released already and carry the refusal. Widget 1.0 is built on a branch `v1` of the
+  released already and carry the refusal. Widget 1.0 is built on a branch `develop` of the
   widget repository until release day, because users receive every commit of its default
   branch at their next plugin update.
 - **Owner files:** the widget repository.
@@ -1847,19 +1847,22 @@ rewrite runs as W0, then W1 (four parallel tracks A–D), then W2, W3 and W4.
 Critical path: G → W0 → A → CS-1 → W2 → W3 → W4 (CS-2). B, C and D run beside A; at most
 four tracks run in parallel. The camera is needed three times: CS-0 (end of G), CS-1 (track
 A) and CS-2 (W4). The Tiny 2 Lite is not available for tests at the moment; stages that need
-it wait for it, and everything else goes ahead.
+it wait for it, and everything else goes ahead. W2 and W3 were therefore built before CS-1
+on 2026-11-24, because the camera was not available; their camera-gated tasks (the model
+change of CAM-20 and the CS-1 results in W2, the candidate's evidence and publication in W3)
+are held back until CS-1 and the owner's go.
 
 ### 10.5 Milestones (proposal)
 
 This is a proposal only. No milestone is edited on GitHub before Thomas has seen this
 spec, and the plan is first reconciled with the audit's fix plan.
 
-- **0.14.0, groundwork:** stage G, with #47 and #61 (both in carried code; they land on
-  `main` before the move, as 10.1 requires, and ship with 0.14.0 unless a 0.13.x patch
-  ships them first).
-- **1.0.0, rebuild:** W0 to W4; #73 (target-box events, by the live topic `target`) and #89
+- **0.14.0, groundwork:** stage G (the carried-code fixes).
+- **1.0.0, rebuild:** W0 to W4; #47 and #61 (both in carried code, now fixed in the
+  rebuild, no longer a 0.14.0 item); #73 (target-box events, by the live topic `target`) and #89
   (start pose, start settings and preset names in the state) move into it.
-- **0.15.0 (camera research) and 0.16.0 (other apps):** after 1.0, when a camera is at hand.
+- **Backlog (camera research, other apps):** no milestone before 1.0; the issues stay in the
+  Backlog until a camera is at hand.
 - A second camera model never blocks 1.0; it is M4.
 
 ### 10.6 Release day and "done"
@@ -1870,7 +1873,7 @@ Release day, in this order:
 2. The release candidate `v1.0.0-rc.N` is published and W4 has passed on it.
 3. `main` fast-forwards to `rebuild`; tag `v1.0.0`; the release workflow publishes the
    packages; the maintainers' private mirror of the repository follows the tag.
-4. Widget 1.0 is released after the tool, the same day: `v1` is merged into the widget
+4. Widget 1.0 is released after the tool, the same day: `develop` is merged into the widget
    repository's default branch by fast-forward. Its `plugin.json` requires
    obsbot4linux ≥ 1.0. The widget's entry in the DankMaterialShell plugin registry is
    updated.
@@ -2186,5 +2189,14 @@ on its own.
 | 96  | 2026-11-13 | `Client::subscribe` returns the hello reply    | `Client::subscribe` returns a sender and a receiver                                                                             | it returns the `hello` reply, a sender and a receiver (6.1)                                                                                                                                                                                                                                                                                                                                                                                                      | the caller needs the device list and the states from the reply, and a refusal or a protocol mismatch is reported by the call itself                                       | the W1 plan review                      |
 | 97  | 2026-11-13 | `--device` takes the shortened id              | `--device` takes the full id, a serial suffix of at least four characters, or a model key                                       | the shortened id that human output prints (`…0001`) is accepted as well (6.2)                                                                                                                                                                                                                                                                                                                                                                                    | a person pastes what the command line printed                                                                                                                             | the W1 plan review                      |
 | 98  | 2026-11-13 | The last 0.x widget release is 0.29.2          | widget 0.28.0 is the last 0.x release and carries the upper bound                                                               | 0.28.0 to 0.29.1 are released and carry the refusal; 0.29.2 is the last 0.x release and adds the bound `< 1.0` to `plugin.json` (10.3, 10.6)                                                                                                                                                                                                                                                                                                                     | 0.28.0 was released before this change; later 0.x releases exist                                                                                                          | the W1 plan review                      |
-| 99  | 2026-11-13 | Widget 1.0 is built on a branch                | widget 1.0 is built in the widget repository, merged on release day                                                             | built on a branch `v1` of the widget repository and merged into the default branch by fast-forward on release day (10.3, 10.6)                                                                                                                                                                                                                                                                                                                                   | `dms plugins update` follows the default branch, so a 1.0 commit there would reach users of 0.13                                                                          | the W1 plan review                      |
+| 99  | 2026-11-13 | Widget 1.0 is built on a branch                | widget 1.0 is built in the widget repository, merged on release day                                                             | built on the branch `develop` of the widget repository and merged into the default branch by fast-forward on release day (10.3, 10.6)                                                                                                                                                                                                                                                                                                                                   | `dms plugins update` follows the default branch, so a 1.0 commit there would reach users of 0.13                                                                          | the W1 plan review                      |
 | 100 | 2026-11-13 | B-1 is a milestone                             | track B in two PRs, B-1 and B-2                                                                                                 | B-1 is reached when the last task of the daemon core with fake mode has landed; it is built in several pull requests (10.3 B)                                                                                                                                                                                                                                                                                                                                    | the daemon core is too large for one reviewable pull request                                                                                                              | the W1 plan review                      |
+| 101 | 2026-11-24 | W3 starts before CS-1 | W3 depends on W2 as a whole (10.3) | W3's gate `w2` is every W2 task without the gate `camera`; W3's `cs-1` tasks wait for CS-1 and the W2 tasks of CAM-20 and the CS-1 results | W2 holds camera-gated tasks, so W3 could never start before the camera | the W2/W3 cross-check |
+| 102 | 2026-11-24 | Public text: statements about knowledge | 8.5 allows "recorded from the vendor app" and "measured on the camera" | only "measured on the camera" is allowed; no statement that knowledge comes from the vendor's app or firmware | the owner's public-text rule of 2026-11-13 | the W2/W3 cross-check |
+| 103 | 2026-11-24 | `docs/center-parity.md` | kept from 0.13 | deleted in W3 (task w3-5) together with the README text that links it | it names the vendor app; no dangling link | the W2/W3 cross-check |
+| 104 | 2026-11-24 | `scripts/check-model.sh` is not packaged | not stated beyond 12.1's package list | a development tool: run on a dev build (8.7 step 7), not shipped | 12.1 lists the package contents without it | the W2/W3 cross-check |
+| 105 | 2026-11-24 | CAM-20 model change stays gated | not stated | stays a camera-gated W2 task; CAM-20 runs first in CS-1 | it needs the camera | the W2/W3 cross-check |
+| 106 | 2026-11-24 | CS-1 results regenerate `levels.rs` | not stated | the W2 task for the CS-1 results regenerates the Tiny 2 Lite's `levels.rs` with W3's generator | W3's evidence test would otherwise turn red | the W2/W3 cross-check |
+| 107 | 2026-11-24 | Project page `site/` | not stated | rewritten in W4's release pull request, before `v1.0.0` | the candidate does not deploy the page | the W2/W3 cross-check |
+| 108 | 2026-11-24 | Test sockets and locks | not stated | the CLI test sockets live in `$TMPDIR`; every harness that starts a daemon removes the daemon's `<socket>.lock` | W2's harnesses would otherwise leave files behind | the W2/W3 cross-check |
+| 109 | 2026-11-24 | Milestones | 0.14.0 = groundwork, #47 and #61 in it, 0.15.0 and 0.16.0 after 1.0 (10.5) | 0.14.0 = groundwork; #47 and #61 in 1.0.0; research and other apps in the Backlog, no milestone | #47 and #61 are fixed in the rebuild; no camera for research | the W2/W3 cross-check |

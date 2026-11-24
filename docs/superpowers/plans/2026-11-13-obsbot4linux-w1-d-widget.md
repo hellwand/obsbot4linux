@@ -151,11 +151,11 @@ Results go into the track D tracking issue. If (1) fails: the modules are inline
 
 **R0, the last 0.x release (after Task 1 lands on `main`).** "Release 0.29.2" through the repository's procedure (a release pull request that moves `## [Unreleased]` into `## [0.29.2] - <date>` and sets `plugin.json` `version`, the dry run, the signed tag). Spec 10.6 calls it "widget 0.28.0"; that version and 0.29.0/0.29.1 are already released with the refusal of obsbot4linux ≥ 1.0 in their startup check, so what is left is only the string in `plugin.json` (decision 2).
 
-**B0, the integration branch (after R0).** Create `v1` in `hellwand/obsbot4linux-dux` from `main` and give it a ruleset like `main`'s (signed commits, the `required` check, fast-forward only, no deletion). Tasks 2–16 branch from and land on `v1`. CI already fires for pull requests into `v1` (Task 1).
+**B0, the integration branch (after R0).** Create `develop` in `hellwand/obsbot4linux-dux` from `main` and give it a ruleset like `main`'s (signed commits, the `required` check, fast-forward only, no deletion). Tasks 2–16 branch from and land on `develop`. CI already fires for pull requests into `develop` (Task 1).
 
 **M1, manual check list (after wave 8, before Task 16).** On the desktop against the fake daemon; section "Manual check list" at the end.
 
-**R1, release day (spec 10.6 step 4, after the tool's `v1.0.0`).** A "Release 1.0.0" pull request into `v1`: `plugin.json` `version` 1.0.0; `## [Unreleased]` becomes `## [1.0.0] - <date>` with a first line "Needs obsbot4linux 1.0 (protocol 2). Update the widget together with the tool, enable the daemon's socket once (`systemctl --user enable --now obsbot4linux.socket`) and restart the shell." and a new empty `## [Unreleased]` above it; the `e2e` job's checkout of the tool uses `ref: v1.0.0` instead of `rebuild` (and its comment says so); `scripts/release-notes.sh HEAD v1.0.0` finds the section. Then a pull request from `v1` into `main` (its head is that release commit, so it is green as a pull request into `main`, as `release-green.sh` requires), fast-forward `main`, dry run, tag `v1.0.0`, update the widget's entry in the plugin registry.
+**R1, release day (spec 10.6 step 4, after the tool's `v1.0.0`).** A "Release 1.0.0" pull request into `develop`: `plugin.json` `version` 1.0.0; `## [Unreleased]` becomes `## [1.0.0] - <date>` with a first line "Needs obsbot4linux 1.0 (protocol 2). Update the widget together with the tool, enable the daemon's socket once (`systemctl --user enable --now obsbot4linux.socket`) and restart the shell." and a new empty `## [Unreleased]` above it; the `e2e` job's checkout of the tool uses `ref: v1.0.0` instead of `rebuild` (and its comment says so); `scripts/release-notes.sh HEAD v1.0.0` finds the section. Then a pull request from `develop` into `main` (its head is that release commit, so it is green as a pull request into `main`, as `release-green.sh` requires), fast-forward `main`, dry run, tag `v1.0.0`, update the widget's entry in the plugin registry.
 
 **Landing rule for `CHANGELOG.md`.** Every task adds lines under `## [Unreleased]`. When a stacked or same-wave branch conflicts there, keep both sides' lines (a union), in task order; nothing else in that file conflicts.
 
@@ -163,12 +163,12 @@ Results go into the track D tracking issue. If (1) fails: the modules are inline
 
 Engineering decisions, each with its reason. Each can be overruled by the maintainers.
 
-1. **Widget 1.0 lands on an integration branch `v1`, not on `main`.** P2 shows that `dms plugins update` pulls the default branch, so a 1.0 commit on `main` would reach users who still run obsbot4linux 0.13 and switch the widget off. `main` stays releasable for 0.x patches, as the tool's own `main` does (spec 10.1). Cost: Task 1 widens the CI trigger on `main` first; B0 creates the branch and its ruleset; R1 merges by fast-forward. This deviates from the brief, which named the widget's `main` as the target of every pull request.
+1. **Widget 1.0 lands on an integration branch `develop`, not on `main`.** P2 shows that `dms plugins update` pulls the default branch, so a 1.0 commit on `main` would reach users who still run obsbot4linux 0.13 and switch the widget off. `main` stays releasable for 0.x patches, as the tool's own `main` does (spec 10.1). Cost: Task 1 widens the CI trigger on `main` first; B0 creates the branch and its ruleset; R1 merges by fast-forward. This deviates from the brief, which named the widget's `main` as the target of every pull request.
 2. **The last 0.x is 0.29.2, and only `plugin.json` changes.** Spec 10.3 and 10.6 name "widget 0.28.0, the last 0.x release, which refuses obsbot4linux ≥ 1.0 (`plugin.json`: `obsbot4linux >= 0.7.3, < 1.0`)". Released facts: 0.28.0 (#105) already refuses 1.0 in `StartupCheck.qml`; 0.29.0 and 0.29.1 followed; `plugin.json` still says `obsbot4linux >= 0.7.3`. The shell enforces no version range (P2), so the string is documentation. Task 1 adds it; R0 releases it.
 3. **Logic in ES modules, tested in two engines.** There is no QML test harness in the repository, and the widget's components import the shell's modules (`qs.Common`, `Quickshell.Io`), so they cannot load outside the shell. Pure logic in `lib/*.mjs` loads in the Qt 6 `qml` tool and in node (measured with Qt 6.12 and node 26: relative imports between modules, optional chaining and template literals work in both; a missing import fails the `qml` run, exit 2). Tests are plain modules with a 25-line harness, run by node and by the `qml` tool offscreen, and both runs must count the same number of passes (`scripts/check-js.sh`). Node's own `node:test` runner is used only by the e2e test, which needs sockets.
 4. **One `Link` class returns effects; `CameraLink.qml` only does I/O.** So every rule of protocol 2 that the widget follows is a unit test, the e2e test drives the same class over a node socket, and the `relay` fallback is a one-file change.
 5. **Fixtures are copies of the tool's generated files, as modules.** `scripts/sync-fixtures.mjs` writes `tests/fixtures/*.mjs` from a tool checkout; the e2e job checks them with `--check` against the `rebuild` branch, so they cannot drift silently. `tests/fixtures/fakes.mjs` (device facts and first states of the three fakes) is hand-written from what the W0 fakes report; the W0 types parse it (proof), and Task 7's e2e test "the unit tests' fixtures match the fake daemon's hello" compares it with what the running fake daemon sends, so it cannot drift silently either.
-6. **The e2e job builds the daemon from the tool's `rebuild` branch and is part of `required` on `v1`.** Spec 10.3 D states the acceptance against `obsbot4linuxd --fake`. A commit hash of `rebuild` is not pinned (it is rebased, spec 10.1); a red `rebuild` turns widget pull requests red until it is fixed, which is accepted for the integration branch. R1 switches the job to the tag `v1.0.0`.
+6. **The e2e job builds the daemon from the tool's `rebuild` branch and is part of `required` on `develop`.** Spec 10.3 D states the acceptance against `obsbot4linuxd --fake`. A commit hash of `rebuild` is not pinned (it is rebased, spec 10.1); a red `rebuild` turns widget pull requests red until it is fixed, which is accepted for the integration branch. R1 switches the job to the tag `v1.0.0`.
 7. **One control, one leaf.** Each bound control writes its own leaf: `exposure.mode` and `exposure.region` become two chip rows (0.29 had one row "Global / Face / Custom" that wrote both), `sleep.auto.enabled` a switch and `sleep.auto.seconds` its own chips, each end of an area range its own slider. A request carries more than one leaf only in the defaults reset (spec 10.3 D: "a `set` patch").
 8. **A `requires` that does not hold disables the control and names the need.** The widget never adds the required leaf to the patch (spec 2): the user sets `exposure.mode` to manual first, with its own control. `blocked()` checks the published state, which is what the daemon validates against (spec 4.1 rule 5), not own or pending values.
 9. **`asleep: ignored` disables the control while the state says `asleep: true`** (the daemon would answer `asleep`); `accepted` and `unknown` stay usable.
@@ -207,7 +207,7 @@ The coordinator decided the product questions of the review and the seam points 
 3. **d-10.** Question 9: the "Return after" slider stays hidden while the description gives no maximum for `hand.return_after`. Question 13: the tracked-hand buttons are gated only on the description and `blocked()`, without 0.29's own mode checks; watch it in the camera session. Both as built; nothing changes.
 4. **d-8.** Question 10: live values (target box, pose) only while the popout is open, as built. Question 16: with two usable cameras and none picked, the bar pill says "Pick camera", not "Offline". Task d-8 changes `pillText` in `ObsbotWidget.qml`: while `link.device` is null and `link.devices` holds a usable device (the case in which `statusText` says "Pick a camera") it returns "Pick camera"; the hidden width texts of `PillContent.qml` gain "Pick camera".
 5. **d-9.** Question 12: the picked camera is not remembered across shell restarts, not for 1.0; as built, nothing changes.
-6. **d-1.** Questions 14 and 15: the last 0.x widget release is 0.29.2 (0.28.0 to 0.29.1 are released and carry the refusal; 0.29.2 only adds the `< 1.0` bound to `plugin.json`), and widget 1.0 is built on the branch `v1` of the widget repository until release day, because users receive every commit of the default branch at their next plugin update. Task d-1 lands on `main`; the coordinator then makes the release 0.29.2 (R0) and creates `v1` with its ruleset (B0); d-2 and every later task branch from and land on `v1`. The spec (10.3, 10.6) now says so.
+6. **d-1.** Questions 14 and 15: the last 0.x widget release is 0.29.2 (0.28.0 to 0.29.1 are released and carry the refusal; 0.29.2 only adds the `< 1.0` bound to `plugin.json`), and widget 1.0 is built on the branch `develop` of the widget repository until release day, because users receive every commit of the default branch at their next plugin update. Task d-1 lands on `main`; the coordinator then makes the release 0.29.2 (R0) and creates `develop` with its ruleset (B0); d-2 and every later task branch from and land on `develop`. The spec (10.3, 10.6) now says so.
 7. **d-7.** Gate: B-1 is the task b-10 landed on `rebuild`; d-7 is issued only after it has landed, because its new `e2e` job builds `rebuild` and never skips. d-6 waits for the result of P1 (and for C-R if P1 fails); d-16 is not a W1 task (it waits for the tool's `v1.0.0-rc.1`).
 
 ## File structure
@@ -216,7 +216,7 @@ All paths are in the widget repository (`hellwand/obsbot4linux-dux`, root = plug
 
 | File                                                                                                                                           | Responsibility                                                                          | Task        |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------- |
-| `.github/workflows/ci.yml` (modify)                                                                                                            | trigger on `v1`; jobs `js`, `e2e` in `required`                                         | 1, 2, 7, R1 |
+| `.github/workflows/ci.yml` (modify)                                                                                                            | trigger on `develop`; jobs `js`, `e2e` in `required`                                         | 1, 2, 7, R1 |
 | `plugin.json` (modify)                                                                                                                         | dependency bound; 1.0 version and requirement                                           | 1, 16, R1   |
 | `CHANGELOG.md` (modify)                                                                                                                        | one or more lines per task                                                              | all         |
 | `README.md` (modify)                                                                                                                           | development checks; 1.0 text                                                            | 2, 16       |
@@ -243,26 +243,26 @@ All paths are in the widget repository (`hellwand/obsbot4linux-dux`, root = plug
 
 ## Tasks, waves and dependencies
 
-Tasks of one wave run side by side and touch different files, except `CHANGELOG.md` (landing rule above). A task branches from `v1` (Task 1: from `main`) after its dependencies landed; where one is still in review, it is stacked on that branch.
+Tasks of one wave run side by side and touch different files, except `CHANGELOG.md` (landing rule above). A task branches from `develop` (Task 1: from `main`) after its dependencies landed; where one is still in review, it is stacked on that branch.
 
 | Task | Title                                                                      | Wave | Depends on                   | Stacked on            | Base   | Effort |
 | ---- | -------------------------------------------------------------------------- | ---- | ---------------------------- | --------------------- | ------ | ------ |
-| 1    | CI on `v1` and the 0.x bound in `plugin.json`                              | 1    | –                            | –                     | `main` | S      |
-| 2    | Two-engine test harness, fixtures, version module                          | 2    | 1, W0, B0                    | –                     | `v1`   | M      |
-| 3    | Protocol lines and the connection state machine                            | 3    | 2                            | 2                     | `v1`   | M      |
-| 4    | Devices, description, values, text, arrows, lists, labels                  | 3    | 2                            | 2                     | `v1`   | M      |
-| 5    | The link without I/O                                                       | 4    | 3, 4                         | – (after both landed) | `v1`   | S      |
-| 6    | `CameraLink.qml` and the bound controls                                    | 5    | 5, P1                        | 5                     | `v1`   | M      |
-| 7    | End-to-end test against the fake daemon                                    | 5    | 5, B-1                       | 5                     | `v1`   | M      |
-| 8    | Popout root, pill and Control Center on `CameraLink`                       | 6    | 6                            | 6                     | `v1`   | L      |
-| 9    | Header and device picker                                                   | 7    | 8                            | 8                     | `v1`   | M      |
-| 10   | Tracking card                                                              | 7    | 8                            | 8                     | `v1`   | M      |
-| 11   | Framing and Zone cards                                                     | 7    | 8                            | 8                     | `v1`   | L      |
-| 12   | Presets card                                                               | 7    | 8                            | 8                     | `v1`   | M      |
-| 13   | Picture, Image and Factory reset cards                                     | 7    | 8                            | 8                     | `v1`   | M      |
-| 14   | Device tab cards                                                           | 7    | 8                            | 8                     | `v1`   | M      |
-| 15   | Desktop widget and preview frame                                           | 8    | 8, 9, 12                     | –                     | `v1`   | L      |
-| 16   | Widget 1.0 for the release candidate: startup check, `plugin.json`, README | 9    | 2–15, M1, tool `v1.0.0-rc.1` | –                     | `v1`   | S      |
+| 1    | CI on `develop` and the 0.x bound in `plugin.json`                              | 1    | –                            | –                     | `main` | S      |
+| 2    | Two-engine test harness, fixtures, version module                          | 2    | 1, W0, B0                    | –                     | `develop`   | M      |
+| 3    | Protocol lines and the connection state machine                            | 3    | 2                            | 2                     | `develop`   | M      |
+| 4    | Devices, description, values, text, arrows, lists, labels                  | 3    | 2                            | 2                     | `develop`   | M      |
+| 5    | The link without I/O                                                       | 4    | 3, 4                         | – (after both landed) | `develop`   | S      |
+| 6    | `CameraLink.qml` and the bound controls                                    | 5    | 5, P1                        | 5                     | `develop`   | M      |
+| 7    | End-to-end test against the fake daemon                                    | 5    | 5, B-1                       | 5                     | `develop`   | M      |
+| 8    | Popout root, pill and Control Center on `CameraLink`                       | 6    | 6                            | 6                     | `develop`   | L      |
+| 9    | Header and device picker                                                   | 7    | 8                            | 8                     | `develop`   | M      |
+| 10   | Tracking card                                                              | 7    | 8                            | 8                     | `develop`   | M      |
+| 11   | Framing and Zone cards                                                     | 7    | 8                            | 8                     | `develop`   | L      |
+| 12   | Presets card                                                               | 7    | 8                            | 8                     | `develop`   | M      |
+| 13   | Picture, Image and Factory reset cards                                     | 7    | 8                            | 8                     | `develop`   | M      |
+| 14   | Device tab cards                                                           | 7    | 8                            | 8                     | `develop`   | M      |
+| 15   | Desktop widget and preview frame                                           | 8    | 8, 9, 12                     | –                     | `develop`   | L      |
+| 16   | Widget 1.0 for the release candidate: startup check, `plugin.json`, README | 9    | 2–15, M1, tool `v1.0.0-rc.1` | –                     | `develop`   | S      |
 
 Wave 7 has six tasks on disjoint files; the coordinator may run them four at a time. Tasks 9–14 depend only on Task 8's `ctl` interface and on Task 6's components (header section "Shared interfaces of the QML tasks"); Task 15 also uses `DevicePicker.qml` (Task 9) and `PresetSlot.qml` (Task 12) and runs in wave 8.
 
@@ -424,7 +424,7 @@ Each card task rewires its files from 0.29 names to `ctl.link`. Rules for every 
 
 ## The tables name, per control: the 1.0 path or action, the component, the text, and what is special. "–" = nothing special.
 
-### Task 1: CI on `v1` and the 0.x bound in `plugin.json`
+### Task 1: CI on `develop` and the 0.x bound in `plugin.json`
 
 Base `main`. A small pull request that the 0.x release R0 then ships.
 
@@ -437,7 +437,7 @@ Base `main`. A small pull request that the 0.x release R0 then ships.
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: CI runs the `required` check for pull requests into `main` and into `v1` (Tasks 2–16 rely on it); `plugin.json` says `"obsbot4linux >= 0.7.3, < 1.0"`.
+- Produces: CI runs the `required` check for pull requests into `main` and into `develop` (Tasks 2–16 rely on it); `plugin.json` says `"obsbot4linux >= 0.7.3, < 1.0"`.
 
 - [ ] **Step 1: The check that fails first**
 
@@ -449,13 +449,13 @@ Expected now: `obsbot4linux >= 0.7.3` and `    branches: [main]`.
 In `.github/workflows/ci.yml`, replace the first comment block and the trigger (lines 3–9 of the current file) with:
 
 ```yaml
-# Pull requests into main and into v1 (the widget 1.0 branch) only: this workflow produces the
+# Pull requests into main and into develop (the widget 1.0 branch) only: this workflow produces the
 # `required` check that the rulesets of both branches require, so it must not run on push or by
 # dispatch (that would mark a commit green that was never a pull request head). No paths filter,
 # so the check always reports.
 on:
   pull_request:
-    branches: [main, v1]
+    branches: [main, develop]
 ```
 
 Leave every job unchanged.
@@ -471,7 +471,7 @@ Under `## [Unreleased]`, `### Changed`, add:
 ```markdown
 - `plugin.json` states the upper bound the startup check enforces since 0.28.0: obsbot4linux 0.7.3
   or newer, before 1.0. obsbot4linux 1.0 needs widget 1.0 (#N).
-- CI also runs for pull requests into `v1`, the branch where widget 1.0 is built until obsbot4linux
+- CI also runs for pull requests into `develop`, the branch where widget 1.0 is built until obsbot4linux
   1.0 is released (#N).
 ```
 
@@ -480,20 +480,20 @@ Under `## [Unreleased]`, `### Changed`, add:
 - [ ] **Step 5: Verify**
 
 Run: `jq -r '.dependencies[0]' plugin.json && actionlint .github/workflows/ci.yml && bash scripts/check-qml.sh && shellcheck scripts/*.sh`
-Expected: `obsbot4linux >= 0.7.3, < 1.0`, actionlint silent, `check-qml: ok (32 files)`, shellcheck silent. Acceptance of the trigger is GitHub's: the pull request itself shows the `required` check (it targets `main`); the `v1` trigger is proven by Task 2's pull request.
+Expected: `obsbot4linux >= 0.7.3, < 1.0`, actionlint silent, `check-qml: ok (32 files)`, shellcheck silent. Acceptance of the trigger is GitHub's: the pull request itself shows the `required` check (it targets `main`); the `develop` trigger is proven by Task 2's pull request.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/ci.yml plugin.json CHANGELOG.md
-git commit -S -m "plugin.json: state the bound before 1.0; CI also for pull requests into v1"
+git commit -S -m "plugin.json: state the bound before 1.0; CI also for pull requests into develop"
 ```
 
 ---
 
 ### Task 2: Two-engine test harness, fixtures, version module
 
-Base `v1` (B0 done). Needs W0 on the tool's `rebuild` (the generated description files and golden transcripts).
+Base `develop` (B0 done). Needs W0 on the tool's `rebuild` (the generated description files and golden transcripts).
 
 **Files:**
 
@@ -1223,13 +1223,13 @@ Replace `.github/workflows/ci.yml` with:
 ```yaml
 name: CI
 
-# Pull requests into main and into v1 (the widget 1.0 branch) only: this workflow produces the
+# Pull requests into main and into develop (the widget 1.0 branch) only: this workflow produces the
 # `required` check that the rulesets of both branches require, so it must not run on push or by
 # dispatch (that would mark a commit green that was never a pull request head). No paths filter,
 # so the check always reports.
 on:
   pull_request:
-    branches: [main, v1]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -1304,7 +1304,7 @@ jobs:
 ```
 
 Run: `actionlint .github/workflows/ci.yml`
-Expected: silent. Acceptance is GitHub's: this pull request into `v1` shows the `required` check with `js=success` in its log.
+Expected: silent. Acceptance is GitHub's: this pull request into `develop` shows the `required` check with `js=success` in its log.
 
 - [ ] **Step 8: README and CHANGELOG**
 
@@ -3454,7 +3454,7 @@ git commit -S -m "Modules: devices, descriptions, shown values, text, arrows, pr
 
 ### Task 5: The link without I/O
 
-Branches from `v1` after Tasks 3 and 4 have both landed (it imports `lib/protocol.mjs` and `lib/session.mjs` of Task 3 and the modules of Task 4; it is not stacked).
+Branches from `develop` after Tasks 3 and 4 have both landed (it imports `lib/protocol.mjs` and `lib/session.mjs` of Task 3 and the modules of Task 4; it is not stacked).
 
 **Files:**
 
@@ -4575,13 +4575,13 @@ Replace `.github/workflows/ci.yml` with:
 ```yaml
 name: CI
 
-# Pull requests into main and into v1 (the widget 1.0 branch) only: this workflow produces the
+# Pull requests into main and into develop (the widget 1.0 branch) only: this workflow produces the
 # `required` check that the rulesets of both branches require, so it must not run on push or by
 # dispatch (that would mark a commit green that was never a pull request head). No paths filter,
 # so the check always reports.
 on:
   pull_request:
-    branches: [main, v1]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -4695,7 +4695,7 @@ git commit -S -m "CI: the widget's link against obsbot4linuxd --fake"
 
 ### Task 8: Popout root, pill and Control Center on `CameraLink`
 
-Stacked on Task 6. After this task the cards still read 0.29 names; Tasks 9–15 move them. `v1` is not shipped, so the popout may show empty cards between these pull requests; the gates stay green because `qmlcachegen` compiles each file on its own.
+Stacked on Task 6. After this task the cards still read 0.29 names; Tasks 9–15 move them. `develop` is not shipped, so the popout may show empty cards between these pull requests; the gates stay green because `qmlcachegen` compiles each file on its own.
 
 **Files:**
 
@@ -5131,7 +5131,7 @@ git commit -S -m "Device tab cards on description paths"
 
 **Interfaces:**
 
-Depends on Tasks 8, 9 and 12 (it uses `DevicePicker.qml` and `PresetSlot.qml`); branches from `v1` after they landed.
+Depends on Tasks 8, 9 and 12 (it uses `DevicePicker.qml` and `PresetSlot.qml`); branches from `develop` after they landed.
 
 - Consumes: Task 6 (`CameraLink`), Task 8's `ctl` members used by `PreviewFrame` in the popout (`link`, `available`, `live`, `previewOn`, `previewReady`, `previewRunning`, `videoNode`, `showTargetBox`, `interactionActive`, `problem`, `streaming`, `streamingApps`, `refresh()`), Task 9's `DevicePicker`, Task 12's `PresetSlot`, `lib/lists.mjs`, `lib/labels.mjs`.
 - Produces: `DesktopPreview` (the desktop surface) exposes to `DesktopSide`, `DesktopBottom` and `PreviewFrame` the same member names as Task 8's `ctl` for these: `link`, `labels()`, `available`, `live`, `problem`, `previewOn`, `previewReady`, `previewRunning`, `videoNode`, `showTargetBox`, `interactionActive`, `streaming`, `streamingApps`, `modeText`, `toggleAwake()`, `stepZoom()`, `refresh()`.
@@ -5202,7 +5202,7 @@ git commit -S -m "Desktop widget and preview frame on CameraLink; drop the watch
 
 ### Task 16: Widget 1.0 for the release candidate: startup check, `plugin.json`, README
 
-Base `v1`, after M1 passed and once the tool's release candidate `v1.0.0-rc.1` exists (stage W3). From this commit on, the `v1` head refuses an obsbot4linux older than 1.0 (the dev builds of `rebuild` report 0.13.2 until W3), which is why it comes after M1; W4 (M2) runs this head against the candidate. The version 1.0.0, the CHANGELOG section and the e2e job's tag are release-day steps (R1), not this task.
+Base `develop`, after M1 passed and once the tool's release candidate `v1.0.0-rc.1` exists (stage W3). From this commit on, the `develop` head refuses an obsbot4linux older than 1.0 (the dev builds of `rebuild` report 0.13.2 until W3), which is why it comes after M1; W4 (M2) runs this head against the candidate. The version 1.0.0, the CHANGELOG section and the e2e job's tag are release-day steps (R1), not this task.
 
 **Files:** Modify `StartupCheck.qml`, `ObsbotSettings.qml` (only if the check below finds a setting without effect), `plugin.json`, `README.md`, `CHANGELOG.md`.
 
@@ -5261,11 +5261,11 @@ git commit -S -m "Startup check, plugin.json and README for obsbot4linux 1.0"
 
 ## Manual check list (M1, the coordinator, on the owner's desktop)
 
-Run after wave 8 (Task 15) has landed on `v1`, before Task 16, against the fake daemon. Setup, all read-only for the camera (none is plugged in):
+Run after wave 8 (Task 15) has landed on `develop`, before Task 16, against the fake daemon. Setup, all read-only for the camera (none is plugged in):
 
 1. Stop anything that holds the default socket: `systemctl --user stop obsbot4linux.socket obsbot4linux.service`; end an `obsbot4linux daemon` process if one runs (the 0.13 widget's watch started it).
 2. Build the daemon from `rebuild` in a scratch directory (`nice -n 19`, at most 4 jobs) and run `obsbot4linuxd --fake fake-a,fake-b,unknown` in a terminal (default socket path).
-3. Point the plugin at `v1`: `git -C ~/.config/dms/plugins/obsbot4linuxDux fetch origin v1 && git -C ~/.config/dms/plugins/obsbot4linuxDux switch --detach origin/v1`, then `dms restart` (the one restart). Afterwards: `git … switch main` and `dms restart` at the next natural restart.
+3. Point the plugin at `develop`: `git -C ~/.config/dms/plugins/obsbot4linuxDux fetch origin develop && git -C ~/.config/dms/plugins/obsbot4linuxDux switch --detach origin/develop`, then `dms restart` (the one restart). Afterwards: `git … switch main` and `dms restart` at the next natural restart.
 4. A second client and the test control: `S=$XDG_RUNTIME_DIR/obsbot4linux.sock`; `printf '%s\n' '{"id":1,"hello":{"protocol":2,"client":"m1","subscribe":false,"live":[]}}' '<request>' | socat -t 2 - UNIX-CONNECT:$S`; test control: `printf '%s\n' '{"unplug":"port:9-3"}' | socat -t 2 - UNIX-CONNECT:$S.test`.
 
 | Id   | Check                                                                                                                                                                                                                                                                 | Expected                                                                                                                                                                                                                            | Task       |
@@ -5354,4 +5354,4 @@ None gates a task of this plan; all are W4 (M2) or track A items whose answers t
 
 ## Execution handoff
 
-Plan complete. The build workflow takes `w1-d-tasks.json` next to this file. Every task but Task 1 has base `v1`, not `main` (decision 1): the workflow must not default to `main`. The coordinator runs R0 and B0 after Task 1 (before Task 2), P1 before Task 6, M1 after wave 8, Task 16 once the tool's release candidate exists, M2 in W4, and R1 on release day.
+Plan complete. The build workflow takes `w1-d-tasks.json` next to this file. Every task but Task 1 has base `develop`, not `main` (decision 1): the workflow must not default to `main`. The coordinator runs R0 and B0 after Task 1 (before Task 2), P1 before Task 6, M1 after wave 8, Task 16 once the tool's release candidate exists, M2 in W4, and R1 on release day.
