@@ -84,6 +84,10 @@ impl FakeDaemon {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(thread) = self.thread.take() {
             let ended = thread.join().expect("the daemon thread does not panic");
+            // the daemon keeps its `<socket>.lock` (5.9); the test's daemon is gone, so is it
+            let mut lock = self.socket.clone().into_os_string();
+            lock.push(".lock");
+            let _ = std::fs::remove_file(lock);
             assert!(ended.is_ok(), "run returned {ended:?}");
         }
     }

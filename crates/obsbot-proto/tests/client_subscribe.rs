@@ -10,8 +10,17 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// `$TMPDIR/o4l-c10-<pid>-<name>.sock`. Not under the target directory: a Unix socket path
+/// holds at most 107 bytes, and a package build runs these tests in a deep directory. A
+/// `$TMPDIR` that is itself too long (a user's makepkg environment) falls back to `/tmp`.
 fn socket(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("c10-{name}.sock"))
+    let file = format!("o4l-c10-{}-{name}.sock", std::process::id());
+    let path = std::env::temp_dir().join(&file);
+    if path.as_os_str().len() <= 100 {
+        path
+    } else {
+        PathBuf::from("/tmp").join(file)
+    }
 }
 
 fn golden(name: &str) -> String {
