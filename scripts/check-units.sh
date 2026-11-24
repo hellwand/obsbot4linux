@@ -19,7 +19,8 @@
 #     setpriv --no-new-privs, which sets the same process flag.
 # Usage: scripts/check-units.sh BINDIR    (BINDIR holds the built obsbot4linuxd and obsbot4linux)
 # Needs systemd-analyze, systemd-socket-activate, setpriv and timeout. The work directory is
-# made under $TMPDIR, or under /tmp when $TMPDIR would make the socket path too long.
+# made under $TMPDIR, or under /tmp when $TMPDIR would make a socket path too long (the daemon's
+# or systemd-analyze's own).
 set -eu
 bindir=$(cd "${1:?usage: check-units.sh BINDIR}" && pwd)
 units=$(cd "$(dirname "$0")/../packaging/systemd" && pwd)
@@ -47,6 +48,9 @@ for unit in obsbot4linux.service obsbot4linux.socket; do
 done
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/check-units.XXXXXX")
+# 60, not 108: the run directory also carries systemd-analyze's own socket paths (about 42
+# bytes more than the work directory), and every socket path must stay under the 108-byte
+# Unix socket limit.
 if [ "${#work}" -gt 60 ]; then
 	rm -rf "$work"
 	work=$(mktemp -d "/tmp/check-units.XXXXXX")
