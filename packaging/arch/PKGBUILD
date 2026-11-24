@@ -4,7 +4,7 @@ pkgname=obsbot4linux
 # Cargo.toml's version; scripts/changelog-section.sh fails the release unless they match.
 pkgver=0.14.0
 pkgrel=1
-pkgdesc='Control OBSBOT webcams (Tiny 2 Lite) from the console, with a daemon for the DMS widget'
+pkgdesc='Control OBSBOT webcams on Linux: a camera daemon and its command line'
 arch=('x86_64' 'aarch64')
 url='https://github.com/hellwand/obsbot4linux'
 license=('GPL-3.0-or-later')
@@ -36,15 +36,20 @@ build() {
   cargo build --frozen --release
 }
 
+# The tests run their daemons in-process on temporary sockets; they need no camera, no systemd
+# and no XDG_RUNTIME_DIR (design spec 11), so it is unset here to prove it.
 check() {
   cd "$_src"
-  cargo test --frozen
+  env -u XDG_RUNTIME_DIR -u OBSBOT4LINUX_SOCKET cargo test --frozen --workspace
 }
 
 package() {
   cd "$_src"
-  install -Dm755 target/release/obsbot4linux -t "$pkgdir/usr/bin"
+  install -Dm755 target/release/obsbot4linux{,d} -t "$pkgdir/usr/bin"
   install -Dm644 packaging/systemd/obsbot4linux.{socket,service} -t "$pkgdir/usr/lib/systemd/user"
+  install -Dm644 packaging/completions/obsbot4linux.bash "$pkgdir/usr/share/bash-completion/completions/obsbot4linux"
+  install -Dm644 packaging/completions/_obsbot4linux -t "$pkgdir/usr/share/zsh/site-functions"
+  install -Dm644 schema/protocol-2.json -t "$pkgdir/usr/share/$pkgname"
   install -Dm644 README.md CHANGELOG.md -t "$pkgdir/usr/share/doc/$pkgname"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
 }

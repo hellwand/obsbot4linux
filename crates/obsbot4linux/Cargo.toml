@@ -1,6 +1,6 @@
 [package]
 name = "obsbot4linux"
-description = "Control OBSBOT webcams on Linux from the console and the DMS widget"
+description = "Control OBSBOT webcams on Linux: a camera daemon and its command line"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -33,13 +33,17 @@ obsbot4linuxd.workspace = true
 [package.metadata.deb]
 maintainer = "Thomas Kroll <t.kroll@outlook.com>"
 section = "video"
-extended-description = "Most settings OBSBOT Center offers, from the console and from the DMS bar widget.\nWhat is missing: https://github.com/hellwand/obsbot4linux/blob/main/docs/center-parity.md\nThe obsbot4linux daemon (systemd user socket) owns the camera state."
+extended-description = "obsbot4linuxd owns the cameras and serves protocol 2 on a systemd user socket;\nobsbot4linux is its command line. The supported models and their support level\nare listed in the README: https://github.com/hellwand/obsbot4linux#supported-cameras"
 depends = "$auto"
 license-file = ["../../LICENSE", "0"]
 assets = [
     ["target/release/obsbot4linux", "usr/bin/", "755"],
+    ["target/release/obsbot4linuxd", "usr/bin/", "755"],
     ["../../packaging/systemd/obsbot4linux.service", "usr/lib/systemd/user/", "644"],
     ["../../packaging/systemd/obsbot4linux.socket", "usr/lib/systemd/user/", "644"],
+    ["../../packaging/completions/obsbot4linux.bash", "usr/share/bash-completion/completions/obsbot4linux", "644"],
+    ["../../packaging/completions/_obsbot4linux", "usr/share/zsh/vendor-completions/", "644"],
+    ["../../schema/protocol-2.json", "usr/share/obsbot4linux/", "644"],
     ["../../README.md", "usr/share/doc/obsbot4linux/", "644"],
     ["../../CHANGELOG.md", "usr/share/doc/obsbot4linux/", "644"],
 ]
@@ -47,8 +51,12 @@ assets = [
 [package.metadata.generate-rpm]
 assets = [
     { source = "target/release/obsbot4linux", dest = "/usr/bin/obsbot4linux", mode = "755" },
+    { source = "target/release/obsbot4linuxd", dest = "/usr/bin/obsbot4linuxd", mode = "755" },
     { source = "../../packaging/systemd/obsbot4linux.service", dest = "/usr/lib/systemd/user/obsbot4linux.service", mode = "644" },
     { source = "../../packaging/systemd/obsbot4linux.socket", dest = "/usr/lib/systemd/user/obsbot4linux.socket", mode = "644" },
+    { source = "../../packaging/completions/obsbot4linux.bash", dest = "/usr/share/bash-completion/completions/obsbot4linux", mode = "644" },
+    { source = "../../packaging/completions/_obsbot4linux", dest = "/usr/share/zsh/site-functions/_obsbot4linux", mode = "644" },
+    { source = "../../schema/protocol-2.json", dest = "/usr/share/obsbot4linux/protocol-2.json", mode = "644" },
     { source = "../../README.md", dest = "/usr/share/doc/obsbot4linux/README.md", mode = "644", doc = true },
     { source = "../../CHANGELOG.md", dest = "/usr/share/doc/obsbot4linux/CHANGELOG.md", mode = "644", doc = true },
     { source = "../../LICENSE", dest = "/usr/share/licenses/obsbot4linux/LICENSE", mode = "644" },
