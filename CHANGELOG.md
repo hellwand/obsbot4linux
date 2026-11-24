@@ -5,28 +5,204 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and command line. The camera
+knowledge of 0.13 (frames, status decoding, recorded bytes and their tests) is carried over; the
+rest is new. Read "Upgrading from 0.13" below before installing.
+
+### Untested models
+
+- OBSBOT Tiny 2 Lite (USB 3564:fef9): built from an owner's recordings, not verified by the
+  maintainers
+
 ### Added
 
-- `docs/protocol-2.md`: the normative part of the protocol 2 reference (transport, requests, replies, errors and their validation order, ordering rules, devices, descriptions, values, the path dictionary and live topics).
+- `obsbot4linuxd`, the camera daemon. It owns every camera, serves protocol 2 on
+  `$XDG_RUNTIME_DIR/obsbot4linux.sock` (started by `obsbot4linux.socket`), handles several
+  cameras at once and hotplug (a sysfs scan once a second), and gives each camera an id that
+  survives re-plugging. An OBSBOT camera that no model covers is listed as `unsupported` and
+  receives nothing. The daemon keeps no file.
+- Protocol 2: typed envelopes, a path → value state with `pending` and `unread`, one
+  description per model (settings, values, ranges, actions), a JSON schema
+  (`/usr/share/obsbot4linux/protocol-2.json`) and [docs/protocol-2.md](docs/protocol-2.md).
+- The command line `obsbot4linux`, generic over the description: `status`, `get`, `set`, `do`,
+  `describe`, `devices` (`--report` for issue reports), `watch`; `--json`, `--device`; exit codes
+  0 ok, 1 internal error, 2 invalid input, 3 the device cannot do it now or there is no usable
+  camera, 4 the daemon cannot be reached; bash and zsh completions.
+- The packages hold both binaries, the completions and the schema; the user service runs
+  `obsbot4linuxd` with `NoNewPrivileges=yes`.
 
 ### Changed
 
-- The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
-- README and package text now say "most settings OBSBOT Center offers" and link `docs/center-parity.md` for the gaps; they also state the glibc 2.34 floor, how to switch to the socket units while the widget's daemon runs, to restart the daemon after an upgrade (socket users: `systemctl --user restart obsbot4linux.service`; a daemon started by `watch` ends with the shell's unit), that `zoom F --speed S` and `zoom stop` leave the AI mode alone, the `device busy` window of the on-air probe on uvcvideo up to 6.16, and the order of auto and manual image controls (#121).
-- The source is a cargo workspace now: `crates/obsbot-device` holds the camera access,
-  `crates/obsbot4linux` the CLI and the daemon. The program, its output and the packages do not
-  change.
+- The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address
+  redirects (#109).
+- Every command is new; the map from the 0.13 commands is below. The 0.13 commands
+  `gimbal [--pan P] [--tilt T]` and `gimbal rate` switched the tracking to static before they
+  moved. `do gimbal.move` and `do gimbal.turn` send only the move and leave the tracking as it
+  is. A script that relied on the switch runs `obsbot4linux set tracking.mode=static` first, as
+  its own step.
+- The 0.13 command `preset save N` without a name saved the preset as `Preset <N + 1>`.
+  `do preset.save slot=N` sends no name: what the camera shows for such a preset is what
+  `get presets` shows, and a script that wants the old names passes `name=…` itself.
+- No command starts a daemon any more; without the socket unit every command exits 4 and
+  prints `systemctl --user enable --now obsbot4linux.socket`.
+
+### Removed
+
+- `obsbot4linux daemon`, `--direct`, `detect`, request forwarding in `watch`, and the files in
+  `$XDG_STATE_HOME/obsbot4linux/` (see the exceptions below).
 
 ### Fixed
 
-- The new command line shows text it received from the daemon (preset and device names, string values, error texts) with control characters, line and paragraph separators and bidirectional formatting characters replaced by visible escapes (`\x1b`, `\u{202e}`), so such text cannot change what the terminal shows; `--json` output, `devices --report` and `watch` are unchanged and print text as the daemon sent it (the JSON serializer escapes only C0 characters) (#250).
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
   leaves the repository clean; a local build is labelled with the release version (#120).
-- `docs/center-parity.md` describes obsbot4linux 0.13 instead of 0.6.0: hand area, auto zoom,
-  framing offset, gimbal rate and speed, stop, zone views, microphone volume, LED blink, power-on
-  mode and the firmware version are no longer listed as missing; gestures are read back (#122).
-- `audio --help` says that every microphone change restarts the camera, not only turning it off, and
-  `gimbal rate --help` says that an omitted axis is stopped (#123).
+
+### Upgrading from 0.13
+
+1. Install the 1.0 package (it replaces the 0.13 one) and run `systemctl --user daemon-reload`.
+2. End the old daemon: `systemctl --user stop obsbot4linux.service`, or end the
+   `obsbot4linux daemon` process that `obsbot4linux watch` started, or log out.
+3. Remove drop-ins whose `ExecStart` runs `obsbot4linux daemon`
+   (`systemctl --user cat obsbot4linux.service` lists them).
+4. `systemctl --user enable --now obsbot4linux.socket`. Setups that never enabled the socket
+   (the default for widget users) have no daemon otherwise, because 1.0 clients no longer
+   start one.
+5. Update the widget together with the tool, and reload the shell that hosts it.
+
+`$XDG_STATE_HOME/obsbot4linux/` (it held `state.json` and `daemon.log`) is no longer used and
+can be deleted. Nothing is imported, and nothing set on the camera is lost: the camera stores
+it.
+
+To go back, the 0.13.2 packages and the widget 0.29.2 stay downloadable from the releases
+pages; a rollback beyond them is a fix forward.
+
+Command map (PX-n: the exceptions after the table):
+
+| 0.13.2                                                                  | 1.0                                                                  | Note                                                                                                        |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--json` (global)                                                       | `--json`                                                             | protocol objects; errors as `{"error":{…}}`                                                                 |
+| `--direct` (global)                                                     | –                                                                    | PX-3                                                                                                        |
+| `--help`, `--version`                                                   | `--help`, `--version`                                                |                                                                                                             |
+| `daemon`                                                                | `obsbot4linuxd`, started by `obsbot4linux.socket`                    |                                                                                                             |
+| `watch`                                                                 | `watch`                                                              | prints events; request forwarding is PX-4                                                                   |
+| `live-pose on\|off`                                                     | `watch --live pose`; a client sends `live:["pose"]`                  |                                                                                                             |
+| `detect`, `detect --json`                                               | `devices`, `devices --json`                                          | PX-5                                                                                                        |
+| `status`, `status --json`                                               | `status`, `status --json`                                            | new layout                                                                                                  |
+| `sleep`                                                                 | `do sleep`                                                           |                                                                                                             |
+| `wake`                                                                  | `do wake`                                                            | replies on acceptance                                                                                       |
+| `wake zoom F`                                                           | `set sleep.wake_zoom=F`                                              | no visible effect on the Tiny 2 Lite (#102)                                                                 |
+| `wake mode M`                                                           | `set power_on.mode=M`                                                |                                                                                                             |
+| `tracking MODE`                                                         | `set tracking.mode=MODE`                                             |                                                                                                             |
+| `speed standard\|sport`                                                 | `set tracking.profile=…`                                             |                                                                                                             |
+| `speed headroom`                                                        | `set tracking.profile=headroom`                                      |                                                                                                             |
+| `speed-mode MODE`                                                       | `set tracking.speed=MODE`                                            |                                                                                                             |
+| `framing auto-zoom on\|off`                                             | `set framing.auto_zoom=…`                                            |                                                                                                             |
+| `framing size S`                                                        | `set framing.size=S`                                                 |                                                                                                             |
+| `framing zoom-speed S`                                                  | `set framing.zoom_speed=S`                                           |                                                                                                             |
+| `framing offset [--x X] [--y Y]`                                        | `set [framing.offset.x=X] [framing.offset.y=Y]`                      |                                                                                                             |
+| `framing part P`                                                        | `set framing.part=P`                                                 |                                                                                                             |
+| `hdr on\|off`                                                           | `set exposure.hdr=…`                                                 |                                                                                                             |
+| `exposure global\|face`                                                 | `set exposure.mode=auto exposure.region=…`                           |                                                                                                             |
+| `exposure manual`                                                       | `set exposure.mode=manual`                                           |                                                                                                             |
+| `exposure manual --time T`                                              | `set exposure.mode=manual exposure.time=<T×100>`                     | time now in µs                                                                                              |
+| `exposure manual --gain G`                                              | `set exposure.mode=manual exposure.gain=G`                           |                                                                                                             |
+| `zoom F`                                                                | `set zoom.factor=F`                                                  |                                                                                                             |
+| `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10/30/50; other S is PX-6                                                                                   |
+| `zoom stop`                                                             | `do zoom.stop`                                                       |                                                                                                             |
+| `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position; the tracking stays as it is                                              |
+| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | the tracking stays as it is                                                                                 |
+| `gimbal stop`                                                           | `do gimbal.stop`                                                     |                                                                                                             |
+| `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | the CLI sends `keep:true`; the tracking stays as it is                                                      |
+| `gimbal center X Y` (hidden)                                            | –                                                                    | PX-1                                                                                                        |
+| `fov wide\|medium\|narrow`                                              | `set zoom.field_of_view=…`                                           |                                                                                                             |
+| `led N`                                                                 | `set led.brightness=N`                                               |                                                                                                             |
+| `led blink on\|off`                                                     | `set led.blink=…`                                                    | not read back                                                                                               |
+| `mirror on\|off`                                                        | `set image.mirror=…`                                                 |                                                                                                             |
+| `invert on\|off`                                                        | `set gimbal.invert=…`                                                |                                                                                                             |
+| `auto-sleep off`                                                        | `set sleep.auto.enabled=off`                                         |                                                                                                             |
+| `auto-sleep N` (N ≥ 1)                                                  | `set sleep.auto.enabled=on sleep.auto.seconds=N`                     |                                                                                                             |
+| `auto-sleep 0`                                                          | –                                                                    | PX-7                                                                                                        |
+| `sleep-background black\|image`                                         | `set sleep.background=…`                                             |                                                                                                             |
+| `sleep-background-mirror on\|off`                                       | `set sleep.background_mirror=…`                                      |                                                                                                             |
+| `audio noise L`                                                         | `set audio.noise_reduction=L`                                        |                                                                                                             |
+| `audio gain on\|off`                                                    | `set audio.auto_gain=…`                                              |                                                                                                             |
+| `audio distance near\|standard\|far`                                    | `set audio.volume=10\|50\|100`                                       | pickup is the volume in bands: near < 50, standard 50–84, far ≥ 85; 10, 50 and 100 are a choice inside them |
+| `audio volume N`                                                        | `set audio.volume=N`                                                 |                                                                                                             |
+| `audio sleep-mic on\|off`                                               | `set audio.in_sleep=…`                                               |                                                                                                             |
+| `audio mic on\|off`                                                     | `set audio.enabled=…`                                                | the camera restarts on both values                                                                          |
+| `gesture set target-lock\|zoom\|dynamic-zoom\|direction-change on\|off` | `set gestures.<name>=…`                                              | names with `_`                                                                                              |
+| `gesture zoom-ratio R`                                                  | `set gestures.zoom_ratio=R`                                          | precision 0.1                                                                                               |
+| `hand right\|left`                                                      | `set hand.side=…`                                                    |                                                                                                             |
+| `hand return-here`                                                      | `do hand.return_here`                                                | the current pose                                                                                            |
+| `hand return-go`                                                        | `do hand.go_return`                                                  |                                                                                                             |
+| `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                                                             |
+| `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   |                                                                                                             |
+| `hand area-reset`                                                       | `do hand.area_reset`                                                 |                                                                                                             |
+| `hand pan\|tilt on\|off`                                                | `set hand.axes.pan=…` / `set hand.axes.tilt=…`                       |                                                                                                             |
+| `hand return-after S`                                                   | `set hand.return_after=S`                                            |                                                                                                             |
+| `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | not read back                                                                                               |
+| `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                                                             |
+| `zone follow on\|off`                                                   | `set zone.follow=…`                                                  |                                                                                                             |
+| `zone area --pan MIN MAX --tilt MIN MAX`                                | `set zone.area.pan=MIN,MAX zone.area.tilt=MIN,MAX`                   |                                                                                                             |
+| `zone return-here`                                                      | `do zone.return_here`                                                | the current pose                                                                                            |
+| `zone return-go`                                                        | `do zone.go_return`                                                  |                                                                                                             |
+| `zone view list`                                                        | `get views`                                                          |                                                                                                             |
+| `zone view save NAME`                                                   | `do view.save name=NAME`                                             | the current pose                                                                                            |
+| `zone view save NAME --pan P --tilt T --zoom Z`                         | `do view.save name=NAME pose=P,T,Z`                                  |                                                                                                             |
+| `zone view rename ID NAME`                                              | `do view.rename id=ID name=NAME`                                     |                                                                                                             |
+| `zone view delete ID`                                                   | `do view.delete id=ID`                                               |                                                                                                             |
+| `zone view go ID`                                                       | `do view.go id=ID`                                                   |                                                                                                             |
+| `focus mode face\|global`                                               | `set focus.region=…`                                                 |                                                                                                             |
+| `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                                                                             |
+| `focus auto off`                                                        | `set focus.mode=manual`                                              |                                                                                                             |
+| `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                                                             |
+| `focus point X Y`                                                       | `do focus.point x=X y=Y`                                             |                                                                                                             |
+| `focus set N`                                                           | `set focus.mode=manual focus.position=N`                             | no visible effect on the Tiny 2 Lite (#99)                                                                  |
+| `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                             |
+| `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                                                             |
+| `startup set --current`                                                 | `do power_on.use_current`                                            | the current pose                                                                                            |
+| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   |                                                                                                             |
+| `startup set <pose option> --ai M`                                      | the `do` of the pose option, then `set power_on.start.mode=M`        |                                                                                                             |
+| `startup show`                                                          | `get power_on`                                                       |                                                                                                             |
+| `startup go`                                                            | `do power_on.go`                                                     |                                                                                                             |
+| `image brightness\|contrast\|saturation\|hue\|sharpness V`              | `set image.<name>=V`                                                 |                                                                                                             |
+| `image white_balance_auto 0\|1`                                         | `set image.white_balance.auto=off\|on`                               |                                                                                                             |
+| `image white_balance_temperature V`                                     | `set image.white_balance.auto=off image.white_balance.temperature=V` | needs white balance auto off                                                                                |
+| `image gain V`                                                          | `set exposure.gain=V`                                                |                                                                                                             |
+| `image power_line_frequency 0\|1\|2`                                    | `set exposure.anti_flicker=off\|50hz\|60hz`                          |                                                                                                             |
+| `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        |                                                                                                             |
+| `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                    |
+| `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                                                                          |
+| `image focus V`                                                         | `set focus.mode=manual focus.position=V`                             | no visible effect on the Tiny 2 Lite (#99)                                                                  |
+| `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`                                                                                             |
+| `image gamma V`                                                         | –                                                                    | PX-2                                                                                                        |
+| `preset list`                                                           | `get presets`                                                        |                                                                                                             |
+| `preset save N`                                                         | `do preset.save slot=N`                                              | the current pose; no name                                                                                   |
+| `preset save N --name S`                                                | `do preset.save slot=N name=S`                                       |                                                                                                             |
+| `preset save N --pan P --tilt T --zoom Z`                               | `do preset.save slot=N pose=P,T,Z`                                   |                                                                                                             |
+| `preset rename N S`                                                     | `do preset.rename slot=N name=S`                                     |                                                                                                             |
+| `preset delete N`                                                       | `do preset.delete slot=N`                                            |                                                                                                             |
+| `preset recall N`                                                       | `do preset.recall slot=N`                                            |                                                                                                             |
+| `factory-reset --yes`                                                   | `do factory_reset confirm=true`                                      | erases the camera settings and restarts it                                                                  |
+| `factory-reset` without `--yes`                                         | `do factory_reset` is refused with `invalid`                         |                                                                                                             |
+
+Exceptions:
+
+- **PX-1** `gimbal center X Y` (hidden in 0.13): not carried over. It moved the gimbal only
+  toward the left and downward in tests.
+- **PX-2** `image gamma`: the camera has no gamma control; 0.13's command always failed. No
+  function is lost.
+- **PX-3** `--direct`: removed. The command line never talks to the camera; socket activation
+  starts the daemon.
+- **PX-4** request forwarding of `watch` from stdin: removed. The widget speaks protocol 2 on
+  the socket.
+- **PX-5** `detect` without a daemon and with exit 1: replaced by `devices`, which needs the
+  daemon and exits 0 when it lists a device and 3 (`no_device`) when the list is empty. A
+  script that needs a usable camera reads `support` from `devices --json`, or runs `status`,
+  which exits 3 without one.
+- **PX-6** `zoom F --speed S` with any integer S: only `slow|medium|fast` (10, 30, 50), the
+  only speeds with a known meaning.
+- **PX-7** `auto-sleep 0`: not offered. The camera cannot store "off" together with 0 s, and
+  "on with 0 s" was never recorded.
 
 ## [0.13.2] - 2026-10-31
 
