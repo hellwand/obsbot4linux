@@ -15,10 +15,17 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// A socket path for one test, unique per name. The name is kept short: a Unix socket path
-/// holds at most 107 bytes, and a daemon adds `.lock` and `.test` (5 bytes) to its path.
+/// A socket path for one test, unique per name and test process: `$TMPDIR/o4l-c-<pid>-<name>`.
+/// It is not under the target directory, which a package build puts deep down; the name is
+/// kept short: a Unix socket path holds at most 107 bytes, and a daemon adds `.lock` and
+/// `.test` (5 bytes) to its path. A `$TMPDIR` that is itself too long (a user's makepkg
+/// environment) falls back to `/tmp`.
 pub fn socket(name: &str) -> PathBuf {
-    let path = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("c-{name}"));
+    let file = format!("o4l-c-{}-{name}", std::process::id());
+    let mut path = std::env::temp_dir().join(&file);
+    if path.as_os_str().len() > 100 {
+        path = PathBuf::from("/tmp").join(file);
+    }
     assert!(
         path.as_os_str().len() <= 100,
         "socket path too long for a Unix socket: {}",
