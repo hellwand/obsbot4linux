@@ -6,6 +6,7 @@
 //! model. `--json` never goes through this module.
 
 use crate::errors::device_line;
+use crate::escape::escape;
 use obsbot_proto::{Description, Device, Setting, SettingType, State, Unit, UnitSpec};
 use serde_json::Value;
 
@@ -22,7 +23,7 @@ pub fn unit_suffix(unit: &Unit) -> String {
         Unit::Fraction => String::new(),
         Unit::Fps => " fps".into(),
         other => match serde_json::to_value(other) {
-            Ok(Value::String(name)) => format!(" {name}"),
+            Ok(Value::String(name)) => format!(" {}", escape(&name)),
             _ => String::new(),
         },
     }
@@ -52,8 +53,8 @@ fn scalar(setting: &Setting, component: Option<&str>, v: &Value) -> String {
             format!("{n}{suffix}")
         }
         Value::String(s) if s.is_empty() => "\"\"".into(),
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
+        Value::String(s) => escape(s).into_owned(),
+        other => escape(&other.to_string()).into_owned(),
     }
 }
 
@@ -69,6 +70,7 @@ pub fn value_text(setting: &Setting, v: &Value) -> String {
                 map.get(*c)
                     .map(|x| format!("{c} {}", scalar(setting, Some(c), x)))
             })
+            .map(|s| escape(&s).into_owned())
             .collect::<Vec<_>>()
             .join(" "),
         _ => scalar(setting, None, v),
@@ -80,7 +82,7 @@ pub fn value_text(setting: &Setting, v: &Value) -> String {
 /// names").
 pub fn item_text(setting: &Setting, item: &Value) -> String {
     let Value::Object(fields) = item else {
-        return item.to_string();
+        return escape(&item.to_string()).into_owned();
     };
     fields
         .iter()
@@ -89,9 +91,9 @@ pub fn item_text(setting: &Setting, item: &Value) -> String {
             let text = match (name.as_str(), v, described) {
                 ("name", Value::String(s), _) if s.is_empty() => "(unnamed)".to_string(),
                 (_, _, Some(field)) => value_text(field, v),
-                (_, _, None) => v.to_string(),
+                (_, _, None) => escape(&v.to_string()).into_owned(),
             };
-            format!("{name} {text}")
+            format!("{} {text}", escape(name))
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -107,7 +109,7 @@ pub fn state_text(desc: &Description, state: &State) -> String {
         if state.available { "yes" } else { "no" }
     );
     if !state.unread.is_empty() {
-        out.push_str(&format!("unread: {}\n", state.unread.join(", ")));
+        out.push_str(&format!("unread: {}\n", escape(&state.unread.join(", "))));
     }
     let mut group: Option<&str> = None;
     for (path, setting) in &desc.settings {
@@ -118,7 +120,7 @@ pub fn state_text(desc: &Description, state: &State) -> String {
         let (indent, name) = match path.split_once('.') {
             Some((first, rest)) => {
                 if group != Some(first) {
-                    out.push_str(first);
+                    out.push_str(&escape(first));
                     out.push('\n');
                     group = Some(first);
                 }
@@ -136,6 +138,7 @@ pub fn state_text(desc: &Description, state: &State) -> String {
         if state.unread.iter().any(|p| p == path) {
             marks.push_str(" (unread)");
         }
+        let name = &*escape(name);
         match (&setting.kind, value) {
             (SettingType::List, Value::Array(items)) => {
                 let empty = if items.is_empty() { " (none)" } else { "" };

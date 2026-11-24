@@ -4,6 +4,7 @@
 //! `devices` send nothing after `hello`, whose reply holds the device list.
 
 use crate::errors::{CliCode, CliError};
+use crate::escape::escape;
 use crate::select::{report_hint, select};
 use crate::{Ctx, describe as text, render, session};
 use obsbot_proto::{Device, ErrorCode, RevState, Support, Usb};
@@ -66,9 +67,9 @@ pub fn describe(ctx: &mut Ctx, target: Option<&str>) -> Result<(), CliError> {
         None => text::device_text(&device),
         Some(name) => match (desc.settings.get(name), desc.actions.get(name)) {
             (Some(s), _) if ctx.json => format!("{}\n", to_json(s)),
-            (Some(s), _) => format!("{name}: {}\n", text::setting_text(s)),
+            (Some(s), _) => format!("{}: {}\n", escape(name), text::setting_text(s)),
             (None, Some(a)) if ctx.json => format!("{}\n", to_json(a)),
-            (None, Some(a)) => format!("{name}: {}\n", text::action_text(a)),
+            (None, Some(a)) => format!("{}: {}\n", escape(name), text::action_text(a)),
             (None, None) => {
                 return Err(CliError::new(
                     CliCode::Proto(ErrorCode::Unsupported),
