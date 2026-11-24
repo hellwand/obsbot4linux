@@ -10,6 +10,7 @@ use crate::registry::{Registry, Spawner};
 use crate::socket::{self, Bound};
 use crate::table::Table;
 use crate::{Config, SWEEP_EVERY, Timing, control, queue, worker};
+use obsbot_device::bus::SysfsBus;
 use obsbot_device::contract::Bus;
 use std::io;
 use std::os::unix::net::UnixStream;
@@ -86,7 +87,12 @@ fn join_within(handle: JoinHandle<()>, limit: Duration) {
 pub fn run(config: Config, timing: Timing) -> io::Result<()> {
     // The lock first, then the inherited or bound socket (5.9); an error names the lock file.
     let bound = socket::open(&config.socket)?;
-    let result = serve(&config, timing, &bound);
+    // Fake mode serves the fake devices; without it the daemon scans sysfs (B-2).
+    let bus: Arc<dyn Bus> = match config.fake.clone() {
+        Some(fake) => fake,
+        None => Arc::new(SysfsBus::new()),
+    };
+    let result = serve(&config, timing, &bound, bus);
     // Only a socket file this daemon bound is removed; an inherited one is systemd's (decision 18).
     if let Some(path) = &bound.owned {
         let _ = std::fs::remove_file(path);
@@ -95,17 +101,14 @@ pub fn run(config: Config, timing: Timing) -> io::Result<()> {
 }
 
 /// Everything between the bound socket and its removal: the threads and the shutdown in the
-/// order of 5.9. The lock is released when `bound` is dropped by the caller.
-fn serve(config: &Config, timing: Timing, bound: &Bound) -> io::Result<()> {
-    let Some(fake) = config.fake.clone() else {
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "the real device path comes with B-2 (task b-15)",
-        ));
-    };
-    let bus: Arc<dyn Bus> = fake.clone();
+/// order of 5.9. The lock is released when `bound` is dropped by the caller. The test-control
+/// socket runs in fake mode only (`config.fake`).
+fn serve(config: &Config, timing: Timing, bound: &Bound, bus: Arc<dyn Bus>) -> io::Result<()> {
     let control_stop = Arc::new(AtomicBool::new(false));
-    let control = control::serve(&config.socket, fake, control_stop.clone())?;
+    let control = match config.fake.clone() {
+        Some(fake) => Some(control::serve(&config.socket, fake, control_stop.clone())?),
+        None => None,
+    };
     let control_path = control::control_path(&config.socket);
 
     let table = Arc::new(Table::new(env!("CARGO_PKG_VERSION")));
@@ -211,8 +214,9 @@ fn start_threads(
     Ok((acceptor, registry_thread, sweeper))
 }
 
-/// Ends the test-control thread, removes its socket file.
-fn stop_control(stop: &AtomicBool, path: &Path, thread: JoinHandle<()>) {
+/// Ends the test-control thread, removes its socket file; a no-op without fake mode.
+fn stop_control(stop: &AtomicBool, path: &Path, thread: Option<JoinHandle<()>>) {
+    let Some(thread) = thread else { return };
     stop.store(true, Ordering::SeqCst);
     let _ = UnixStream::connect(path);
     join_within(thread, ACCEPTOR_JOIN);
@@ -222,6 +226,7 @@ fn stop_control(stop: &AtomicBool, path: &Path, thread: JoinHandle<()>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Write};
 
     /// 5.9: a panic in a critical thread is recorded, so that `run` ends with an error.
     #[test]
@@ -248,5 +253,49 @@ mod tests {
             .join()
             .unwrap();
         assert_eq!(calm.get(), None);
+    }
+
+    /// B-2: without `--fake` the daemon scans sysfs through track A's bus; on a root without
+    /// any video device it serves an empty device list and stops cleanly. No real device is
+    /// touched: the root is an empty directory.
+    #[test]
+    fn the_real_path_serves_what_the_sysfs_scan_finds() {
+        let dir = std::env::temp_dir().join(format!("o4ld-real-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sys")).unwrap();
+        let socket = dir.join("s.sock");
+        // The daemon adds `.lock`; a Unix socket path holds at most 107 bytes.
+        assert!(
+            socket.as_os_str().len() <= 100,
+            "socket path too long for a Unix socket: {}",
+            socket.display()
+        );
+        let config = Config::new(socket.clone());
+        assert!(
+            config.fake.is_none(),
+            "the real path runs without fake mode"
+        );
+        let stop = config.stop.clone();
+        let bus: Arc<dyn Bus> = Arc::new(SysfsBus::with_root(dir.join("sys")));
+        let bound = socket::open(&socket).unwrap();
+        let h = std::thread::spawn(move || serve(&config, Timing::SPEC, &bound, bus));
+        let until = Instant::now() + Duration::from_secs(5);
+        while UnixStream::connect(&socket).is_err() {
+            assert!(Instant::now() < until, "the daemon did not serve");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut s = UnixStream::connect(&socket).unwrap();
+        writeln!(s, r#"{{"id":1,"hello":{{"protocol":2,"client":"t 1"}}}}"#).unwrap();
+        let mut line = String::new();
+        BufReader::new(s).read_line(&mut line).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["ok"]["devices"], serde_json::json!([]), "{line}");
+        stop.store(true, Ordering::SeqCst);
+        h.join().unwrap().unwrap();
+        assert!(
+            !dir.join("s.sock.test").exists(),
+            "no test-control socket outside fake mode"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
