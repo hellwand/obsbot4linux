@@ -118,6 +118,19 @@ pub fn run_with(config: Config, timing: Timing) -> std::io::Result<()> {
     daemon::run(config, timing)
 }
 
+/// [`run_with`] on a bus the caller builds, instead of the one `config` names: a model on the
+/// replay transport, so that a test runs the daemon and a real model end to end without a
+/// camera (stage W2). `config.fake` only decides whether the test-control socket is served.
+/// For in-process tests only.
+#[doc(hidden)]
+pub fn run_on(
+    config: Config,
+    timing: Timing,
+    bus: Arc<dyn obsbot_device::contract::Bus>,
+) -> std::io::Result<()> {
+    daemon::run_on(config, timing, bus)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +145,44 @@ mod tests {
         }
         assert_eq!(t.request_deadline, obsbot_proto::REQUEST_DEADLINE);
         assert_eq!(t.scan, Duration::from_secs(1));
+    }
+
+    /// W2: `run_on` serves the bus it is given, and without `config.fake` it serves no
+    /// test-control socket. The bus here is a fake bus with one `fake-b`; `config.fake` stays
+    /// `None`, as for a model on the replay transport.
+    #[test]
+    fn run_on_serves_the_given_bus_without_a_test_control_socket() {
+        use std::io::{BufRead, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::atomic::Ordering;
+        use std::time::Instant;
+        let dir = std::env::temp_dir().join(format!("o4ld-on-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("s.sock");
+        let config = Config::new(socket.clone());
+        let stop = config.stop.clone();
+        let bus: Arc<dyn obsbot_device::contract::Bus> =
+            Arc::new(FakeBus::new(&["fake-b"]).unwrap());
+        let h = std::thread::spawn(move || run_on(config, Timing::SPEC, bus));
+        let until = Instant::now() + Duration::from_secs(5);
+        while UnixStream::connect(&socket).is_err() {
+            assert!(Instant::now() < until, "the daemon does not accept");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut s = UnixStream::connect(&socket).unwrap();
+        writeln!(s, r#"{{"id":1,"hello":{{"protocol":2,"client":"t 1"}}}}"#).unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(s).read_line(&mut line).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["ok"]["devices"][0]["model"], "fake-b", "{line}");
+        assert!(
+            !control::control_path(&socket).exists(),
+            "no test-control socket without config.fake"
+        );
+        stop.store(true, Ordering::SeqCst);
+        h.join().unwrap().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

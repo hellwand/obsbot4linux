@@ -85,13 +85,18 @@ fn join_within(handle: JoinHandle<()>, limit: Duration) {
 
 /// The daemon: see `crate::run`.
 pub fn run(config: Config, timing: Timing) -> io::Result<()> {
-    // The lock first, then the inherited or bound socket (5.9); an error names the lock file.
-    let bound = socket::open(&config.socket)?;
     // Fake mode serves the fake devices; without it the daemon scans sysfs (B-2).
     let bus: Arc<dyn Bus> = match config.fake.clone() {
         Some(fake) => fake,
         None => Arc::new(SysfsBus::new()),
     };
+    run_on(config, timing, bus)
+}
+
+/// The daemon on a bus the caller builds: see `crate::run_on`. The lock first, then the
+/// inherited or bound socket (5.9); an error names the lock file.
+pub(crate) fn run_on(config: Config, timing: Timing, bus: Arc<dyn Bus>) -> io::Result<()> {
+    let bound = socket::open(&config.socket)?;
     let result = serve(&config, timing, &bound, bus);
     // Only a socket file this daemon bound is removed; an inherited one is systemd's (decision 18).
     if let Some(path) = &bound.owned {
