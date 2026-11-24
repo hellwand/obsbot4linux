@@ -12,7 +12,7 @@ use crate::table::Cause;
 use crate::worker::Worker;
 use obsbot_device::contract::{CameraError, Ctx, Target, Tier};
 use obsbot_proto::validate::{Refusal, validate_do, validate_get, validate_set};
-use obsbot_proto::{ErrorBody, ErrorCode, OkBody, Params, RevOk, RevState};
+use obsbot_proto::{ErrorBody, ErrorCode, OkBody, Params, RevOk, RevState, Warning};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
@@ -56,6 +56,10 @@ impl Worker {
         let mut outcomes: Vec<Outcome> = Vec::new();
         let mut deadlines: Vec<Instant> = Vec::new();
         let mut stopped = None;
+        // The batch is one request with a `restart` warning (the plan runs it alone): it is
+        // answered on acceptance, without a re-read (5.6 "Restart").
+        let mut restart = false;
+        let was_asleep = self.state.asleep();
 
         for (i, job) in jobs.iter().enumerate() {
             if job.out.as_ref().is_some_and(|out| out.is_closed()) {
@@ -107,6 +111,7 @@ impl Worker {
                         let e = echo(setting, value);
                         match self.cam.apply(&leaf, &sent(setting, value), &ctx) {
                             Ok(()) => {
+                                restart |= setting.warning.contains(&Warning::Restart);
                                 working.set(&leaf, e.clone());
                                 touched.extend(self.cam.touched(Target::Leaf(&leaf)));
                                 if readback {
@@ -173,6 +178,7 @@ impl Worker {
                     match self.cam.act(action, &p, &working, &ctx) {
                         Ok(result) => {
                             touched.extend(self.cam.touched(Target::Action(action)));
+                            restart |= spec.warning.contains(&Warning::Restart);
                             outcomes.push(Outcome::Done(result));
                         }
                         Err(err) => {
@@ -234,22 +240,25 @@ impl Worker {
         }
 
         // The groups the batch touched are read once, with the earliest deadline of the
-        // requests that sent something.
-        let ctx = Ctx::new(
-            deadlines.iter().min().copied(),
-            Some(self.queue.cut.clone()),
-        );
+        // requests that sent something. After a `restart` write nothing is read: the camera
+        // is going (5.6 "Restart").
         let mut ok_groups: BTreeSet<String> = BTreeSet::new();
-        for group in self.plan.clone() {
-            if !touched.contains(&group.name) {
-                continue;
-            }
-            let ok = self.read_group(&group.name, &ctx);
-            if ok {
-                ok_groups.insert(group.name.clone());
-            }
-            if group.tier == Tier::Touched {
-                self.schedule.touched_read(&group.name, ok);
+        if !restart {
+            let ctx = Ctx::new(
+                deadlines.iter().min().copied(),
+                Some(self.queue.cut.clone()),
+            );
+            for group in self.plan.clone() {
+                if !touched.contains(&group.name) {
+                    continue;
+                }
+                let ok = self.read_group(&group.name, &ctx);
+                if ok {
+                    ok_groups.insert(group.name.clone());
+                }
+                if group.tier == Tier::Touched {
+                    self.schedule.touched_read(&group.name, ok);
+                }
             }
         }
         for w in written {
@@ -260,12 +269,17 @@ impl Worker {
                 .is_some_and(|g| ok_groups.contains(&g.name))
                 .then(|| self.state.at(&w.leaf))
                 .flatten();
+            let settle_from = if restart {
+                Some(w.at)
+            } else {
+                w.readable.then_some(w.at)
+            };
             self.pending.written(
                 &self.desc.settings[&w.leaf],
                 &w.leaf,
                 w.echo,
                 read,
-                w.readable.then_some(w.at),
+                settle_from,
             );
         }
         let rev = self.publish(Cause::Request);
@@ -302,6 +316,13 @@ impl Worker {
                     failure_body(&error, &applied, &failed, Some(rev)),
                 )),
             }
+        }
+        if restart {
+            self.quiet_until = Some(Instant::now() + deadline);
+            return;
+        }
+        if was_asleep && !self.state.asleep() {
+            self.wake();
         }
     }
 }

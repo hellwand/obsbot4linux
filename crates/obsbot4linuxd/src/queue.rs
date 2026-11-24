@@ -282,6 +282,26 @@ impl DeviceQueue {
         inner.jobs.drain(..).collect()
     }
 
+    /// Waits until the device ends or the daemon stops, or `until` passes; queued jobs do not
+    /// end the wait (the quiet time after a `restart` write, 5.6: they stay queued unsent).
+    pub fn wait_quiet(&self, until: Instant) {
+        let mut inner = self.lock();
+        loop {
+            if self.is_ended() || self.is_shutdown() {
+                return;
+            }
+            let now = Instant::now();
+            if now >= until {
+                return;
+            }
+            inner = self
+                .cv
+                .wait_timeout(inner, until - now)
+                .unwrap_or_else(PoisonError::into_inner)
+                .0;
+        }
+    }
+
     /// Waits until a job is queued, the device ends or the daemon stops, or `until` passes.
     pub fn wait(&self, until: Instant) {
         let mut inner = self.lock();
@@ -597,6 +617,28 @@ mod tests {
         q.push(stop(2)).ok().unwrap();
         q.put_back(rest);
         assert_eq!(names(&q.take_all()), ["gimbal.stop", "set c.d"]);
+    }
+
+    /// 5.6 "Restart": during the quiet time a queued request must not end the wait (it would
+    /// make the worker spin), while the device going does.
+    #[test]
+    fn the_quiet_wait_ignores_queued_jobs_and_ends_with_the_device() {
+        let q = DeviceQueue::new();
+        q.push(set(1, "led.brightness", 1)).ok().unwrap();
+        let t0 = Instant::now();
+        q.wait_quiet(t0 + Duration::from_millis(150));
+        assert!(
+            t0.elapsed() >= Duration::from_millis(150),
+            "a queued job does not end it"
+        );
+        assert_eq!(q.len(), 1, "the job stays queued");
+        q.end();
+        let t1 = Instant::now();
+        q.wait_quiet(t1 + Duration::from_secs(10));
+        assert!(
+            t1.elapsed() < Duration::from_secs(5),
+            "the device going ends it"
+        );
     }
 
     #[test]
