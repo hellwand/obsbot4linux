@@ -9,10 +9,9 @@
 //! added, and on `main` in a change that alters what a builder sends on purpose (that change
 //! lists the changed lines). A move never writes it; every other run compares.
 
-use clap::ValueEnum;
 use obsbot_device::family::frame::{self, FRAME_SIZE};
 use obsbot_device::models::tiny2lite::commands::{self as cmd, *};
-use obsbot_device::models::tiny2lite::presets::{self, Pose, StartupAi};
+use obsbot_device::models::tiny2lite::presets::{self, Pose};
 use std::fmt::Display;
 
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/byte-guard.txt");
@@ -170,7 +169,7 @@ fn record() -> Vec<String> {
             cmd::sleep_background_mirror(on),
         );
     }
-    for m in AiMode::value_variants() {
+    for m in AiMode::ALL {
         rec(o, format!("cmd::ai_mode({m:?})"), cmd::ai_mode(*m));
         rec(
             o,
@@ -181,14 +180,7 @@ fn record() -> Vec<String> {
     for s in [i16::MIN, -600, -1, 0, 1, 600, i16::MAX] {
         rec(o, format!("cmd::auto_sleep({s})"), cmd::auto_sleep(s));
     }
-    for s in [0u16, 1, 600, 32767, 32768, u16::MAX] {
-        rec(
-            o,
-            format!("cmd::auto_sleep_off({s})"),
-            cmd::auto_sleep_off(s),
-        );
-    }
-    for b in SleepBackground::value_variants() {
+    for b in SleepBackground::ALL {
         rec(
             o,
             format!("cmd::sleep_background({b:?})"),
@@ -208,28 +200,21 @@ fn record() -> Vec<String> {
             cmd::wake_zoom_percent(f),
         );
     }
-    for v in FieldOfView::value_variants() {
+    for v in FieldOfView::ALL {
         rec(
             o,
             format!("cmd::field_of_view({v:?})"),
             cmd::field_of_view(*v),
         );
     }
-    for v in NoiseReduction::value_variants() {
+    for v in NoiseReduction::ALL {
         rec(
             o,
             format!("cmd::noise_reduction({v:?})"),
             cmd::noise_reduction(*v),
         );
     }
-    for v in PickupDistance::value_variants() {
-        rec(
-            o,
-            format!("cmd::pickup_distance({v:?})"),
-            cmd::pickup_distance(*v),
-        );
-    }
-    for v in ExposureMode::value_variants() {
+    for v in ExposureMode::ALL {
         rec(
             o,
             format!("cmd::exposure_mode_select({v:?})"),
@@ -266,48 +251,48 @@ fn record() -> Vec<String> {
     for (name, f) in seq_only {
         rec(o, format!("cmd::{name}()"), f(SEQ));
     }
-    for v in TrackingSpeed::value_variants() {
+    for v in TrackingSpeed::ALL {
         rec(
             o,
             format!("cmd::tracking_speed({v:?})"),
             cmd::tracking_speed(*v, SEQ),
         );
     }
-    for v in SpeedMode::value_variants() {
+    for v in SpeedMode::ALL {
         rec(
             o,
             format!("cmd::speed_mode({v:?})"),
             cmd::speed_mode(*v, SEQ),
         );
     }
-    for v in FramingSize::value_variants() {
+    for v in FramingSize::ALL {
         rec(
             o,
             format!("cmd::framing_size({v:?})"),
             cmd::framing_size(*v, SEQ),
         );
     }
-    for v in AutoZoomSpeed::value_variants() {
+    for v in AutoZoomSpeed::ALL {
         rec(
             o,
             format!("cmd::auto_zoom_speed({v:?})"),
             cmd::auto_zoom_speed(*v, SEQ),
         );
     }
-    for v in PartMode::value_variants() {
+    for v in PartMode::ALL {
         rec(o, format!("cmd::part_mode({v:?})"), cmd::part_mode(*v, SEQ));
     }
-    for v in HandSide::value_variants() {
+    for v in HandSide::ALL {
         rec(o, format!("cmd::hand_side({v:?})"), cmd::hand_side(*v, SEQ));
     }
-    for v in AutofocusMode::value_variants() {
+    for v in AutofocusMode::ALL {
         rec(
             o,
             format!("cmd::autofocus_mode_select({v:?})"),
             cmd::autofocus_mode_select(*v, SEQ),
         );
     }
-    for g in Gesture::value_variants() {
+    for g in Gesture::ALL {
         for on in [false, true] {
             rec(
                 o,
@@ -343,11 +328,6 @@ fn record() -> Vec<String> {
                 o,
                 format!("cmd::focus_point({x}, {y})"),
                 cmd::focus_point(x, y, SEQ),
-            );
-            rec(
-                o,
-                format!("cmd::view_center({x}, {y})"),
-                cmd::view_center(x, y, SEQ),
             );
         }
     }
@@ -536,10 +516,6 @@ fn record() -> Vec<String> {
             format!("presets::hand_return_set({p:?})"),
             presets::hand_return_set(p, SEQ),
         );
-    }
-    for ai in StartupAi::value_variants() {
-        let f = presets::startup_picture_settings(ai.byte(), SEQ);
-        rec(o, format!("presets::startup_picture_settings({ai:?})"), f);
     }
     let block: Vec<u8> = (0u8..48).collect();
     for len in [0usize, 39, 40, 48] {

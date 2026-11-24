@@ -146,13 +146,12 @@ fn range(min: f64, max: f64) -> Value {
 }
 
 /// A pitch range (min, max) as the camera reports it (positive down) in the units of 4.2
-/// (positive up): min and max swap and flip. Carried from `camera.rs` (`pitch_to_tilt_range`).
+/// (positive up): min and max swap and flip.
 pub fn pitch_to_tilt_range(pitch: (f64, f64)) -> (f64, f64) {
     (-pitch.1 + 0.0, -pitch.0 + 0.0)
 }
 
 /// A tilt range in the units of 4.2 as the camera takes it (pitch): min and max swap and flip.
-/// Carried from `camera.rs` (`tilt_to_pitch_range`).
 pub fn tilt_to_pitch_range(tilt: (f32, f32)) -> (f32, f32) {
     (-tilt.1 + 0.0, -tilt.0 + 0.0)
 }
@@ -222,8 +221,7 @@ pub fn gestures(d: &[u8]) -> Option<Values> {
 }
 
 /// The answer to `0x0043` on receiver 3, group `pose`: bytes 8–9 the pitch (positive down) and
-/// 10–11 the yaw (positive left), i16 in hundredths of a degree. Carried from `camera.rs`
-/// (`LivePose::decode`).
+/// 10–11 the yaw (positive left), i16 in hundredths of a degree.
 pub fn pose(d: &[u8]) -> Option<Values> {
     let i16_at = |i: usize| d.get(i..i + 2).map(|b| i16::from_le_bytes([b[0], b[1]]));
     let pitch = f64::from(i16_at(8)?) / 100.0;
@@ -248,8 +246,7 @@ pub fn zoom(d: &[u8]) -> Option<Values> {
 
 /// The answer to `0x01c4`, group `target`: `01 01 <detected> 01 00 00` and four f32 (left, top,
 /// right, bottom as picture fractions). An answer that is not that (the single `00` of a camera
-/// without a target) is no target: `detected` false, `box` null. Carried from `status.rs`
-/// (`Target::decode`).
+/// without a target) is no target: `detected` false, `box` null.
 pub fn target(d: &[u8]) -> Values {
     let decoded = (|| {
         if d.len() < 22 || d[0] != 1 || d[2] > 1 {
@@ -291,8 +288,7 @@ pub fn framing(leaf: &str, d: &[u8]) -> Option<Value> {
         "tracking.speed" => named(&SPEED, byte?),
         "framing.auto_zoom" => flag(byte?),
         "framing.size" => named(&FRAMING_SIZE, byte?),
-        // a camera that was never set reports the speed itself: 10, 30 or 50 (#98); carried
-        // from `camera.rs` (`auto_zoom_speed_reading`)
+        // a camera that was never set reports the speed itself: 10, 30 or 50 (#98)
         "framing.zoom_speed" => match byte? {
             10 => json!("slow"),
             30 => json!("medium"),
@@ -405,8 +401,7 @@ pub fn zone(
 }
 
 /// The group `hand` from the answers to `0x2004` (yaw min, max, pitch min, max as f32; the
-/// pan and tilt flags in bytes 22 and 23) and `0x2504` (return pose, lead −1 = none). Carried
-/// from `camera.rs` (`HandArea::decode`, `hand_enabled`).
+/// pan and tilt flags in bytes 22 and 23) and `0x2504` (return pose, lead −1 = none).
 pub fn hand(area: &[u8], ret: &[u8]) -> Option<Values> {
     let (tilt_min, tilt_max) = pitch_to_tilt_range((f32_at(area, 2)?, f32_at(area, 3)?));
     let mut v = Values::new();
@@ -533,7 +528,7 @@ pub fn on_air(o: &OnAir) -> Values {
 }
 
 /// The firmware version from the answer to `0x0408` on receiver `0x0d`: a u32 shown as
-/// byte 3.2.1.0. Carried from `status.rs` (`firmware_version`).
+/// byte 3.2.1.0.
 pub fn firmware(d: &[u8]) -> Option<String> {
     let v: [u8; 4] = d.get(..4)?.try_into().ok()?;
     Some(format!("{}.{}.{}.{}", v[3], v[2], v[1], v[0]))
