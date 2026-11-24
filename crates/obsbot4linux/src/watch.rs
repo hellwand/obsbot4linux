@@ -3,7 +3,9 @@
 //! `watch` (design spec 6.2): `hello` with `subscribe: true` and the given live topics; the
 //! reply as its first line, then every line the daemon sends, unchanged, one JSON object per
 //! line. It reads nothing from stdin, takes no `--device`, exits 0 on SIGINT or SIGTERM and
-//! 4 when the connection ends.
+//! 4 when the connection ends. The lines are printed as received and are not escaped
+//! (`escape` does not apply; a peer on the socket that sends raw control characters reaches
+//! the terminal): a known limit, the daemon's own lines hold only what serde leaves raw.
 
 use crate::Ctx;
 use crate::errors::{CliCode, CliError};

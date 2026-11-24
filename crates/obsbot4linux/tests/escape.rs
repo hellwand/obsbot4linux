@@ -8,8 +8,8 @@
 mod common;
 
 use common::{cli, fake_a, fake_b, script, socket};
-use obsbot_proto::Device;
 use obsbot_proto::client::script::ScriptServer;
+use obsbot_proto::{Action, Asleep, Device, Setting};
 use serde_json::Value;
 
 /// As JSON text, and as the escaped form human output must show.
@@ -30,7 +30,16 @@ fn hostile_devices() -> Vec<Device> {
     let hostile: String = serde_json::from_str(&format!("\"{HOSTILE_JSON}\"")).unwrap();
     let (mut a, mut b) = (fake_a(), fake_b());
     a.name = hostile.clone();
-    b.firmware = Some(hostile);
+    b.firmware = Some(hostile.clone());
+    b.usb.vendor = hostile.clone();
+    b.usb.product = hostile.clone();
+    let d = std::mem::take(&mut b.description);
+    b.description = d
+        .setting(&hostile, Setting::string(&hostile, 8, false))
+        .action(
+            &format!("x{hostile}"),
+            Action::new(&hostile, Asleep::Unknown),
+        );
     vec![a, b]
 }
 
@@ -110,6 +119,10 @@ fn devices_and_describe_show_names_and_firmware_escaped() {
             );
         } else {
             assert!(out.contains(&format!("firmware: {SHOWN}\n")), "{out:?}");
+            assert!(
+                out.contains(&format!("usb: {SHOWN}:{SHOWN} ")),
+                "usb ids: {out:?}"
+            );
         }
         server.finish().unwrap();
     }
@@ -166,5 +179,59 @@ fn json_output_carries_the_original_text() {
     assert_eq!(v["state"]["presets"][0]["name"], want.as_str());
     assert_eq!(v["device"]["name"], want.as_str());
     assert!(!out.contains(SHOWN), "JSON must not hold the human escapes");
+    server.finish().unwrap();
+}
+
+/// `describe <target>` shows the name and the setting or action line escaped.
+#[test]
+fn describe_of_one_target_is_shown_escaped() {
+    let hostile: String = serde_json::from_str(&format!("\"{HOSTILE_JSON}\"")).unwrap();
+    for (name, target, shown, label) in [
+        ("esc-dset", hostile.clone(), SHOWN.to_string(), "string"),
+        (
+            "esc-dact",
+            format!("x{hostile}"),
+            format!("x{SHOWN}"),
+            "no parameters",
+        ),
+    ] {
+        let server = ScriptServer::start(&socket(name), &script(&hostile_devices(), &[]));
+        let (code, out, err) = cli(
+            Some(server.path()),
+            &["describe", &target, "--device", "fake-b"],
+        );
+        assert_eq!((code, err.as_str()), (0, ""), "{name}");
+        assert_safe(&out);
+        assert!(out.starts_with(&format!("{shown}: ")), "{out:?}");
+        assert!(out.contains(label), "{out:?}");
+        assert!(out.trim_end().ends_with(&format!("({SHOWN})")), "{out:?}");
+        server.finish().unwrap();
+    }
+}
+
+/// `do`: the result's field name and an undescribed value (serde leaves U+2028 and U+202E
+/// raw in its text) are shown escaped.
+#[test]
+fn a_do_result_is_shown_escaped() {
+    let reply =
+        format!(r#"< {{"id":2,"ok":{{"rev":3,"result":{{"{HOSTILE_JSON}":"{HOSTILE_JSON}"}}}}}}"#);
+    let server = ScriptServer::start(
+        &socket("esc-do"),
+        &script(
+            &hostile_devices(),
+            &[
+                r#"> {"id":2,"device":"sn:FAKEB0000001","do":"beacon.flash","with":{"times":2}}"#,
+                &reply,
+            ],
+        ),
+    );
+    let (code, out, err) = cli(
+        Some(server.path()),
+        &["do", "beacon.flash", "times=2", "--device", "fake-b"],
+    );
+    assert_eq!((code, err.as_str()), (0, ""));
+    assert_safe(&out);
+    assert!(out.starts_with(&format!("{SHOWN}: ")), "{out:?}");
+    assert!(out.contains(r"\u{2028}\u{202e}"), "{out:?}");
     server.finish().unwrap();
 }

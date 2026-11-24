@@ -267,4 +267,13 @@ mod tests {
             "obsbot4linux: the camera did not answer\n  applied: exposure.mode\n  failed: exposure.time\n"
         );
     }
+
+    /// Issue #250: the hint line is escaped like the message.
+    #[test]
+    fn the_hint_is_escaped() {
+        let e = CliError::usage("x").with_hint("\u{1b}[31mtry\n\u{202e}");
+        let text = e.human();
+        assert!(text.ends_with("\\x1b[31mtry\\x0a\\u{202e}\n"), "{text:?}");
+        assert!(!text.contains('\u{1b}') && !text.contains('\u{202e}'));
+    }
 }

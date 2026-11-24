@@ -322,4 +322,62 @@ mod tests {
             assert_eq!(unit_suffix(&unit), suffix);
         }
     }
+
+    const HOSTILE: &str = "\u{1b}[31mX\u{7}\n\u{2028}\u{202e}";
+    const SHOWN: &str = r"\x1b[31mX\x07\x0a\u{2028}\u{202e}";
+
+    fn assert_safe(text: &str) {
+        for c in text.chars() {
+            assert!(
+                c == '\n' || !(c.is_control() || ('\u{2028}'..='\u{202e}').contains(&c)),
+                "{c:?} reached the terminal in {text:?}"
+            );
+        }
+    }
+
+    /// Issue #250: the `unread:` list, a group heading, a path segment and a string value of
+    /// a state are escaped.
+    #[test]
+    fn state_text_escapes_unread_group_name_and_value() {
+        let desc = Description::default()
+            .setting(
+                &format!("{HOSTILE}.{HOSTILE}"),
+                Setting::string("S", 8, false),
+            )
+            .setting(&format!("z{HOSTILE}"), Setting::string("T", 8, false));
+        let mut state = State::new(true);
+        state.set(&format!("{HOSTILE}.{HOSTILE}"), json!(HOSTILE));
+        state.set(&format!("z{HOSTILE}"), json!(HOSTILE));
+        state.unread.push(HOSTILE.into());
+        state.unread.push(HOSTILE.into());
+        let text = state_text(&desc, &state);
+        assert_safe(&text);
+        assert!(
+            text.contains(&format!("unread: {SHOWN}, {SHOWN}\n")),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("\n{SHOWN}\n  {SHOWN}: {SHOWN}\n")),
+            "{text}"
+        );
+    }
+
+    /// A compound value shows its string components escaped; an item that is not an object
+    /// and an undescribed item field are escaped too.
+    #[test]
+    fn compound_values_and_list_items_are_escaped() {
+        let pose = Setting::new(SettingType::Pose, "Pose");
+        let text = value_text(&pose, &json!({"pan": HOSTILE}));
+        assert_safe(&text);
+        assert!(text.contains(SHOWN), "{text}");
+        let list = Setting::list("L", &[("n", Setting::string("N", 8, false))]);
+        // serde leaves U+2028 and U+202E raw in a rendered JSON string.
+        let text = item_text(&list, &json!(HOSTILE));
+        assert_safe(&text);
+        assert!(text.contains(r"\u{2028}\u{202e}"), "{text}");
+        let text = item_text(&list, &json!({HOSTILE: HOSTILE}));
+        assert_safe(&text);
+        assert!(text.starts_with(&format!("{SHOWN} ")), "{text}");
+        assert!(text.contains(r"\u{2028}\u{202e}"), "{text}");
+    }
 }

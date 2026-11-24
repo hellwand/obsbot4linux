@@ -188,8 +188,8 @@ pub fn device_text(d: &Device) -> String {
     out.push_str(&format!("video node: {}\n", dash(&d.video_node)));
     out.push_str(&format!(
         "usb: {}:{} {}, path {}\n",
-        d.usb.vendor,
-        d.usb.product,
+        escape(&d.usb.vendor),
+        escape(&d.usb.product),
         dash(&d.usb.product_name),
         escape(&d.usb.path)
     ));
@@ -222,6 +222,7 @@ pub fn device_text(d: &Device) -> String {
 mod tests {
     use super::*;
     use obsbot_proto::{Description, HelloOk, OkBody, Reply, ReplyBody, ServerMessage};
+    use serde_json::json;
 
     const SESSION: &str = include_str!("../../obsbot-proto/tests/golden/session.jsonl");
     const TINY2LITE: &str = include_str!("../../../descriptions/tiny2lite.json");
@@ -312,6 +313,71 @@ mod tests {
         assert_eq!(
             action_text(&d.actions["beacon.flash"]),
             "times (number 1..3, step 1), asleep accepted (Flash the beacon)"
+        );
+    }
+
+    const HOSTILE: &str = "\u{1b}[31mX\u{7}\n\u{2028}\u{202e}";
+    const SHOWN: &str = r"\x1b[31mX\x07\x0a\u{2028}\u{202e}";
+
+    fn assert_safe(text: &str) {
+        for c in text.chars() {
+            assert!(
+                c == '\n' || !(c.is_control() || ('\u{2028}'..='\u{202e}').contains(&c)),
+                "{c:?} reached the terminal in {text:?}"
+            );
+        }
+    }
+
+    /// Issue #250: every string of a description that a setting line shows (label, enum
+    /// values, requirement, default, live topic) is escaped.
+    #[test]
+    fn setting_text_escapes_label_values_requires_default_and_live() {
+        let s = Setting::enumeration(HOSTILE, &[HOSTILE, "plain"])
+            .requires(HOSTILE, json!(HOSTILE))
+            .default_value(json!(HOSTILE))
+            .live(HOSTILE);
+        let text = setting_text(&s);
+        assert_safe(&text);
+        assert!(text.starts_with(&format!("enum {SHOWN}|plain")), "{text}");
+        assert!(
+            text.contains(&format!("requires {SHOWN}={SHOWN}")),
+            "{text}"
+        );
+        assert!(text.contains(&format!("default {SHOWN}")), "{text}");
+        assert!(text.contains(&format!("live {SHOWN}")), "{text}");
+        assert!(text.ends_with(&format!("({SHOWN})")), "{text}");
+    }
+
+    /// The same for an action line: parameter and result names, their settings, conditions
+    /// and the label.
+    #[test]
+    fn action_text_escapes_names_parameters_requires_and_results() {
+        let a = Action::new(HOSTILE, obsbot_proto::Asleep::Unknown)
+            .param(HOSTILE, Setting::enumeration(HOSTILE, &[HOSTILE]))
+            .requires(HOSTILE, json!(HOSTILE))
+            .result(HOSTILE, Setting::string(HOSTILE, 4, false));
+        let text = action_text(&a);
+        assert_safe(&text);
+        assert!(text.contains(&format!("{SHOWN} (enum {SHOWN}")), "{text}");
+        assert!(
+            text.contains(&format!("requires {SHOWN}={SHOWN}")),
+            "{text}"
+        );
+        assert!(text.contains(&format!("result {SHOWN} (string")), "{text}");
+        assert!(text.ends_with(&format!("({SHOWN})")), "{text}");
+    }
+
+    /// The device entry shows the USB ids as they arrived, so they are escaped as well.
+    #[test]
+    fn device_text_escapes_the_usb_ids() {
+        let mut d = hello().devices[0].clone();
+        d.usb.vendor = HOSTILE.into();
+        d.usb.product = HOSTILE.into();
+        let text = device_text(&d);
+        assert_safe(&text);
+        assert!(
+            text.contains(&format!("usb: {SHOWN}:{SHOWN} Example Camera")),
+            "{text}"
         );
     }
 }
