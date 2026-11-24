@@ -4,5 +4,6 @@ Requires=obsbot4linux.socket
 After=obsbot4linux.socket
 
 [Service]
-ExecStart=/usr/bin/obsbot4linux daemon
+ExecStart=/usr/bin/obsbot4linuxd
+NoNewPrivileges=yes
 Restart=on-failure
