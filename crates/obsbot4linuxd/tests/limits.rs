@@ -38,10 +38,14 @@ fn the_65th_connection_is_closed_at_once() {
     assert!(extra.closed_within(Duration::from_secs(2)), "the 65th");
     first.close();
     assert!(eventually(T, || {
-        let mut c = d.connect();
-        c.send(&json!({"id": 1, "hello": {"protocol": 2, "client": "late"}}));
-        c.line(Duration::from_millis(500))
-            .is_some_and(|r| r["ok"].is_object())
+        // While the daemon still refuses the slot, a connect, a write or a read may fail:
+        // that is "not yet", not a test failure.
+        let Some(mut c) = d.try_connect() else {
+            return false;
+        };
+        c.try_send(&json!({"id": 1, "hello": {"protocol": 2, "client": "late"}}))
+            && c.line(Duration::from_millis(500))
+                .is_some_and(|r| r["ok"].is_object())
     }));
     drop(open);
 }
