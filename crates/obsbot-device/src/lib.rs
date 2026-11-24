@@ -8,6 +8,7 @@ pub mod contract;
 pub mod descriptions;
 pub mod enumeration;
 pub mod error;
+pub mod evidence;
 pub mod family;
 pub mod models;
 pub mod registry;

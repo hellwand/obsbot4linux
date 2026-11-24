@@ -303,8 +303,9 @@ fn live_cam_10_cam_20_a_cold_read_of_every_group() {
 #[test]
 #[ignore = "needs a Tiny 2 Lite and OBSBOT_LIVE=1"]
 fn live_the_uvc_ranges_the_description_holds() {
-    // the W0 plan's decision 12: these bounds, steps and defaults are not backed yet; the camera
-    // reports its own (a read). A mismatch is fixed by a contract-change PR of the description.
+    // the bounds, steps and defaults of the description are backed by the recorded range answers
+    // (captures 01, 14, 16, 18; tests/evidence.rs); here the unit reports its own (a read). A
+    // mismatch is fixed by a contract-change PR of the description.
     let Some((found, cam)) = camera(false) else {
         return;
     };
