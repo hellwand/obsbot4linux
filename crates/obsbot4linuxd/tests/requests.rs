@@ -52,6 +52,9 @@ fn pipelined_sets_share_at_most_two_rereads() {
     let d = Daemon::start();
     let (mut c, _) = d.hello(false, &[]);
     let skip = d.ops(B).len();
+    // A slow first operation keeps the worker busy while all eight requests arrive, so the
+    // grouping does not depend on how fast the test thread sends.
+    d.bus.set_delay("fake-b", Duration::from_millis(300));
     let colors = [
         "green", "blue", "red", "green", "blue", "red", "green", "blue",
     ];
