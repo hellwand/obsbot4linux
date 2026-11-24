@@ -4,7 +4,9 @@
 //! camera, error texts) is made safe for a terminal before human output prints it. Control
 //! characters (C0, DEL, C1, so also ESC), line and paragraph separators and bidirectional
 //! formatting characters are replaced by a visible `\xNN` or `\u{NNNN}` stand-in; ordinary
-//! text stays as it is. `--json` output never goes through here: the serializer escapes it.
+//! text stays as it is. `--json` output, `devices --report` and `watch` never go through
+//! here: the serializer escapes only the C0 characters, so DEL, C1 (U+009B, CSI, included),
+//! U+2028/2029 and the bidirectional controls reach the terminal there as they were sent.
 
 use std::borrow::Cow;
 use std::fmt::Write;
