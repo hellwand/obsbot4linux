@@ -178,6 +178,12 @@ impl Worker {
                     match self.cam.act(action, &p, &working, &ctx) {
                         Ok(result) => {
                             touched.extend(self.cam.touched(Target::Action(action)));
+                            self.queue.record_act(
+                                action,
+                                self.motion[action],
+                                job.conn,
+                                p.get("keep") == Some(&Value::Bool(true)),
+                            );
                             restart |= spec.warning.contains(&Warning::Restart);
                             outcomes.push(Outcome::Done(result));
                         }

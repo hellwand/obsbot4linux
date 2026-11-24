@@ -17,7 +17,7 @@ use obsbot_device::contract::{
 };
 use obsbot_proto::validate::{Fit, check_value, leaves, validate_get};
 use obsbot_proto::values::is_raw;
-use obsbot_proto::{Description, OkBody, Patch, RevState, State, Warning, port_id};
+use obsbot_proto::{Description, OkBody, Params, Patch, RevState, State, Warning, port_id};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -105,7 +105,7 @@ pub fn run(p: Plugged) {
             return;
         }
         if w.queue.is_shutdown() {
-            drop(w.queue.take_all());
+            w.own_stops(w.queue.take_all());
             w.queue.close();
             return;
         }
@@ -256,6 +256,28 @@ impl Worker {
     pub(crate) fn failed(&self, error: &CameraError) {
         if let CameraError::NotInSendTable(message) = error {
             eprintln!("{}", names::log_refused_frame(&self.log_id(), message));
+        }
+    }
+
+    /// The daemon's own stops at shutdown (5.9): the stop of a continuing action whose connection
+    /// closed is sent, not dropped; every other queued job is dropped unsent. Nothing is sent
+    /// during the quiet time after a `restart` write (5.6). The stop runs without a cut flag, so
+    /// the shutdown does not cancel it; its deadline is the request deadline.
+    fn own_stops(&mut self, jobs: Vec<Job>) {
+        if self.quiet_until.is_some_and(|until| until > Instant::now()) {
+            return;
+        }
+        for job in jobs {
+            let Work::Do { action, .. } = &job.work else {
+                continue;
+            };
+            if job.out.is_some() || !job.stop {
+                continue;
+            }
+            let ctx = Ctx::new(Some(job.arrived + self.timing.request_deadline), None);
+            if let Err(err) = self.cam.act(action, &Params::new(), &self.state, &ctx) {
+                self.failed(&err);
+            }
         }
     }
 
