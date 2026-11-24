@@ -75,37 +75,11 @@ pub const UNBACKED: &[(&str, &str)] = &[
     ("power_on.start.source=preset_2", "U-26"),
 ];
 
-/// Bounds, steps and defaults that this description holds but neither the spec nor the field
-/// ledger backs yet (the W0 plan's decision 12): `<path>@min`, `<path>@max`, `<path>#step`,
-/// `<path>#default`. They are not evidence. Track A confirms each in the ledger, from a capture
-/// or a measurement on the camera, or changes it, before the evidence-level test of stage W3.
-pub const UNCONFIRMED: &[&str] = &[
-    "exposure.time@min",
-    "exposure.time@max",
-    "exposure.time#default",
-    "exposure.gain#default",
-    "focus.position#default",
-    "image.brightness@min",
-    "image.brightness@max",
-    "image.brightness#default",
-    "image.contrast@min",
-    "image.contrast@max",
-    "image.contrast#default",
-    "image.saturation@min",
-    "image.saturation@max",
-    "image.saturation#default",
-    "image.hue@min",
-    "image.hue@max",
-    "image.hue#default",
-    "image.sharpness@min",
-    "image.sharpness@max",
-    "image.sharpness#default",
-    "image.white_balance.auto#default",
-    "image.white_balance.temperature@min",
-    "image.white_balance.temperature@max",
-    "image.white_balance.temperature#step",
-    "image.white_balance.temperature#default",
-];
+/// Bounds, steps and defaults that this description holds without backing (the W0 plan's
+/// decision 12): `<path>@min`, `<path>@max`, `<path>#step`, `<path>#default`. None today: the
+/// camera's UVC range answers recorded in captures 01, 14, 16 and 18 back every one of them
+/// (`levels.rs`, `tests/evidence.rs`).
+pub const UNCONFIRMED: &[&str] = &[];
 
 /// A writable leaf with a readback: asleep `unknown` until CAM-2, the model-wide settle bound.
 fn w(s: Setting) -> Setting {

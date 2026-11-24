@@ -6,6 +6,7 @@ pub mod act;
 pub mod commands;
 pub mod decode;
 pub mod description;
+pub mod levels;
 pub mod model;
 pub mod plan;
 pub mod presets;

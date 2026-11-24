@@ -17,7 +17,8 @@ env:
   RUSTUP_TOOLCHAIN: "1.99.1"
 
 jobs:
-  # Docs-only changes (Markdown, LICENSE, docs/) skip fmt, clippy and test.
+  # Docs-only changes (Markdown, LICENSE, docs/) skip fmt, clippy and test, except the docs a
+  # test reads: docs/field-ledger.md (the evidence test) and docs/protocol-2.md (its transcripts).
   changes:
     runs-on: ubuntu-22.04
     outputs:
@@ -40,6 +41,7 @@ jobs:
             code=false
             for f in $files; do
               case $f in
+                docs/field-ledger*.md | docs/protocol-2*.md) code=true ;;
                 *.md | LICENSE | docs/*) ;;
                 *) code=true ;;
               esac
