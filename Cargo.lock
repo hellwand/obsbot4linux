@@ -195,6 +195,7 @@ name = "obsbot4linux"
 version = "0.14.0"
 dependencies = [
  "clap",
+ "hex",
  "nix",
  "obsbot-device",
  "obsbot-proto",
