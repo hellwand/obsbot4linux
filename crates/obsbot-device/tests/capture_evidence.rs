@@ -52,15 +52,16 @@ fn no_leaf_is_read_from_the_byte_that_follows_the_microphone_until_u_23() {
     assert_eq!(decode::status(&off), decode::status(&on));
 }
 
-/// CAM-20 in part: after every enumeration recorded on the owner's device (capture 01 at
-/// plug-in, capture 14 after both microphone restarts, capture 16 at plug-in and after the
-/// factory reset) a status read 0.8 to 4.5 s after the enumeration returned all-zero blocks
-/// (after the second restart a full block was read 1.7 s before them); the next read, about
-/// 4 s later, was a full block, and the serial query sent in between was answered with 14
-/// characters. The decoder turns such a block into values that
-/// look real (`sleep.auto.seconds` 0, `image.frame_rate` 0). CS-1 decides whether a block whose
-/// first byte is 0 counts as no read (spec 14, CAM-20); until then this test pins today's
-/// decoding, and the pull request of that decision changes it.
+/// CAM-20, what the decoder does with a zero block. After every enumeration recorded on the
+/// owner's device (capture 01 at plug-in, capture 14 after both microphone restarts, capture 16
+/// at plug-in and after the factory reset) the host's minimum, maximum, resolution and default
+/// queries of the status selector were answered with 60 zero bytes; every status read after an
+/// enumeration returned a full block, and no recorded status read has 0 in its first field.
+/// So the recordings do not show whether a status read during boot returns such a block; CS-1
+/// checks that. The decoder turns a zero block into values that look real
+/// (`sleep.auto.seconds` 0, `image.frame_rate` 0). CS-1 decides whether a block whose first
+/// byte is 0 counts as no read (spec 14, CAM-20); until then this test pins today's decoding,
+/// and the pull request of that decision changes it.
 #[test]
 fn a_boot_block_decodes_as_values_until_cam_20_is_settled() {
     let values = decode::status(&[0u8; 60]);
