@@ -265,8 +265,7 @@ mod tests {
     /// touched: the root is an empty directory.
     #[test]
     fn the_real_path_serves_what_the_sysfs_scan_finds() {
-        let dir = std::env::temp_dir().join(format!("o4ld-real-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = crate::test_dir("real");
         std::fs::create_dir_all(dir.join("sys")).unwrap();
         let socket = dir.join("s.sock");
         // The daemon adds `.lock`; a Unix socket path holds at most 107 bytes.

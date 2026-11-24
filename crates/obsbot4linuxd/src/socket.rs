@@ -115,9 +115,7 @@ mod tests {
     use super::*;
 
     fn socket_in(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("o4ld-sock-{tag}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_dir(&format!("sock-{tag}"));
         let socket = dir.join("obsbot4linux.sock");
         // The daemon adds `.lock` and `.test`; a Unix socket path holds at most 107 bytes.
         assert!(

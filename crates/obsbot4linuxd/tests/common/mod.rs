@@ -38,11 +38,16 @@ pub const UNKNOWN: &str = "port:9-3";
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
 /// A fresh, short directory for one daemon's sockets (a Unix socket path has at most 107
-/// bytes, and the daemon adds `.lock` and `.test`): `$TMPDIR/o4ld-<pid>-<n>`. Asserts that
-/// `s.sock` in it is at most 100 bytes, so that a deep `TMPDIR` fails loudly.
+/// bytes, and the daemon adds `.lock` and `.test`): `$TMPDIR/o4ld-<pid>-<n>`, or the same
+/// under `/tmp` when `$TMPDIR` is too long for that. Asserts that `s.sock` in it is at most
+/// 100 bytes.
 pub fn temp_dir() -> PathBuf {
     let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("o4ld-{}-{n}", std::process::id()));
+    let name = format!("o4ld-{}-{n}", std::process::id());
+    let mut dir = std::env::temp_dir().join(&name);
+    if dir.join("s.sock").as_os_str().len() > 100 {
+        dir = PathBuf::from("/tmp").join(name);
+    }
     let socket = dir.join("s.sock");
     assert!(
         socket.as_os_str().len() <= 100,
