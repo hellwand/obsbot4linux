@@ -151,20 +151,24 @@ jobs:
           ver=$VER
           mkdir dist
           dir=obsbot4linux-$ver-$ARCH-linux
-          mkdir -p "$dir/systemd"
-          cp target/release/obsbot4linux README.md CHANGELOG.md LICENSE "$dir"
+          mkdir -p "$dir/systemd" "$dir/completions"
+          cp target/release/obsbot4linux target/release/obsbot4linuxd "$dir"
+          cp README.md CHANGELOG.md LICENSE schema/protocol-2.json "$dir"
           cp packaging/systemd/* "$dir/systemd"
+          cp packaging/completions/* "$dir/completions"
           tar -czf "dist/$dir.tar.gz" "$dir"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-tarball-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
-      # deb and rpm package exactly this binary.
+      # deb and rpm package exactly these binaries.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-${{ matrix.arch }}
-          path: target/release/obsbot4linux
+          path: |
+            target/release/obsbot4linux
+            target/release/obsbot4linuxd
           if-no-files-found: error
 
   deb:
@@ -199,8 +203,8 @@ jobs:
         run: |
           ver=$VER
           mkdir dist
-          # no rebuild: package the binary from the binary job (artifacts drop the mode)
-          chmod +x target/release/obsbot4linux
+          # no rebuild: package the binaries from the binary job (artifacts drop the mode)
+          chmod +x target/release/obsbot4linux target/release/obsbot4linuxd
           cargo deb -p obsbot4linux --no-build --deb-revision "" -o "dist/obsbot4linux_${ver}_$DEB.deb"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -237,7 +241,7 @@ jobs:
         run: |
           ver=$VER
           mkdir dist
-          chmod +x target/release/obsbot4linux
+          chmod +x target/release/obsbot4linux target/release/obsbot4linuxd
           cargo generate-rpm -p crates/obsbot4linux -o "dist/obsbot4linux-$ver-1.$ARCH.rpm"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -292,7 +296,7 @@ jobs:
           path: dist
           pattern: dist-*
           merge-multiple: true
-      - run: sudo apt-get install -y --no-install-recommends libarchive-tools
+      - run: sudo apt-get install -y --no-install-recommends libarchive-tools rpm
       # [profile.release] strip = true must reach every package (cargo ignores a member
       # manifest's profile, and the file list alone would not show it)
       - name: The packaged binaries are stripped
@@ -302,16 +306,54 @@ jobs:
             *.deb) bsdtar -xOf "$pkg" 'data.tar*' > payload ;;
             *) cp "$pkg" payload ;;
             esac
-            bin=$(bsdtar -tf payload | grep -E '(usr/bin|-linux)/obsbot4linux$')
-            bsdtar -xOf payload "$bin" > obsbot4linux.bin
-            info=$(file -b obsbot4linux.bin)
-            echo "$pkg: $info"
-            case $info in
-            *', stripped') ;;
-            *) echo "::error::$pkg ships an unstripped binary"; exit 1 ;;
-            esac
+            for name in obsbot4linux obsbot4linuxd; do
+              bin=$(bsdtar -tf payload | grep -E "(usr/bin|-linux)/$name\$")
+              bsdtar -xOf payload "$bin" > binary
+              info=$(file -b binary)
+              echo "$pkg $name: $info"
+              case $info in
+              *', stripped') ;;
+              *) echo "::error::$pkg ships an unstripped $name"; exit 1 ;;
+              esac
+            done
           done
-          rm -f payload obsbot4linux.bin
+          rm -f payload binary
+      # spec 12.1: "There is no libudev dependency" and "Packages do not enable the socket
+      # unit" (a package that carries no install script cannot), and the glibc floor that the
+      # README names holds for both binaries
+      - name: The packages keep the claims of spec 12.1
+        run: |
+          for pkg in dist/obsbot4linux*; do
+            case $pkg in
+            *.deb) bsdtar -xOf "$pkg" 'data.tar*' > payload ;;
+            *) cp "$pkg" payload ;;
+            esac
+            for name in obsbot4linux obsbot4linuxd; do
+              bin=$(bsdtar -tf payload | grep -E "(usr/bin|-linux)/$name\$")
+              bsdtar -xOf payload "$bin" > binary
+              if readelf -d binary | grep -q 'NEEDED.*udev'; then
+                echo "::error::$pkg: $name links libudev"; exit 1
+              fi
+              glibc=$(readelf --dyn-syms -W binary | grep -oE 'GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?' | sort -Vu | tail -n1)
+              echo "$pkg $name: needs $glibc"
+              # the Arch package is built on current Arch: no floor
+              case $pkg in
+              *.pkg.tar.zst) ;;
+              *)
+                [ "$(printf '%s\nGLIBC_2.34\n' "$glibc" | sort -V | tail -n1)" = GLIBC_2.34 ] || {
+                  echo "::error::$pkg: $name needs $glibc, the README names glibc 2.34"; exit 1
+                } ;;
+              esac
+            done
+            case $pkg in
+            *.deb) scripts=$(bsdtar -xOf "$pkg" 'control.tar*' | bsdtar -tf - | grep -E '/(pre|post)(inst|rm)$' || true) ;;
+            *.rpm) scripts=$(rpm -qp --scripts "$pkg" | grep scriptlet || true) ;;
+            *.pkg.tar.zst) scripts=$(bsdtar -tf "$pkg" | grep -x '\.INSTALL' || true) ;;
+            *) scripts= ;;
+            esac
+            [ -z "$scripts" ] || { echo "::error::$pkg has install scripts: $scripts"; exit 1; }
+          done
+          rm -f payload binary
       - name: Compare the package contents
         env:
           VER: ${{ needs.version.outputs.ver }}
