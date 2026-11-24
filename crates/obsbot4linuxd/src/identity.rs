@@ -163,6 +163,7 @@ impl Series {
     }
 
     /// No further attempt will be sent for this plug-in.
+    #[cfg(test)]
     pub fn done(&self) -> bool {
         self.phase == Phase::Done
     }
