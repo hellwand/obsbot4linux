@@ -30,7 +30,7 @@ pub struct Outbound {
 
 impl Outbound {
     /// A queue of `capacity` lines for connection `conn`; `stream` (a clone of the
-    /// connection's socket) is shut down when the queue overflows or [`Outbound::close`] runs.
+    /// connection's socket) is shut down when the queue overflows.
     /// The receiver goes to the writer thread.
     pub fn new(
         conn: ConnId,

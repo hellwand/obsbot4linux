@@ -714,7 +714,7 @@ impl Table {
             .collect()
     }
 
-    /// The listed devices, for tests and logs.
+    /// The listed devices, for tests.
     #[cfg(test)]
     pub fn devices(&self) -> Vec<Device> {
         self.lock().listed()
