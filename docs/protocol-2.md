@@ -3,8 +3,8 @@
 The protocol between the obsbot4linux daemon (`obsbot4linuxd`) and its clients: the CLI, the
 widget and the desktop app. This part is normative. The machine-readable form is
 `schema/protocol-2.json`; the Rust types are the crate `obsbot-proto`; the golden transcripts in
-`crates/obsbot-proto/tests/golden/` show every message. Worked examples follow in a later
-revision of this file.
+`crates/obsbot-proto/tests/golden/` show every message. Sections 11 and 12 are not normative:
+worked transcripts, lifecycles and the client library in use.
 
 ## 1. Transport
 
@@ -257,3 +257,165 @@ Actions: `gimbal.move`, `gimbal.stop`, `gimbal.turn`, `zoom.move`, `zoom.stop`, 
 | `pose`   | `gimbal.pan`, `gimbal.tilt`                                         |
 | `target` | `tracking.target.box`                                               |
 | `auto`   | `exposure.time`, `exposure.gain`, `image.white_balance.temperature` |
+
+## 11. Worked transcripts
+
+Recorded from `obsbot4linuxd --fake …` (the test models of fake mode, design spec 5.12): `> `
+lines go from the client to the daemon, `< ` lines from the daemon to the client, `#` lines are
+comments. Every line of a `jsonl` block below is a complete message; a test reads this file and
+checks that each of them round-trips through `obsbot-proto` byte for byte and that a state
+event comes before the reply that carries its rev.
+
+### 11.1 A write whose readback lags, and a batch
+
+```jsonl
+# A client subscribes. fake-b's LED brightness reads back 250 ms after a write.
+> {"id":1,"hello":{"protocol":2,"client":"example 1.0","subscribe":true,"live":[]}}
+# The hello reply (devices and states) is left out here; section 11.2 shows one.
+> {"id":2,"device":"sn:FAKEB0000001","set":{"led.brightness":3}}
+# The touched re-read still shows 0: the camera accepted 3, its readback lags. The
+# event comes before the reply, with the written value in `pending`.
+< {"event":"state","device":"sn:FAKEB0000001","rev":2,"state":{"available":true,"pending":{"led.brightness":3},"unread":[],"asleep":false,"beacon":{"color":"red","pulse":null},"exposure":{"mode":"auto","time":100},"led":{"blink":null,"brightness":0},"on_air":{"active":false,"apps":[]},"presets":[],"tracking":{"mode":"off"},"zoom":{"factor":1}}}
+< {"id":2,"ok":{"rev":2}}
+# The next read of the LED group (a 1 s tier) shows 3: `pending` is empty again.
+< {"event":"state","device":"sn:FAKEB0000001","rev":3,"state":{"available":true,"pending":{},"unread":[],"asleep":false,"beacon":{"color":"red","pulse":null},"exposure":{"mode":"auto","time":100},"led":{"blink":null,"brightness":3},"on_air":{"active":false,"apps":[]},"presets":[],"tracking":{"mode":"off"},"zoom":{"factor":1}}}
+# Two requests pipelined: the second requires `exposure.mode` = manual, which the
+# first writes. Here both ran in one batch: one re-read, one rev. Had the first been
+# taken before the second arrived, each would get its own re-read and rev; the second
+# is valid either way, as a written value counts as the current one.
+> {"id":3,"device":"sn:FAKEB0000001","set":{"exposure.mode":"manual"}}
+> {"id":4,"device":"sn:FAKEB0000001","set":{"exposure.time":500}}
+< {"event":"state","device":"sn:FAKEB0000001","rev":4,"state":{"available":true,"pending":{},"unread":[],"asleep":false,"beacon":{"color":"red","pulse":null},"exposure":{"mode":"manual","time":500},"led":{"blink":null,"brightness":3},"on_air":{"active":false,"apps":[]},"presets":[],"tracking":{"mode":"off"},"zoom":{"factor":1}}}
+< {"id":3,"ok":{"rev":4}}
+< {"id":4,"ok":{"rev":4}}
+# A value outside the description is refused before anything is sent; no rev.
+> {"id":5,"device":"sn:FAKEB0000001","set":{"exposure.time":20000}}
+< {"id":5,"error":{"code":"out_of_range","message":"exposure.time: 20000 is above the maximum 10000"}}
+```
+
+A client that shows the value from the reply on sees `led.brightness` = 3 at once: rev 2 holds
+it in `pending`, rev 3 in the value. It runs no timer of its own (section 5, rule 4). Had the
+readback not shown 3 within the leaf's `settle_ms` (1000 ms on fake-b, 3000 ms on the Tiny 2
+Lite), the next read of its group after that bound would have dropped the path from `pending`
+and the camera's value would stand.
+
+### 11.2 Several devices, an unsupported one, unplug and re-plug
+
+fake-b and an unsupported device; descriptions, USB facts and most of each state are shown as
+`…`. The `# test control` lines are what the test-control socket of fake mode was sent, the
+stand-in for a cable being pulled.
+
+```text
+> {"id":1,"hello":{"protocol":2,"client":"example 1.0","subscribe":true,"live":[]}}
+< {"id":1,"ok":{"protocol":2,"daemon":"1.0.0","devices":[{"id":"sn:FAKEB0000001","name":"Fake B 0001","model":"fake-b","support":"untested","serial":"FAKEB0000001","firmware":"0.9.1","video_node":"/dev/video102","available":true,"usb":{…},"settings":{…},"actions":{…},"limits":{"presets":5}},{"id":"port:9-2","name":"Unknown Camera 9-2","model":"unknown","support":"unsupported","serial":null,"firmware":null,"video_node":"/dev/video104","available":true,"usb":{…},"settings":{},"actions":{},"limits":{}}],"states":{"port:9-2":{"rev":1,"state":{…}},"sn:FAKEB0000001":{"rev":1,"state":{…}}}}}
+> {"id":2,"device":"port:9-2","do":"wake"}
+< {"id":2,"error":{"code":"unsupported_device","message":"port:9-2 is not supported by obsbot4linux"}}
+# test control: {"unplug":"sn:FAKEB0000001"} -> {"ok":true}
+< {"event":"devices","devices":[{"id":"sn:FAKEB0000001","name":"Fake B 0001","model":"fake-b","support":"untested","serial":"FAKEB0000001","firmware":"0.9.1","video_node":null,"available":false,"usb":{…},"settings":{…},"actions":{…},"limits":{"presets":5}},{"id":"port:9-2","name":"Unknown Camera 9-2","model":"unknown","support":"unsupported","serial":null,"firmware":null,"video_node":"/dev/video104","available":true,"usb":{…},"settings":{},"actions":{},"limits":{}}]}
+< {"event":"state","device":"sn:FAKEB0000001","rev":2,"state":{"available":false,"pending":{},"unread":[],"led":{"blink":null,"brightness":0},…}}
+> {"id":3,"device":"sn:FAKEB0000001","set":{"led.brightness":1}}
+< {"id":3,"error":{"code":"unavailable","message":"sn:FAKEB0000001 is unplugged"}}
+# test control: {"plug":"fake-b"} -> {"ok":"sn:FAKEB0000001"}
+< {"event":"devices","devices":[{"id":"sn:FAKEB0000001","name":"Fake B 0001","model":"fake-b","support":"untested","serial":"FAKEB0000001","firmware":"0.9.1","video_node":"/dev/video102","available":true,"usb":{…},"settings":{…},"actions":{…},"limits":{"presets":5}},{"id":"port:9-2","name":"Unknown Camera 9-2","model":"unknown","support":"unsupported","serial":null,"firmware":null,"video_node":"/dev/video104","available":true,"usb":{…},"settings":{},"actions":{},"limits":{}}]}
+< {"event":"state","device":"sn:FAKEB0000001","rev":3,"state":{"available":true,"pending":{},"unread":[],"led":{"blink":null,"brightness":0},…}}
+```
+
+- The unsupported device is listed and refused (`unsupported_device`); nothing is sent to it.
+- An `sn:` entry stays listed while unplugged, `available: false`, and a request for it is
+  answered at once with `unavailable`. The re-plug brings it back under the same id; its rev
+  goes on (3). A `port:` entry is removed at unplug and starts at rev 1 when it is added again
+  (section 5, rule 1).
+- The `devices` event comes before the `state` event of the same change.
+
+### 11.3 Lifecycles
+
+A connection:
+
+```text
+connect ── hello ──► reply (devices, states) ──► requests, pipelined; events if subscribe:true
+   │                     │
+   │                     └─ before the first enumeration has read each device: the reply
+   │                        waits, at most 15 s; a device not read by then is `unread`
+   └─ first line not hello, or another protocol ──► error `protocol`, connection closed
+close ──► requests still queued for this connection are dropped; a `gimbal.turn` it started
+          without `keep: true` is stopped
+```
+
+A device entry:
+
+```text
+plugged ──► scan finds it ──► first read (identity attempt, every group) ──► listed, rev 1
+   ▲                                                                          │
+   │      serial answered later: `port:` entry handed over to `sn:`            │
+   │      (`replaced_by`, two `devices` events, then a `state` event)          │
+   │                                                                          ▼
+re-plug ◄── unplugged: `sn:` stays (available:false), `port:` is removed ◄── polled by tier
+```
+
+A `set`:
+
+```text
+queued ──► validated whole (invalid, unsupported, out_of_range, conflict, asleep: nothing sent)
+   └─► leaves written in apply order ──► touched groups re-read once per batch
+         └─► state event (written values the readback does not show yet are `pending`)
+               └─► reply {rev}  ──►  later reads clear `pending` (or `settle_ms` passes)
+```
+
+## 12. The client library
+
+`obsbot-proto` holds the synchronous client (design spec 6.1). `Client::connect` opens a
+connection with `subscribe: false` and blocks per request; `Client::subscribe` returns the
+`hello` reply, a `Sender` and a `Receiver`, whose reader thread delivers replies and events in
+arrival order. There is no retry: when a connection ends, the caller connects again and
+rebuilds from the new `hello` reply. This is `crates/obsbot-proto/examples/watch.rs`; the
+test of this file checks that the two are the same:
+
+```rust
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! The client library in a few lines (design spec 6.1, `docs/protocol-2.md` section 12): list
+//! the devices once with the blocking client, then print every state event of a subscribed
+//! connection. It sends no write. Run it with `cargo run -p obsbot-proto --example watch`.
+
+use obsbot_proto::client::{Client, ClientError, Incoming};
+use obsbot_proto::{Event, Hello, short_id};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // A blocking client: one request at a time, no events (subscribe: false).
+    let mut client = Client::connect(Hello::new("example 1.0"))?;
+    for device in client.devices().to_vec() {
+        // `{:?}` quotes the short id and escapes any control character it holds: an id comes
+        // from the camera, and what a terminal prints is not for the camera to choose.
+        println!(
+            "{:?}  {}  {:?}",
+            short_id(&device.id),
+            device.model,
+            device.support
+        );
+        if device.available && !device.description.settings.is_empty() {
+            match client.get(&device.id, Some(&["zoom.factor"])) {
+                Ok((rev, state)) => println!("  rev {rev}: zoom {:?}", state.at("zoom.factor")),
+                // A model without the leaf refuses with a code; that device ends nothing.
+                Err(ClientError::Refused(body)) => {
+                    println!("  zoom.factor: {}", body.code.as_str())
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    // A subscribed client: the hello reply, a sender and a receiver (15.1 row 96).
+    let (hello, _sender, receiver) = Client::subscribe(Hello::new("example 1.0"))?;
+    println!("daemon {} speaks protocol {}", hello.daemon, hello.protocol);
+    for incoming in receiver {
+        if let Incoming::Event(Event::State { device, rev, state }) = incoming? {
+            println!(
+                "{:?} rev {rev}: pending {:?}",
+                short_id(&device),
+                state.pending
+            );
+        }
+    }
+    Ok(())
+}
+```
