@@ -395,20 +395,11 @@ fn without_destructive_no_restart_row_reaches_the_camera() {
 #[test]
 fn a_value_that_never_shows_fails_its_row() {
     let d = Daemon::start("f");
-    let wrapper = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("check-model-drop-led.sh");
-    std::fs::write(
-        &wrapper,
-        format!(
-            "#!/bin/sh\ncase \"$*\" in *led.brightness=*) echo '{{\"rev\":1}}'; exit 0 ;; esac\nexec '{}' \"$@\"\n",
-            env!("CARGO_BIN_EXE_obsbot4linux")
-        ),
-    )
-    .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let wrapper = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/drop-led-cli.sh");
     let results = results_file("f");
     let out = d
         .command(&results, &wrapper, &["--device", "fake-b", "--assume-pass"])
+        .env("DROP_LED_REAL_CLI", env!("CARGO_BIN_EXE_obsbot4linux"))
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(1), "{}", report(&out));
