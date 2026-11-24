@@ -9,9 +9,7 @@
 
 use crate::error::{Error, Result};
 use crate::family::frame::{FRAME_SIZE, frame, query_frame_with};
-use crate::models::tiny2lite::commands::{AiMode, gimbal_angles_ok};
-use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
+use crate::models::tiny2lite::commands::gimbal_angles_ok;
 
 const RECEIVER: u8 = 0x04;
 pub const SLOTS: u8 = 3;
@@ -19,14 +17,15 @@ pub const MAX_NAME: usize = 32;
 pub const MAX_ZOOM: f32 = 4.0;
 const NAME_OFFSET: usize = 10;
 
-/// Per-preset picture settings OBSBOT Center writes after a delete: everything "not set".
+/// Per-preset picture settings the vendor app writes after a delete (capture 10): everything
+/// "not set".
 const PICTURE_SETTINGS_CLEARED: [u8; 44] = [
     0x00, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pose {
     /// Degrees, positive turns the camera to its left.
     pub pan: f32,
@@ -36,7 +35,7 @@ pub struct Pose {
     pub zoom: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Preset {
     /// Slot index 0-2.
     pub slot: u8,
@@ -44,9 +43,9 @@ pub struct Preset {
     pub pose: Pose,
 }
 
-/// A zone view: a named pose stored in the camera (`REGION_VIEW`, the "areas" of the zone dialog
-/// in OBSBOT Center). The camera does not track by them; they are poses to go to.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// A zone view: a named pose stored in the camera (the "areas" of the zone dialog of the vendor
+/// app). The camera does not track by them; they are poses to go to.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ZoneView {
     pub id: u32,
     pub name: String,
@@ -79,7 +78,7 @@ fn pose_data(lead: u32, pose: Pose, last: f32, what: &str) -> Result<Vec<u8>> {
 
 fn pose_frame(command: u16, slot: u8, pose: Pose, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     check_slot(slot)?;
-    // last value -1000 as OBSBOT Center sends it
+    // last value -1000, as recorded from the vendor app (captures 10, 11)
     let data = pose_data(slot as u32, pose, -1000.0, "preset pose")?;
     Ok(frame(RECEIVER, command, &data, seq))
 }
@@ -117,8 +116,8 @@ fn named(command: u16, id: u32, name: &str, seq: u16) -> Result<[u8; FRAME_SIZE]
     Ok(frame(RECEIVER, command, &data, seq))
 }
 
-/// Adds a zone view (`0x1384`): the preset layout with the view id, last value -1000 as OBSBOT
-/// Center sends it. The name goes in a second frame, [`view_rename`].
+/// Adds a zone view (`0x1384`): the preset layout with the view id, last value -1000 as recorded
+/// from the vendor app (capture 11). The name goes in a second frame, [`view_rename`].
 pub fn view_add(id: u32, pose: Pose, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     let data = pose_data(id, pose, -1000.0, "zone view pose")?;
     Ok(frame(RECEIVER, 0x1384, &data, seq))
@@ -134,11 +133,11 @@ pub fn view_remove(id: u32, seq: u16) -> [u8; FRAME_SIZE] {
 }
 
 /// Moves the gimbal to a zone view (`0x1604`, id only). The id is outside the ranges that arm the
-/// zone Static flag (README), so it does not arm it. But the camera runs it through the same
-/// preset move as a recall (`trigger_untracked_view`, inferred from the firmware code, not tried
-/// yet): on arrival that CONSUMES a flag a recall or `0x6604` armed earlier, which switches the
-/// camera to Static, and tracking restarts afterwards only if the view's actions name an AI mode
-/// (they default to "not set"), so tracking may stay suspended, as after `startup go`.
+/// zone Static flag (README), so it does not arm it. Not tried on the camera: the move may be the
+/// same as a recall's, and on arrival it would then CONSUME a flag a recall armed earlier, which
+/// switches the camera to Static, and tracking restarts afterwards only if the view's actions
+/// name an AI mode (they default to "not set"), so tracking may stay suspended, as after
+/// `startup go`.
 pub fn view_go(id: u32, seq: u16) -> [u8; FRAME_SIZE] {
     frame(RECEIVER, 0x1604, &id.to_le_bytes(), seq)
 }
@@ -164,7 +163,7 @@ pub fn parse_view_name(data: &[u8]) -> String {
         .to_string()
 }
 
-/// The lowest id not taken. OBSBOT Center used 0-2; the firmware keeps no limit.
+/// The lowest id not taken.
 pub fn free_view_id(taken: &[u32]) -> u32 {
     (0..).find(|id| !taken.contains(id)).unwrap_or(0)
 }
@@ -178,7 +177,7 @@ pub fn delete(slot: u8, seq1: u16, seq2: u16) -> Result<[[u8; FRAME_SIZE]; 2]> {
     ])
 }
 
-/// Recall: the slot, then four f32 1.0 as the vendor software sends them.
+/// Recall: the slot, then four f32 1.0 as recorded from the vendor app (capture 10).
 pub fn recall(slot: u8, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     check_slot(slot)?;
     let mut data = [0u8; 20];
@@ -248,63 +247,7 @@ pub fn startup_preset(source: u32) -> Option<u8> {
     u8::try_from(source).ok().filter(|s| *s < SLOTS)
 }
 
-/// What the camera tracks again after `startup go`: byte 0 of the initial-state block. Only the
-/// values seen on the camera or in OBSBOT Center are offered; hand tracking (7 or 8, which one
-/// is written is not known), close-up (2) and lower body (4) are read but not written.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum StartupAi {
-    Static,
-    Normal,
-    UpperBody,
-    Headless,
-    Group,
-    /// Not set (the camera's own default): `startup go` leaves tracking suspended.
-    None,
-}
-
-impl StartupAi {
-    pub fn byte(self) -> u8 {
-        match self {
-            Self::Static => 0xff,
-            Self::Normal => 0,
-            Self::UpperBody => 1,
-            Self::Headless => 3,
-            Self::Group => 9,
-            Self::None => STARTUP_AI_NOT_SET,
-        }
-    }
-}
-
-/// Byte 0 of the initial-state block when no AI mode is set. After the move of `startup go` the
-/// camera then does not resume tracking (#79).
-pub const STARTUP_AI_NOT_SET: u8 = 0xfe;
-
-/// The AI mode named by byte 0 of the initial-state block; None when not set, or a value not known.
-pub fn startup_ai_mode(byte: u8) -> Option<AiMode> {
-    match byte {
-        0xff => Some(AiMode::Static),
-        0 => Some(AiMode::Normal),
-        1 => Some(AiMode::UpperBody),
-        2 => Some(AiMode::CloseUp),
-        3 => Some(AiMode::Headless),
-        4 => Some(AiMode::LowerBody),
-        7 | 8 => Some(AiMode::Hand),
-        9 => Some(AiMode::Group),
-        _ => None,
-    }
-}
-
 const STARTUP_BLOCK: usize = 40;
-
-/// Picture settings of the initial state with every group "not set" and `ai` in byte 0 (as in
-/// capture 08: `0xfe` not set, `0x00` normal).
-pub fn startup_picture_settings(ai: u8, seq: u16) -> [u8; FRAME_SIZE] {
-    let mut data = [0u8; STARTUP_BLOCK];
-    data[0..8].copy_from_slice(&[ai, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-    data[8..16].copy_from_slice(&[0x80, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-    data[20..24].copy_from_slice(&[0xff; 4]);
-    frame(RECEIVER, 0x3e44, &data, seq)
-}
 
 /// The block read back with `0x3e84`, written again with only byte 0 changed. None when the
 /// answer is not a whole block.
@@ -312,48 +255,6 @@ pub fn startup_with_ai(read: &[u8], ai: u8, seq: u16) -> Option<[u8; FRAME_SIZE]
     let mut data: [u8; STARTUP_BLOCK] = read.get(..STARTUP_BLOCK)?.try_into().ok()?;
     data[0] = ai;
     Some(frame(RECEIVER, 0x3e44, &data, seq))
-}
-
-/// The picture settings of the initial state, from the 40-byte answer to `0x3e84` (the layout of
-/// `0x3e44`). A group the initial state does not set is `None` (first byte `0xff`); a set group
-/// shows the byte as read, because only some values are known (autofocus and exposure 1 = set,
-/// white balance mode 5 = manual temperature, tracking speed 0 = standard).
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct StartupActions {
-    pub tracking_speed: Option<u8>,
-    pub autofocus: Option<u8>,
-    pub auto_exposure: Option<u8>,
-    pub white_balance_mode: Option<u8>,
-    /// Kelvin; only with white balance mode 5.
-    pub white_balance_kelvin: Option<u16>,
-    pub contrast: Option<u8>,
-    pub saturation: Option<u8>,
-    pub sharpness: Option<u8>,
-    pub hue: Option<u8>,
-    /// The AI mode the camera takes at power-on and returns to after `startup go` (byte 0);
-    /// None when not set.
-    pub ai_mode: Option<AiMode>,
-}
-
-impl StartupActions {
-    pub fn decode(d: &[u8]) -> Option<Self> {
-        if d.len() < 24 {
-            return None;
-        }
-        let group = |i: usize| (d[i] != 0xff).then_some(d[i]);
-        Some(Self {
-            tracking_speed: group(1),
-            autofocus: group(2),
-            auto_exposure: group(6),
-            white_balance_mode: group(13),
-            white_balance_kelvin: (d[13] == 5).then(|| u16::from_le_bytes([d[14], d[15]])),
-            contrast: group(20),
-            saturation: group(21),
-            sharpness: group(22),
-            hue: group(23),
-            ai_mode: startup_ai_mode(d[0]),
-        })
-    }
 }
 
 /// Occupied slots from a selector-0x0c read: count, then the slot indices.
@@ -424,58 +325,8 @@ mod tests {
         assert!(built[captured.len()..].iter().all(|b| *b == 0));
     }
 
-    // Frames from OBSBOT Center (capture 10). Preset tilt is positive down, so the
+    // Frames recorded from the vendor app (capture 10). Preset tilt is positive down, so the
     // captured tilt -0.1 is user tilt +0.1.
-    #[test]
-    fn startup_actions_nothing_set_as_read_live() {
-        // `0x3e84` on a camera whose initial state sets nothing (firmware 6.2.8.1): the same
-        // bytes `startup_picture_settings` writes. Every group is "not set", not zero/off.
-        let d = hex::decode(
-            "feffffffffffffff80ffffffffffffff00000000ffffffff00000000000000000000000000000000",
-        )
-        .unwrap();
-        let a = StartupActions::decode(&d).unwrap();
-        assert_eq!(a.tracking_speed, None);
-        assert_eq!(a.autofocus, None);
-        assert_eq!(a.auto_exposure, None);
-        assert_eq!(a.white_balance_mode, None);
-        assert_eq!(a.white_balance_kelvin, None);
-        assert_eq!(a.contrast, None);
-    }
-
-    #[test]
-    fn startup_actions_set_groups() {
-        // Layout from capture 08b: contrast 60 is 0x3c, manual white balance is 05 then Kelvin
-        // (`d8 0e` = 3800), autofocus and exposure 01 when set. Built by hand, not read back.
-        let mut d = [0xffu8; 40];
-        d[1] = 2;
-        d[2] = 1;
-        d[6] = 0;
-        d[13] = 5;
-        d[14..16].copy_from_slice(&[0xd8, 0x0e]);
-        d[20] = 60;
-        let a = StartupActions::decode(&d).unwrap();
-        assert_eq!(a.tracking_speed, Some(2));
-        assert_eq!(a.autofocus, Some(1));
-        assert_eq!(
-            a.auto_exposure,
-            Some(0),
-            "a set group with value 0 is not 'not set'"
-        );
-        assert_eq!(a.white_balance_mode, Some(5));
-        assert_eq!(a.white_balance_kelvin, Some(3800));
-        assert_eq!(a.contrast, Some(60));
-        assert_eq!(a.saturation, None, "0xff is not set, not 255");
-        // a white balance mode other than manual is set, with no Kelvin to show
-        d[13] = 3;
-        let a = StartupActions::decode(&d).unwrap();
-        assert_eq!(
-            (a.white_balance_mode, a.white_balance_kelvin),
-            (Some(3), None)
-        );
-        assert_eq!(StartupActions::decode(&d[..23]), None);
-    }
-
     #[test]
     fn create_and_update_match_capture() {
         let pose = Pose {
@@ -500,7 +351,8 @@ mod tests {
 
     #[test]
     fn zone_view_frames_match_capture() {
-        // OBSBOT Center, capture 11: view 0 at pan 0.2, tilt 0, zoom 1.48, named "Bereich1"
+        // recorded from the vendor app, capture 11: view 0 at pan 0.2, tilt 0, zoom 1.48, named
+        // "Bereich1"
         let pose = Pose {
             pan: f32::from_bits(0x3e4ccccd),
             tilt: 0.0,
@@ -611,8 +463,8 @@ mod tests {
 
     #[test]
     fn zone_return_set_matches_capture() {
-        // capture 18, seq 267: Center sets the zone return position; wire pitch -13.9 (bits
-        // 0xc15e6667) is user tilt 13.9 up
+        // capture 18, seq 267: the vendor app sets the zone return position; wire pitch -13.9
+        // (bits 0xc15e6667) is user tilt 13.9 up
         assert_captured(
             zone_return_set(
                 Pose {
@@ -629,8 +481,8 @@ mod tests {
 
     #[test]
     fn startup_source_3_is_an_own_pose_and_no_preset() {
-        // 0x3884 reads the preset slot 0-2, or 3 for an own pose (Center writes 3 in capture 08
-        // and slot 0 in capture 10)
+        // 0x3884 reads the preset slot 0-2, or 3 for an own pose (the vendor app writes 3 in
+        // capture 08 and slot 0 in capture 10)
         assert_eq!(startup_preset(0), Some(0));
         assert_eq!(startup_preset(1), Some(1));
         assert_eq!(startup_preset(2), Some(2));
@@ -754,40 +606,26 @@ mod tests {
             "aa2567010c0094800a04c43e18002d47000000006766663fcdcc4cbe000000000000803f",
         );
         assert!(startup_pose(3, Pose { zoom: 5.0, ..pose }, 0).is_err());
-        assert_captured(
-            startup_picture_settings(STARTUP_AI_NOT_SET, 130),
-            "aa2582000c00ec960a04443e28004dd4feffffffffffffff80ffffffffffffff00000000ffffffff",
-        );
     }
 
-    // The 40-byte block of `0x3e44` in capture 08, frames at seq 120 (OBSBOT Center sets AI mode
-    // normal) and seq 130 (not set). They differ in byte 0 only, which is the byte `startup go`
-    // depends on (#79). The block starts after the 16-byte frame header.
+    // The 40-byte block of `0x3e44` in capture 08, frames at seq 120 (the vendor app sets AI
+    // mode normal) and seq 130 (not set). They differ in byte 0 only, which is the byte
+    // `startup go` depends on (#79). The block starts after the 16-byte frame header.
     const CAPTURE_08_NORMAL: &str =
         "00ffffffffffffff80ffffffffffffff00000000ffffffff00000000000000000000000000000000";
     const CAPTURE_08_NOT_SET: &str =
         "feffffffffffffff80ffffffffffffff00000000ffffffff00000000000000000000000000000000";
 
     #[test]
-    fn startup_block_with_an_ai_mode_matches_capture_08() {
-        let block = |ai| startup_picture_settings(ai, 120)[16..56].to_vec();
-        assert_eq!(block(0), hex::decode(CAPTURE_08_NORMAL).unwrap());
-        assert_eq!(
-            block(STARTUP_AI_NOT_SET),
-            hex::decode(CAPTURE_08_NOT_SET).unwrap()
-        );
-    }
-
-    #[test]
     fn ai_alone_rewrites_only_byte_0_of_what_the_camera_reports() {
         // a camera with autofocus, exposure and contrast set in the initial state: they stay
         let mut read = [0xffu8; 40];
-        read[0] = STARTUP_AI_NOT_SET;
+        read[0] = 0xfe;
         read[2] = 1;
         read[6] = 1;
         read[20] = 60;
         read[30] = 0x5a; // a byte this code does not know: kept as read
-        let built = startup_with_ai(&read, StartupAi::Normal.byte(), 7).unwrap();
+        let built = startup_with_ai(&read, 0x00, 7).unwrap();
         let mut want = read;
         want[0] = 0;
         assert_eq!(built[16..56], want[..]);
@@ -802,36 +640,6 @@ mod tests {
             startup_with_ai(&read[..39], 0, 1).is_none(),
             "a short answer is not written back"
         );
-    }
-
-    #[test]
-    fn startup_ai_bytes_decode_and_only_known_ones_are_written() {
-        assert_eq!(startup_ai_mode(STARTUP_AI_NOT_SET), None);
-        assert_eq!(startup_ai_mode(0xff), Some(AiMode::Static));
-        assert_eq!(startup_ai_mode(0), Some(AiMode::Normal));
-        assert_eq!(startup_ai_mode(7), Some(AiMode::Hand));
-        assert_eq!(startup_ai_mode(8), Some(AiMode::Hand));
-        assert_eq!(startup_ai_mode(0x42), None);
-        for ai in [
-            StartupAi::Static,
-            StartupAi::Normal,
-            StartupAi::UpperBody,
-            StartupAi::Headless,
-            StartupAi::Group,
-        ] {
-            let mode = startup_ai_mode(ai.byte()).expect("an offered value reads back as a mode");
-            let name = format!("{ai:?}").to_lowercase();
-            assert_eq!(format!("{mode:?}").to_lowercase(), name);
-        }
-        assert_eq!(StartupAi::None.byte(), STARTUP_AI_NOT_SET);
-        // the camera's own mode on the status is what the byte names
-        let d = hex::decode(CAPTURE_08_NORMAL).unwrap();
-        assert_eq!(
-            StartupActions::decode(&d).unwrap().ai_mode,
-            Some(AiMode::Normal)
-        );
-        let d = hex::decode(CAPTURE_08_NOT_SET).unwrap();
-        assert_eq!(StartupActions::decode(&d).unwrap().ai_mode, None);
     }
 
     #[test]
@@ -925,36 +733,6 @@ mod tests {
         assert_eq!(parse_slots(&[0x00]), Vec::<u8>::new());
         assert_eq!(parse_slots(&[0x02, 0x00, 0x02]), vec![0, 2]);
         assert_eq!(parse_slots(&[0x02, 0x00, 0x07]), vec![0]);
-    }
-
-    #[test]
-    fn startup_ai_mode_names_the_documented_bytes() {
-        // byte 0 of the initial-state block; 7 and 8 are both hand tracking, 0xfe is not set
-        let table = [
-            (0xff, Some(AiMode::Static)),
-            (0, Some(AiMode::Normal)),
-            (1, Some(AiMode::UpperBody)),
-            (2, Some(AiMode::CloseUp)),
-            (3, Some(AiMode::Headless)),
-            (4, Some(AiMode::LowerBody)),
-            (7, Some(AiMode::Hand)),
-            (8, Some(AiMode::Hand)),
-            (9, Some(AiMode::Group)),
-            (STARTUP_AI_NOT_SET, None),
-            (5, None),
-        ];
-        for (byte, mode) in table {
-            assert_eq!(startup_ai_mode(byte), mode, "byte {byte:#04x}");
-        }
-    }
-
-    #[test]
-    fn startup_actions_need_the_24_bytes_up_to_the_hue() {
-        // hue is byte 23, the last byte read
-        let mut d = [0xffu8; 24];
-        d[23] = 7;
-        assert_eq!(StartupActions::decode(&d).unwrap().hue, Some(7));
-        assert!(StartupActions::decode(&d[..23]).is_none());
     }
 
     #[test]

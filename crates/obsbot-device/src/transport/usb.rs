@@ -2,10 +2,9 @@
 // Derived from Tiny4Linux (EUPL-1.2), used under EUPL-1.2 Article 5.
 
 //! The USB transport (design spec 3.1, 5.8): UVC extension-unit queries and V4L2 controls on
-//! one camera's video node, and its facts from sysfs. Carried from `transport/uvc.rs`
-//! (`Device`), with three changes: the extension unit is the one the registry entry's GUID
-//! names in the USB descriptor (no fixed unit), the node is given (no detection by name), and
-//! errors are `CameraError`s (a node that is gone is `Gone` at once).
+//! one camera's video node, and its facts from sysfs. The extension unit is the one the
+//! registry entry's GUID names in the USB descriptor (no fixed unit), the node is given (no
+//! detection by name), and errors are `CameraError`s (a node that is gone is `Gone` at once).
 //!
 //! The node is opened per operation and closed after it, so streaming applications keep
 //! working: control ioctls need no exclusive access. Each operation holds an exclusive `flock`
@@ -83,7 +82,7 @@ fn from_io(e: std::io::Error) -> CameraError {
 }
 
 /// Takes an exclusive flock on `file`, retrying every 20 ms until `wait` has passed; `Locked`
-/// then. Carried from `transport/uvc.rs` (`lock_exclusive`).
+/// then.
 pub fn lock_exclusive(mut file: File, wait: Duration) -> Result<Flock<File>> {
     let deadline = Instant::now() + wait;
     loop {
@@ -155,8 +154,7 @@ impl UsbTransport {
 }
 
 /// The kernel fails GET_CUR and SET_CUR with ENOBUFS unless the buffer is exactly the
-/// selector's length; a write is padded with zeros to it. Carried from `transport/uvc.rs`
-/// (`check_len`, `Device::xu_set`).
+/// selector's length; a write is padded with zeros to it.
 pub fn padded(selector: u8, len: usize, data: &[u8]) -> Result<Vec<u8>> {
     if data.len() > len {
         return Err(CameraError::Io(format!(

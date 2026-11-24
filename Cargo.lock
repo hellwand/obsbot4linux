@@ -174,11 +174,9 @@ dependencies = [
 name = "obsbot-device"
 version = "0.13.2"
 dependencies = [
- "clap",
  "hex",
  "nix",
  "obsbot-proto",
- "serde",
  "serde_json",
  "thiserror",
 ]

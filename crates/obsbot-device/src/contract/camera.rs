@@ -192,7 +192,7 @@ pub enum Motion {
 /// One frame a model may send (8.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Frame {
-    /// A framed command or query on an extension-unit selector.
+    /// A framed command (frame type `0x25`) on an extension-unit selector. Queries are `Query`.
     Framed {
         selector: u8,
         receiver: u8,

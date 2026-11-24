@@ -8,16 +8,15 @@
 
 use crate::error::{Error, Result};
 use crate::family::frame::{FRAME_SIZE, frame};
-use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
 
 macro_rules! setting {
     ($(#[$m:meta])* $name:ident { $($v:ident = $n:expr),+ $(,)? }) => {
         $(#[$m])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-        #[serde(rename_all = "snake_case")]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $name { $($v),+ }
         impl $name {
+            /// Every value, in declaration order.
+            pub const ALL: &'static [Self] = &[$(Self::$v),+];
             pub fn from_u8(value: u8) -> Option<Self> {
                 match value { $($n => Some(Self::$v),)+ _ => None }
             }
@@ -30,11 +29,9 @@ macro_rules! setting {
 
 setting!(FieldOfView { Wide = 0, Medium = 1, Narrow = 2 });
 setting!(NoiseReduction { Off = 0, Weak = 1, Medium = 2, Strong = 3 });
-setting!(PickupDistance { Near = 0, Standard = 1, Far = 2 });
 setting!(
-    /// Vertical tracking type (command 0x0cc4): `standard` and `sport` are the two OBSBOT Center
-    /// offers; `headroom` leaves more room above the head. Only `sport` fixes the tracking gain
-    /// (1.0) and so overrides `speed-mode`.
+    /// Vertical tracking type (command 0x0cc4): `headroom` leaves more room above the head.
+    /// Only `sport` fixes the tracking gain (1.0) and so overrides `speed-mode`.
     TrackingSpeed { Standard = 0, Headroom = 1, Sport = 2 }
 );
 setting!(
@@ -73,14 +70,13 @@ setting!(
     AutofocusMode { Continuous = 1, Single = 2, Manual = 3 }
 );
 setting!(
-    /// Automatic exposure mode. The camera reports it only as status byte 0x07 (face);
-    /// obsbot4linux also remembers the last one set. Manual exposure goes over UVC.
+    /// Automatic exposure mode. The camera reports it only as status byte 0x07 (face).
+    /// Manual exposure goes over UVC.
     ExposureMode { Global = 0, Face = 1 }
 );
 
 /// AI tracking mode as (mode, sub-mode), the pair of status bytes 0x18 / 0x1c.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiMode {
     Static,
     Normal,
@@ -93,6 +89,18 @@ pub enum AiMode {
 }
 
 impl AiMode {
+    /// Every mode, in declaration order.
+    pub const ALL: &'static [Self] = &[
+        Self::Static,
+        Self::Normal,
+        Self::UpperBody,
+        Self::CloseUp,
+        Self::Headless,
+        Self::LowerBody,
+        Self::Hand,
+        Self::Group,
+    ];
+
     pub fn to_bytes(self) -> [u8; 2] {
         match self {
             Self::Static => [0, 0],
@@ -122,13 +130,22 @@ impl AiMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gesture {
     TargetLock,
     Zoom,
     DynamicZoom,
     DirectionChange,
+}
+
+impl Gesture {
+    /// Every gesture, in declaration order.
+    pub const ALL: &'static [Self] = &[
+        Self::TargetLock,
+        Self::Zoom,
+        Self::DynamicZoom,
+        Self::DirectionChange,
+    ];
 }
 
 // Receivers: 0x04 for almost everything, 0x02 for power and exposure.
@@ -152,13 +169,6 @@ pub fn hdr(on: bool) -> [u8; 3] {
 pub fn auto_sleep(seconds: i16) -> [u8; 4] {
     let [lo, hi] = seconds.to_le_bytes();
     [0x0b, 0x02, lo, hi]
-}
-/// Auto-sleep off: the current time negated, as OBSBOT Center does.
-pub fn auto_sleep_off(current: u16) -> Result<[u8; 4]> {
-    // -0 reads back as on, so 0 s goes off as the camera's default 600 s (measured)
-    let current = if current == 0 { 600 } else { current };
-    let secs = i16::try_from(current).map_err(|_| invalid("auto-sleep time is at most 32767 s"))?;
-    Ok(auto_sleep(-secs))
 }
 pub fn sleep_background(background: SleepBackground) -> [u8; 4] {
     [0x0e, 0x02, 0x00, background.to_u8()]
@@ -212,9 +222,6 @@ pub fn noise_reduction(level: NoiseReduction) -> [u8; 3] {
 pub fn auto_gain(on: bool) -> [u8; 3] {
     [0x17, 0x01, on as u8]
 }
-pub fn pickup_distance(distance: PickupDistance) -> [u8; 3] {
-    [0x1b, 0x01, distance.to_u8()]
-}
 /// Microphone on/off. Every change makes the camera restart (about 18 s).
 pub fn microphone(on: bool) -> [u8; 3] {
     [0x1c, 0x01, on as u8]
@@ -250,16 +257,15 @@ pub fn hand_side(side: HandSide, seq: u16) -> [u8; FRAME_SIZE] {
 pub fn invert(on: bool, seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x3b84, &[on as u8], seq)
 }
-/// Zone tracking on / off (`0x08c4`). OBSBOT Center follows it with `0x5084` about 100 ms later,
-/// but the firmware has no handler for that id, and on a Tiny 2 Lite `0x08c4` alone switched zone
-/// tracking both ways (status byte 10 of `0x0104` followed after 1 s and 3 s, #81).
+/// Zone tracking on / off (`0x08c4`). Sent alone, it switched zone tracking both ways on a
+/// Tiny 2 Lite (status byte 10 of `0x0104` followed after 1 s and 3 s, measured, #81).
 pub fn zone_tracking(on: bool, seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x08c4, &[on as u8], seq)
 }
 /// Gimbal range in obsbot4linux's angles (pan positive = left, tilt positive = up). Measured on a
 /// Tiny 2 Lite: pan stops at about ±148, tilt reaches 90. Below -75 the camera goes to sleep
-/// (privacy) and parks at -85; on wake it returns to that pose and sleeps again. -70 is
-/// OBSBOT's controllable limit (spec: pan ±140, tilt 30 to -70; mechanical ±150, ±90).
+/// (privacy) and parks at -85; on wake it returns to that pose and sleeps again, so -70 is the
+/// lowest tilt that is sent.
 pub const GIMBAL_PAN_LIMIT: f32 = 150.0;
 pub const GIMBAL_TILT_MIN: f32 = -70.0;
 pub const GIMBAL_TILT_MAX: f32 = 90.0;
@@ -268,7 +274,7 @@ pub const GIMBAL_TILT_MAX: f32 = 90.0;
 pub fn gimbal_angles_ok(pan: f32, tilt: f32) -> bool {
     pan.abs() <= GIMBAL_PAN_LIMIT && (GIMBAL_TILT_MIN..=GIMBAL_TILT_MAX).contains(&tilt)
 }
-/// The four area frames (yaw min / max, pitch min / max), sent one after the other as Center does.
+/// The four area frames (yaw min / max, pitch min / max), sent one after the other (capture 11).
 pub fn zone_area(
     yaw: (f32, f32),
     pitch: (f32, f32),
@@ -305,9 +311,9 @@ fn area(
     seqs: [u16; 4],
 ) -> Result<[[u8; FRAME_SIZE]; 4]> {
     // In the camera's own angles: yaw positive = camera left, pitch positive = down (as 0x6444).
-    // OBSBOT Center offers yaw -100..100, pitch -30..30 (captures 11, 18); the camera stores
-    // more, and zone tracking measured on a Tiny 2 Lite keeps to a tilt of 45 (stopped at 48.7,
-    // 90.7 without zone). So the area takes the gimbal range.
+    // The vendor app's areas are yaw -100..100, pitch -30..30 (captures 11, 18); the camera
+    // stores more, and zone tracking measured on a Tiny 2 Lite keeps to a tilt of 45 (stopped at
+    // 48.7, 90.7 without zone). So the area takes the gimbal range.
     let ok = |(lo, hi): (f32, f32), (min, max): (f32, f32)| {
         lo.is_finite() && hi.is_finite() && lo < hi && lo >= min && hi <= max
     };
@@ -352,9 +358,7 @@ pub fn area_axis(
 }
 
 /// Sets every bound of the hand tracking area back to the camera's default (-45..45 pan, -30..30
-/// tilt): one frame per bound, no data. The reset ids are `0x25c4`, `0x2604`, `0x2644`, `0x2684`;
-/// libdev's names for them swap min and max against the firmware's, which does not matter when
-/// all four are sent.
+/// tilt): one frame per bound, no data. The reset ids are `0x25c4`, `0x2604`, `0x2644`, `0x2684`.
 pub fn hand_area_reset(seqs: [u16; 4]) -> [[u8; FRAME_SIZE]; 4] {
     [0x25c4, 0x2604, 0x2644, 0x2684]
         .into_iter()
@@ -381,26 +385,27 @@ pub fn hand_return_after(seconds: f32, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     Ok(frame(TRACKING, 0x2444, &seconds.to_le_bytes(), seq))
 }
 /// Whether the hand tracker may move the gimbal at all (`0x26c4`). Not stored by the camera; with
-/// 0 it stops the gimbal. OBSBOT Center sends 0 while its hand area dialog is open and 1 on OK.
+/// 0 it stops the gimbal. The vendor app sends 0 while its hand area dialog is open and 1 on OK
+/// (capture 11).
 pub fn hand_gimbal(on: bool, seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x26c4, &[on as u8], seq)
 }
 /// Moves the gimbal to the boot pose (the start pose of the initial state). Does not store
-/// anything. Short command `00`: the camera sends the AI request 0x3904 itself. Center's framed
-/// 0x3904 does the same but arms the flag that turns the next zone return into Static (#79); the
-/// short command does not. The camera ignores it while asleep or with the gimbal locked.
+/// anything. Short command `00`; a framed command for the same move arms the flag that turns the
+/// next zone return into Static (#79), the short command does not. The camera ignores it while
+/// asleep or with the gimbal locked.
 pub fn startup_go() -> [u8; 3] {
     [0x00, 0x01, 0x01]
 }
-/// Moves the gimbal to the zone return position (`aiTrgLimitedZoneTrackInitPosR`, no data).
+/// Moves the gimbal to the zone return position (no data).
 pub fn zone_return_go(seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x4f44, &[], seq)
 }
-/// Moves the gimbal to the hand-tracking return position (`aiTrgHandTrackInitPosR`, no data).
+/// Moves the gimbal to the hand-tracking return position (no data).
 pub fn hand_return_go(seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x2584, &[], seq)
 }
-/// Clears the hand-tracking return position (`aiRstHandTrackInitPosR`, no data).
+/// Clears the hand-tracking return position (no data).
 pub fn hand_return_reset(seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x2544, &[], seq)
 }
@@ -468,9 +473,9 @@ fn f32s(values: &[f32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
 
-/// Moves the gimbal with OBSBOT Center's pose command 0x6444 (joint angles, as fast as the motors
-/// go). Degrees; yaw positive turns the camera to its left, pitch positive tilts it down; None
-/// keeps that axis.
+/// Moves the gimbal with the pose command 0x6444 (joint angles, as fast as the motors go).
+/// Degrees; yaw positive turns the camera to its left, pitch positive tilts it down; None keeps
+/// that axis.
 pub fn gimbal_pose(yaw: Option<f32>, pitch: Option<f32>, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     Ok(frame(
         TRACKING,
@@ -504,9 +509,9 @@ pub fn gimbal_pose_speed(
     Ok(frame(TRACKING, 0x6544, &data, seq))
 }
 
-/// Turns the gimbal at a speed in degrees per second, like OBSBOT Center's joystick (0x6484: roll,
-/// pitch, yaw). `pan` and `tilt` are obsbot4linux's directions (pan positive = the way `gimbal
-/// --pan` turns, tilt positive = up), 0 stops that axis. It keeps turning until a speed of 0 or
+/// Turns the gimbal at a speed in degrees per second, like a joystick (0x6484: roll, pitch, yaw).
+/// `pan` and `tilt` are obsbot4linux's directions (pan positive = the way `gimbal --pan` turns,
+/// tilt positive = up), 0 stops that axis. It keeps turning until a speed of 0 or
 /// [`gimbal_stop`]. The camera flips the yaw of this command when exactly one of mirror and
 /// invert is on (measured), which is undone here.
 pub fn gimbal_rate(
@@ -537,18 +542,9 @@ pub fn gimbal_stop(seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x6704, &[], seq)
 }
 
-/// Turns the gimbal so that a point of the picture moves to its centre (0x0544, libdev
-/// `aiSetVideoCenter`): x and y from 0.0 to 1.0, from the top left.
-pub fn view_center(x: f32, y: f32, seq: u16) -> Result<[u8; FRAME_SIZE]> {
-    if !(0.0..=1.0).contains(&x) || !(0.0..=1.0).contains(&y) {
-        return Err(invalid("centre point x and y are 0.0-1.0"));
-    }
-    Ok(frame(TRACKING, 0x0544, &f32s(&[x, y]), seq))
-}
-
-/// Zoom to a factor at a speed (0x6884: i32 speed, f32 ratio; OBSBOT Center sends 30), the camera
-/// clamps the ratio to its range. The speed is the one of the auto zoom (10 slow, 30 medium, 50
-/// fast).
+/// Zoom to a factor at a speed (0x6884: i32 speed, f32 ratio; the vendor app sends 30, capture
+/// 11), the camera clamps the ratio to its range. The speed is the one of the auto zoom (10 slow,
+/// 30 medium, 50 fast).
 pub fn zoom_to(speed: i32, ratio: f32, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     if !(1.0..=4.0).contains(&ratio) {
         return Err(invalid("zoom factor is 1.0-4.0"));
@@ -612,8 +608,8 @@ mod tests {
     #[test]
     fn sleep_and_wake_frames() {
         // The command and data are recorded (capture 13: 0xa0c2 with 01000000 on sleep, 00000000
-        // on wake), but these two frames, with their sequence numbers and CRCs, come from the
-        // Tiny4Linux port, not from a recording.
+        // on wake), but these two frames, with their sequence numbers and CRCs, are not
+        // recorded.
         assert_captured(
             sleep(false, 0xa5),
             "aa25a5000c005fef0a02c2a00400be0700000000",
@@ -659,8 +655,8 @@ mod tests {
 
     #[test]
     fn tracking_speed_hand_and_invert_frames() {
-        // The two tracking_speed frames (seq 0x20, 0x21) come from the Tiny4Linux port; capture 11
-        // records the same command with data 00 / 02 at other sequence numbers. The hand_side and
+        // The two tracking_speed frames (seq 0x20, 0x21) are not recorded; capture 11 records
+        // the same command with data 00 / 02 at other sequence numbers. The hand_side and
         // invert frames are byte for byte from captures 11 and 05.
         assert_captured(
             tracking_speed(TrackingSpeed::Standard, 0x20),
@@ -684,7 +680,7 @@ mod tests {
 
     #[test]
     fn zone_tracking_matches_capture() {
-        // the first frame of Center's pair (capture 11); the second, 0x5084, is not sent
+        // the frame of capture 11; nothing follows it
         assert_captured(
             zone_tracking(true, 0x0194),
             "aa2594010c00e15a0a04c408010027ff01",
@@ -710,7 +706,7 @@ mod tests {
 
     #[test]
     fn zone_area_matches_capture() {
-        // capture 11, seq 430-433: Center's full area
+        // capture 11, seq 430-433: the full area
         let frames = zone_area((-100.0, 100.0), (-30.0, 30.0), [430, 431, 432, 433]).unwrap();
         assert_captured(frames[0], "aa25ae010c0091b60a04044c040068560000c8c2");
         assert_captured(frames[1], "aa25af010c00a1b30a04844c040069f60000c842");
@@ -782,8 +778,7 @@ mod tests {
 
     #[test]
     fn hand_axes_and_return_time_use_the_firmware_ids() {
-        // not captured: the ids come from the firmware inventory (static), the bodies are the
-        // u8 / f32 the handlers read
+        // not captured
         let f = hand_pan(false, 1);
         assert_eq!((f[10..12].to_vec(), f[12], f[16]), (vec![0x44, 0x23], 1, 0));
         let f = hand_tilt(true, 1);
@@ -899,8 +894,8 @@ mod tests {
         assert!(gimbal_pose(Some(-150.0), Some(70.0), 0).is_ok());
     }
 
-    /// Frames of commands OBSBOT Center never sends, built independently (CRC-16/USB computed in
-    /// Python); the effect of each was read back from a Tiny 2 Lite on firmware 6.2.8.1.
+    /// Frames that no capture holds, built independently of this code (CRC-16/USB); the effect of
+    /// each was read back from a Tiny 2 Lite on firmware 6.2.8.1 (measured).
     #[test]
     fn framing_frames_hold_what_the_camera_read_back() {
         assert_captured(
@@ -952,12 +947,12 @@ mod tests {
         );
     }
 
-    /// The only captured frames of the milestone: Center's joystick (0x6484, capture 10, seq 272)
-    /// and its zoom to 1.0 at speed 30 (0x6884, capture 11, seq 377).
+    /// The only captured frames of the milestone: the vendor app's joystick (0x6484, capture 10,
+    /// seq 272) and its zoom to 1.0 at speed 30 (0x6884, capture 11, seq 377).
     #[test]
     fn joystick_and_zoom_speed_match_capture() {
-        // Center's roll 0, pitch -0.6775, yaw -0.1693; obsbot4linux's pan is the yaw negated while
-        // mirror and invert are both off, tilt the pitch negated
+        // the vendor app's roll 0, pitch -0.6775, yaw -0.1693; obsbot4linux's pan is the yaw
+        // negated while mirror and invert are both off, tilt the pitch negated
         let pan = -f32::from_bits(0xbe2d_8f30);
         let tilt = -f32::from_bits(0xbf2d_8f30);
         assert_captured(
@@ -1013,16 +1008,9 @@ mod tests {
     }
 
     #[test]
-    fn stop_and_centre_frames() {
+    fn stop_and_zoom_frames() {
         assert_captured(gimbal_stop(0x38), "aa2538000c003a5b0a0404670000ffdb");
         assert_captured(zoom_stop(0x39), "aa2539000c007b9a0a04c4680000ffdb");
-        assert_captured(
-            view_center(0.3, 0.4, 0x37).unwrap(),
-            "aa2537000c00ba420a0444050800e4779a99993ecdcccc3e",
-        );
-        assert!(view_center(1.1, 0.5, 0).is_err());
-        assert!(view_center(0.5, -0.1, 0).is_err());
-        assert!(view_center(f32::NAN, 0.5, 0).is_err());
         assert_captured(
             zoom_to(30, 2.5, 0x3c).unwrap(),
             "aa253c000c005a4a0a0484680800e2921e00000000002040",
@@ -1044,20 +1032,19 @@ mod tests {
         assert_eq!(ai_mode(AiMode::Group), [0x16, 0x02, 0x01, 0x00]);
         assert_eq!(ai_mode(AiMode::Static), [0x16, 0x02, 0x00, 0x00]);
         assert_eq!(auto_sleep(-120), [0x0b, 0x02, 0x88, 0xff]);
-        assert_eq!(auto_sleep_off(120).unwrap(), auto_sleep(-120));
         assert_eq!(led(2).unwrap(), [0x1a, 0x01, 0x02]);
         assert!(led(4).is_err());
         // capture 12: HDR off 0101, on 010101
         assert_eq!(hdr(false), [0x01, 0x01, 0x00]);
         assert_eq!(hdr(true), [0x01, 0x01, 0x01]);
-        // a short command, never the framed 0x3904 that arms the zone-Static flag (#79)
+        // a short command, never a framed one: that arms the zone-Static flag (#79)
         assert_eq!(startup_go(), [0x00, 0x01, 0x01]);
     }
 
     #[test]
     fn ai_mode_status_pairs_round_trip() {
         // from_status is a second table; the two must not drift apart
-        for mode in AiMode::value_variants() {
+        for mode in AiMode::ALL {
             let [main, sub] = mode.to_bytes();
             assert_eq!(AiMode::from_status(main, sub), Some(*mode));
         }
@@ -1096,13 +1083,6 @@ mod tests {
         // capture 06: auto gain off 1701, on 170101
         assert_eq!(auto_gain(false), [0x17, 0x01, 0x00]);
         assert_eq!(auto_gain(true), [0x17, 0x01, 0x01]);
-        // capture 06: pickup distance far 1b0102, standard 1b0101, near 1b01
-        assert_eq!(pickup_distance(PickupDistance::Far), [0x1b, 0x01, 0x02]);
-        assert_eq!(
-            pickup_distance(PickupDistance::Standard),
-            [0x1b, 0x01, 0x01]
-        );
-        assert_eq!(pickup_distance(PickupDistance::Near), [0x1b, 0x01, 0x00]);
         // capture 14: microphone disabled 1c01 (the capture holds only this direction)
         assert_eq!(microphone(false), [0x1c, 0x01, 0x00]);
     }
@@ -1125,10 +1105,10 @@ mod tests {
         assert_eq!(default_work_mode(AiMode::Hand), [0x19, 0x01, 0x30]);
     }
 
-    /// Frames built independently (CRC-16/USB computed in Python) for payloads whose effect was
-    /// read back from a Tiny 2 Lite on firmware 6.2.8.1: volume 0x37 read back as 55 ("standard"),
-    /// mode 3 as 3, the point (0.3, 0.4) as sent with the camera in single autofocus. OBSBOT Center
-    /// sends none of these, so there is no capture to compare with.
+    /// Frames built independently of this code (CRC-16/USB) for payloads whose effect was read
+    /// back from a Tiny 2 Lite on firmware 6.2.8.1 (measured): volume 0x37 read back as 55
+    /// ("standard"), mode 3 as 3, the point (0.3, 0.4) as sent with the camera in single autofocus.
+    /// No capture holds these, so there is none to compare with.
     #[test]
     fn audio_and_focus_frames_hold_what_the_camera_read_back() {
         assert_captured(
@@ -1146,15 +1126,6 @@ mod tests {
         );
         assert!(focus_point(1.1, 0.5, 0).is_err());
         assert!(focus_point(0.5, f32::NAN, 0).is_err());
-    }
-
-    #[test]
-    fn auto_sleep_off_is_always_negative() {
-        // the status reads >= 0 as on, so -0 would leave auto-sleep on
-        assert_eq!(auto_sleep_off(0).unwrap(), auto_sleep(-600));
-        // 32768 (status -0x8000) has no positive i16 to negate
-        assert_eq!(auto_sleep_off(32767).unwrap(), auto_sleep(-32767));
-        assert!(auto_sleep_off(32768).is_err());
     }
 
     #[test]
@@ -1180,8 +1151,8 @@ mod tests {
 
     #[test]
     fn a_rate_of_zero_sends_twelve_zero_bytes_whatever_mirror_and_invert_are() {
-        // Center releasing the joystick (capture 13, seq 525): 0x6484 with the data all zero.
-        // A negated zero would put the sign bit into the frame.
+        // the vendor app releasing the joystick (capture 13, seq 525): 0x6484 with the data all
+        // zero. A negated zero would put the sign bit into the frame.
         for (mirror, invert) in [(false, false), (false, true), (true, false), (true, true)] {
             let f = gimbal_rate(0.0, 0.0, mirror, invert, 525).unwrap();
             assert_eq!(f[16..28], [0u8; 12], "mirror {mirror}, invert {invert}");

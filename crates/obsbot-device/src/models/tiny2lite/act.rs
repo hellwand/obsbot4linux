@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 pub const ZOOM_MOVE_SPEED: [(&str, i32); 3] = [("slow", 10), ("medium", 30), ("fast", 50)];
 
 /// A tilt in the units of 4.2 (positive up) as the pose commands take it (pitch, positive down);
-/// `+ 0.0` sends a tilt of 0 as +0.0. Carried from `camera.rs` (`tilt_to_pitch`).
+/// `+ 0.0` sends a tilt of 0 as +0.0.
 pub fn tilt_to_pitch(tilt: Option<f32>) -> Option<f32> {
     tilt.map(|t| -t + 0.0)
 }
@@ -167,7 +167,7 @@ fn pose_of(v: &Value) -> Option<Pose> {
 
 /// The live pose (query `0x0043` on receiver 3) and the zoom factor (query `0x6804`), as the
 /// pose-taking actions use it (4.4). Angles to a tenth of a degree, the zoom kept within
-/// 1.0–4.0. Carried from `camera.rs` (`live_pose_and_zoom`).
+/// 1.0–4.0.
 pub fn live_pose(link: &mut Link, ctx: &Ctx) -> Result<Pose> {
     let d = link.query(FRAMED, GIMBAL, 0x0043, ctx)?;
     let i16_at = |i: usize| d.get(i..i + 2).map(|b| i16::from_le_bytes([b[0], b[1]]));
