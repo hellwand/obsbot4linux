@@ -11,8 +11,9 @@ url='https://github.com/hellwand/obsbot4linux'
 license=('GPL-3.0-or-later')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
-# The check() below runs the workspace tests, among them scripts/check-model.sh, which needs jq.
-checkdepends=('jq')
+# The check() below runs the workspace tests, among them scripts/check-model.sh, which needs jq,
+# and scripts/check-model-observe.py, which needs numpy.
+checkdepends=('jq' 'python-numpy')
 options=('!debug')
 
 if [[ -n ${OBSBOT4LINUX_TARBALL:-} ]]; then
