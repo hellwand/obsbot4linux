@@ -246,11 +246,15 @@ pub fn touched(plan: &[Group], target: Target<'_>) -> Vec<String> {
     }
 }
 
-/// The leaves that go first in a patch (8.8): the `requires` paths of the description
-/// (`exposure.mode`, `image.white_balance.auto`, `focus.mode`), `exposure.mode` also before
-/// `exposure.gain`, `tracking.mode` before `framing.*`, and `sleep.auto.seconds` before
-/// `sleep.auto.enabled`, so that switching auto-sleep on in the same patch uses the new time.
-pub const FIRST: [&str; 5] = [
+/// The leaves that go first in a patch (8.8), in this order: `exposure.anti_flicker` before
+/// `exposure.mode` (CAM-13, measured 2026-11-25: written right after `exposure.mode=manual`, an
+/// anti-flicker change is lost; written before it, both read back), the `requires` paths of the
+/// description (`exposure.mode`, `image.white_balance.auto`, `focus.mode`), `exposure.mode`
+/// also before `exposure.gain`, `tracking.mode` before `framing.*`, and `sleep.auto.seconds`
+/// before `sleep.auto.enabled`, so that switching auto-sleep on in the same patch uses the new
+/// time.
+pub const FIRST: [&str; 6] = [
+    "exposure.anti_flicker",
     "exposure.mode",
     "image.white_balance.auto",
     "focus.mode",
@@ -258,11 +262,11 @@ pub const FIRST: [&str; 5] = [
     "sleep.auto.seconds",
 ];
 
-/// The apply order of a patch: the leaves of [`FIRST`], then the others, each part in the order
-/// given.
+/// The apply order of a patch: the leaves of [`FIRST`] in its order, then the others in the
+/// order given.
 pub fn order(leaves: &[&str]) -> Vec<String> {
     let mut out: Vec<String> = leaves.iter().map(|l| l.to_string()).collect();
-    out.sort_by_key(|l| !FIRST.contains(&l.as_str()));
+    out.sort_by_key(|l| FIRST.iter().position(|f| f == l).unwrap_or(FIRST.len()));
     out
 }
 
@@ -405,6 +409,31 @@ mod tests {
         assert_eq!(
             order(&["exposure.gain", "exposure.mode"]),
             ["exposure.mode", "exposure.gain"]
+        );
+    }
+
+    #[test]
+    fn anti_flicker_goes_before_the_exposure_mode() {
+        // CAM-13 (measured 2026-11-25): `exposure.mode=manual` and then `exposure.anti_flicker`
+        // loses the anti-flicker write (it read 50hz after `off`); the other order keeps both.
+        // Given in the losing order, the patch is sent in the other one.
+        assert_eq!(
+            order(&["exposure.mode", "exposure.anti_flicker"]),
+            ["exposure.anti_flicker", "exposure.mode"]
+        );
+        assert_eq!(
+            order(&[
+                "exposure.time",
+                "exposure.mode",
+                "led.brightness",
+                "exposure.anti_flicker"
+            ]),
+            [
+                "exposure.anti_flicker",
+                "exposure.mode",
+                "exposure.time",
+                "led.brightness"
+            ]
         );
     }
 

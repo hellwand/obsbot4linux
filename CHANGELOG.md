@@ -45,6 +45,12 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   `get presets` shows, and a script that wants the old names passes `name=…` itself.
 - No command starts a daemon any more; without the socket unit every command exits 4 and
   prints `systemctl --user enable --now obsbot4linux.socket`.
+- Tiny 2 Lite, from measurements on the camera: a `set` with both writes
+  `exposure.anti_flicker` before `exposure.mode` (written after manual exposure, the camera
+  dropped the anti-flicker change); `exposure.time` takes multiples of 100 µs, the camera's
+  step, and refuses other values instead of rounding them down; a `focus.position` that the
+  kernel refuses while the continuous autofocus is on fails as the camera's refusal with that
+  reason, not as an I/O error.
 
 ### Removed
 

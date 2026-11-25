@@ -512,7 +512,10 @@ Per group:
   newer are not affected.
 - `gimbal.invert` reverses the gimbal's pan direction.
 - `zoom.factor`: 1.0–4.0. It follows `zoom.field_of_view`, the zoom
-  gestures and `preset.recall`.
+  gestures and `preset.recall`. In CS-1 (2026-11-25) the field of view stood at `medium` with
+  the factor at 1.17, and neither `zoom.factor=1.3` nor `zoom.field_of_view=wide` changed
+  either within 10 s; which write had moved them, and how the two leaves are coupled, is
+  CAM-36.
 - `zoom.field_of_view`: values `wide|medium|narrow|custom`, writable `wide|medium|narrow`.
 - `tracking.mode`: `static|normal|upper_body|close_up|headless|lower_body|hand|group`. A mode
   change rewrites `framing.*`: `upper_body` and `close_up` set `framing.auto_zoom` and
@@ -533,6 +536,12 @@ Per group:
   `gestures.direction_change` reverses the direction of the dynamic zoom gesture.
 - `zone.area.pan` −150..150, `zone.area.tilt` −70..90 (degrees, ranges). `zone.return` is a
   pose and never `null`: the camera has no "not set" for it.
+- `zone.area` and `hand.area`: the model sends the min frame, then the max frame (in the
+  camera's angles; for tilt the bounds swap and change sign). Measured 2026-11-25 (CAM-16): a
+  range wholly below the stored one on the wire reads back as written; for a range wholly
+  above it, the min reads back as the stored max (the camera keeps min ≤ max at each frame),
+  and the max as written. So `zone.area.pan` 40..60 over −20..20 reads 20..60, and a tilt
+  −60..−40 over −30..30 reads −60..−30. Whether max first fixes such a range is U-8.
 - `hand.side`: `left|right`. `hand.area` defaults to pan −45..45, tilt −30..30.
   `hand.return_after` in seconds. `hand.move_gimbal`: `readback: false`; the camera does not
   store it, and `false` stops the hand tracker's gimbal moves. `hand.return` is a pose or
@@ -541,9 +550,10 @@ Per group:
   at most 32 printable ASCII characters. A preset's `name` is what the camera reports, and
   may be empty (4.4, CAM-35).
 - `exposure.mode`: `auto|manual`. `exposure.region`: `face|global`, the metering while the
-  exposure is automatic. `exposure.time` in µs; it `requires` `exposure.mode=manual` (a time
-  written while automatic freezes the automatic exposure); the camera rounds down to its own
-  steps, and the state shows the value it took. `exposure.gain` 1–64. `exposure.time` and
+  exposure is automatic. `exposure.time` in µs, step 100 µs (the camera's unit): a time between
+  two steps is refused with `out_of_range` (CS-1: 44990 was sent as 449 units and read back as
+  44900); it `requires` `exposure.mode=manual` (a time written while automatic freezes the
+  automatic exposure). `exposure.gain` 1–64. `exposure.time` and
   `exposure.gain` have the live topic `auto`. `exposure.compensation`: the camera's raw
   value 0–18, default 9 (U-20). `exposure.anti_flicker`: values `off|50hz|60hz|auto`,
   writable `off|50hz|60hz` (the kernel driver offers no way to set `auto` on this camera),
@@ -554,6 +564,10 @@ Per group:
   topic `auto`. `frame_rate` is read-only (fps).
 - `focus.mode`: `continuous|single|manual`. `focus.region`: `face|global`.
   `focus.position` 0–100, `requires` `focus.mode=manual`, `no_effect` on this model (#99).
+  The kernel refuses it (EACCES) while the camera's UVC continuous autofocus is on, and
+  `focus.mode=manual` does not switch that off (measured 2026-11-25, CAM-15); the write
+  fails with the camera's refusal and that reason (`camera`), not an I/O error. What makes it
+  writable is CAM-14.
 - `audio.enabled`: `warning: [restart]`; the camera restarts on every write, both values;
   the restart lasts about 18 s (measured; how long until the device is enumerated again and
   answers is timed in CAM-1). The write is answered once the camera accepted it, and the
@@ -1369,11 +1383,13 @@ M4 is the first model that completes these steps.
   workaround" and stays only until CAM-19 decides). While asleep only the status block is
   read. This plan is carried from 0.13.2; the vendor-app rate rule of 8.7 step 4 applies to
   models onboarded under 8.7.
-- **Apply order** inside a patch: a setting's `requires` paths before the setting
+- **Apply order** inside a patch: `exposure.anti_flicker` before `exposure.mode` (CAM-13,
+  measured 2026-11-25: written right after `exposure.mode=manual`, `anti_flicker=off` was
+  lost and read `50hz`; written before it, both read back; only the change to `manual` was
+  measured), a setting's `requires` paths before the setting
   (`exposure.mode=manual` before `exposure.time`; `image.white_balance.auto=false` before
   `image.white_balance.temperature`; `focus.mode=manual` before `focus.position`),
-  `exposure.mode` before `exposure.gain`, and `tracking.mode` before `framing.*`. The order
-  between `exposure.anti_flicker` and `exposure.mode` is CAM-13.
+  `exposure.mode` before `exposure.gain`, and `tracking.mode` before `framing.*`.
 - **Touched groups:** `tracking.mode` touches tracking and framing; `zoom.field_of_view`
   and the gesture settings touch zoom; `preset.recall` touches zoom and the live pose;
   `gimbal.move`, `gimbal.turn`, `gimbal.stop`, `zoom.stop` and `zoom.move` touch nothing.
@@ -1565,8 +1581,8 @@ shows as backed (measured 2026-10-31 or captured); they are not reused.
 | U-5  | `hand.axes.pan`, `.tilt`                                                                                                         | no recording; effect not observed                                                                               | set, read back; hand tracking with a person in view                                                                                      | PX-U-5: `hand pan`, `hand tilt`                                                                                        |
 | U-6  | `hand.return_after`                                                                                                              | no recorded write                                                                                               | set, read back                                                                                                                           | PX-U-6: `hand return-after`                                                                                            |
 | U-7  | `hand.area_reset`                                                                                                                | no recording                                                                                                    | narrow the area, reset, read back the default area                                                                                       | PX-U-7: `hand area-reset`                                                                                              |
-| U-8  | `hand.area`, `zone.area` with a new range wholly beyond the stored one                                                           | frame order unmeasured                                                                                          | write such ranges for pan and tilt, read back                                                                                            | the model sends the bounds in the order the check shows; re-checked                                                    |
-| U-9  | `gimbal.move` with `speed`: tilt 86–90°, speeds 178–180 °/s, one axis with speed                                                 | speeds 1, 5 and 100 °/s to tilt 80 and pan 145 measured (#98); the rest not measured                            | moves with speed to tilt 86, 88, 90; speed 178 and 180; pan only                                                                         | range narrowed to the measured one; PX-U-9: `gimbal --speed` if no move with speed works                               |
+| U-8  | `hand.area`, `zone.area` with a new range wholly beyond the stored one | measured 2026-11-25 (CAM-16, min frame first): a range wholly below the stored one on the wire reads back; for one wholly above, the min reads back as the stored max (zone pan 40..60 over −20..20 read 20..60; zone and hand tilt −60..−40 over −30..30 read −60..−30). `hand.area.pan` had no range wholly beyond the stored one (−45..45) in the check. Open: whether max first lands such a range | write a range wholly above the stored one (on the wire) with the max frame first, read back; `hand.area.pan` beyond ±45 | the model sends the bounds in the order the check shows; re-checked |
+| U-9  | `gimbal.move` with `speed`: tilt 86–90°, speeds 178–180 °/s | speeds 1, 5 and 100 °/s to tilt 80 and pan 145 measured (#98); one axis with speed measured 2026-11-25 (CAM-17: pan 30 and tilt −10 at 90 °/s arrived). Tilt 89 and speed 180 in one move: no motion at all, the pose unchanged after 4 s, so the data does not say which of the two the camera refuses; the tilt limit with speed is below 89 or the speed ceiling below 180, open | moves with speed 90 to tilt 86, 88, 89; speed 178 and 180 to tilt 0 (separate moves) | range narrowed to the measured one; PX-U-9: `gimbal --speed` if no move with speed works |
 | U-12 | `zoom.move` speeds `slow` (10), `fast` (50)                                                                                      | only 30 captured                                                                                                | a move at each speed, factor reached                                                                                                     | the speed leaves `writable`; PX-U-12: `zoom --speed` with that speed                                                   |
 | U-16 | `focus.point`                                                                                                                    | accepted, and the point reads back (measured, #97); the picture blurs instead of focusing (#99)                 | point at an object, observe the focus                                                                                                    | PX-U-16: `focus point`                                                                                                 |
 | U-18 | `power_on.start.mode`: writing `static`, `upper_body`, `headless`, `group`; names of read values other than `normal` and `unset` | only `normal` and `unset` recorded from the vendor app                                                          | set each value, read the block, power-cycle, observe the start mode                                                                      | the value leaves `writable`; an unconfirmed read value shows as `raw:<n>`; PX-U-18: `startup set --ai` with that value |
@@ -2029,7 +2045,7 @@ and CAM-29 are recorded only if they happen and gate nothing.
 | CAM-11 | Can the image be flipped? Only a recording of the vendor app doing it can show how; nothing is sent before.                                                                     | none in 1.0 (see above)        | `image.flip` (additive, after 1.0)                             |
 | CAM-12 | Can the start pose and the zone area be reset? Only a recording of the vendor app doing it can show how; nothing is sent before.                                                | none in 1.0 (see above)        | `power_on.reset`, a zone-area reset (additive, after 1.0)      |
 | CAM-13 | Order of `exposure.anti_flicker` and `exposure.mode` writes, in both directions                                                                                                 | A                              | apply order (8.8)                                              |
-| CAM-14 | After UVC autofocus off, is `focus.mode` `single` or `manual`?                                                                                                                  | A                              | rows `focus auto off`, `image autofocus 0`                     |
+| CAM-14 | After UVC autofocus off, is `focus.mode` `single` or `manual`? Does it make `focus.position` writable? (CS-1: the kernel refuses the absolute focus while the UVC continuous autofocus is on, also after `focus.mode=manual`) | A | rows `focus auto off`, `image autofocus 0`, `focus set N`, `image focus V`; whether `focus.position` stays writable |
 | CAM-15 | Are the white-balance temperature and the absolute focus refused while their automatic control is on?                                                                           | A                              | confirms the `requires` rules (kept either way: a kernel rule) |
 | CAM-16 | Hand and zone area: a new range wholly beyond the stored one                                                                                                                    | A                              | U-8                                                            |
 | CAM-17 | `gimbal.move` with speed near the tilt limit and the speed ceiling; one axis with speed                                                                                         | A                              | U-9                                                            |
@@ -2051,6 +2067,7 @@ and CAM-29 are recorded only if they happen and gate nothing.
 | CAM-33 | Do `tracking.speed`, `tracking.profile=headroom` and `framing.*` change the tracking visibly, with a person in view? (Their write and readback are measured, #98.)              | A                              | `no_effect` of those leaves                                    |
 | CAM-34 | With the tracking on (`tracking.mode` not `static`), what do `gimbal.move` and `gimbal.turn` do: move and track on, switch the mode, or nothing? (with a person in view)        | A                              | the text of 4.4; `touched` of the moves (8.8)                  |
 | CAM-35 | What does the camera report as the name of a preset saved without a name, and does the name reach the state as empty or as a name of its own? (obsbot4linux sends none)         | A                              | the text of 4.4; the placeholder of clients (6.2, 12.3)        |
+| CAM-36 | In the CS-1 sweep (2026-11-25) the field of view moved from `wide` to `medium` before its own write; the test did not record which write moved it. At `medium` the zoom read 1.17 (status digital zoom 5 %, UVC zoom 6), and neither `zoom.factor=1.3` nor `zoom.field_of_view=wide` changed it within 10 s; written by hand afterwards, both took. Which write moves the field of view, and how are it and `zoom.factor` coupled? | A (rerun of `live_cam_5`, which now names every leaf a write moves) | touched groups (8.8); the text of 4.3; the apply order of the two |
 
 **Tiny 3 and Tiny 3 Lite** (stage M4, onboarding steps 0–2 and 7 on the unit in hand;
 everything here is unknown until captures)
@@ -2200,3 +2217,4 @@ on its own.
 | 107 | 2026-11-24 | Project page `site/` | not stated | rewritten in W4's release pull request, before `v1.0.0` | the candidate does not deploy the page | the W2/W3 cross-check |
 | 108 | 2026-11-24 | Test sockets and locks | not stated | the CLI test sockets live in `$TMPDIR`; every harness that starts a daemon removes the daemon's `<socket>.lock` | W2's harnesses would otherwise leave files behind | the W2/W3 cross-check |
 | 109 | 2026-11-24 | Milestones | 0.14.0 = groundwork, #47 and #61 in it, 0.15.0 and 0.16.0 after 1.0 (10.5) | 0.14.0 = groundwork; #47 and #61 in 1.0.0; research and other apps in the Backlog, no milestone | #47 and #61 are fixed in the rebuild; no camera for research | the W2/W3 cross-check |
+| 110 | 2026-11-25 | CS-1 blocks B and C in the contract | the order of `exposure.anti_flicker` and `exposure.mode` is CAM-13; `exposure.time` without a step ("the camera rounds down"); `focus.position` writable after `focus.mode=manual`; the area frames min then max (U-8 open); U-9 with one axis unmeasured | `exposure.anti_flicker` goes before `exposure.mode` (8.8); `exposure.time` has step 100 µs and refuses a time between steps; a kernel refusal of `focus.position` is the camera's refusal with its reason, and CAM-14 decides what makes it writable; the area rule measured for one direction is recorded and U-8 stays open; U-9's one-axis move passed, its limits stay open; new CAM-36 (field of view and zoom); the live tests put back what they wrote also when they fail (4.3, 8.8, 9.3, 14) | measured on the camera in CS-1 on 2026-11-25 (live tests `live_cam_5`, `_13`, `_15`, `_16`, `_17`) | CS-1, 2026-11-25 |

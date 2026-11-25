@@ -241,7 +241,7 @@ pub fn apply(
             link.short(SHORT, &cmd::exposure_mode_select(r), ctx)
         }
         "exposure.time" => {
-            // 100 µs units; the camera takes the step at or below (#97)
+            // 100 µs units, the step of the description (CAM-5)
             let units = (float(leaf, v)? / 100.0).floor() as i32;
             link.ctrl_set(0x009a_0902, units, ctx)
         }
@@ -274,7 +274,20 @@ pub fn apply(
             let f = cmd::autofocus_mode(face, link.seq());
             link.send(FRAMED, &f, ctx)
         }
-        "focus.position" => link.ctrl_set(decode::FOCUS_ABSOLUTE, int(leaf, v)?, ctx),
+        "focus.position" => {
+            // the kernel gates the absolute focus on the UVC continuous autofocus, which
+            // `focus.mode` does not switch (measured 2026-11-25: refused after
+            // `focus.mode=manual` too); what does is CAM-14
+            link.ctrl_set(decode::FOCUS_ABSOLUTE, int(leaf, v)?, ctx)
+                .map_err(|e| match e {
+                    CameraError::Rejected(_) => CameraError::Rejected(
+                        "focus.position: the kernel takes no absolute focus while the UVC \
+                         continuous autofocus is on, and focus.mode does not switch that off"
+                            .into(),
+                    ),
+                    other => other,
+                })
+        }
         "audio.enabled" => link.short(SHORT, &cmd::microphone(boolean(leaf, v)?), ctx),
         "audio.volume" => {
             let volume = u8::try_from(int(leaf, v)?).map_err(|_| wrong(leaf, v))?;

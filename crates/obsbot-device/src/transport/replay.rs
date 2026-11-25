@@ -20,7 +20,7 @@ use crate::contract::camera::Result;
 use crate::contract::{CameraError, ControlRange, OnAir, Transport};
 use crate::family::frame::{FRAME_SIZE, crc16_usb};
 use obsbot_proto::Usb;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
 
 /// One write the transport received.
@@ -160,6 +160,7 @@ pub struct Replay {
     buffers: BTreeMap<u8, [u8; FRAME_SIZE]>,
     reads: BTreeMap<u8, VecDeque<[u8; FRAME_SIZE]>>,
     ctrls: BTreeMap<u32, i32>,
+    inactive: BTreeSet<u32>,
     ranges: BTreeMap<u32, ControlRange>,
     usb: Option<Usb>,
     serial: Option<String>,
@@ -178,6 +179,7 @@ impl Replay {
             buffers: BTreeMap::new(),
             reads: BTreeMap::new(),
             ctrls: BTreeMap::new(),
+            inactive: BTreeSet::new(),
             ranges: BTreeMap::new(),
             usb: None,
             serial: None,
@@ -233,6 +235,13 @@ impl Replay {
 
     pub fn ctrl(mut self, id: u32, value: i32) -> Replay {
         self.ctrls.insert(id, value);
+        self
+    }
+
+    /// A control the kernel refuses to write, as while its automatic control is on: a write
+    /// fails as on the USB transport and changes nothing.
+    pub fn inactive(mut self, id: u32) -> Replay {
+        self.inactive.insert(id);
         self
     }
 
@@ -349,6 +358,9 @@ impl Transport for Replay {
 
     fn ctrl_set(&mut self, id: u32, value: i32) -> Result<()> {
         self.here()?;
+        if self.inactive.contains(&id) {
+            return Err(crate::transport::usb::inactive_control(id));
+        }
         self.log.push(Sent::Ctrl { id, value });
         self.ctrls.insert(id, value);
         Ok(())

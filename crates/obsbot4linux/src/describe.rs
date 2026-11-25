@@ -276,7 +276,7 @@ mod tests {
         let a = |n: &str| action_text(&d.actions[n]);
         assert_eq!(
             s("exposure.time"),
-            "number 100..250000, unit us, asleep unknown, requires exposure.mode=manual, \
+            "number 100..250000, step 100, unit us, asleep unknown, requires exposure.mode=manual, \
              default 33000, live auto, settle 3000 ms (Exposure time)"
         );
         assert_eq!(
