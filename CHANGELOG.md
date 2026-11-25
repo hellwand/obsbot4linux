@@ -272,7 +272,6 @@ Exceptions:
   mode and the firmware version are no longer listed as missing; gestures are read back (#122).
 - `audio --help` says that every microphone change restarts the camera, not only turning it off, and
   `gimbal rate --help` says that an omitted axis is stopped (#123).
-
 ## [0.13.2] - 2026-10-31
 
 ### Fixed

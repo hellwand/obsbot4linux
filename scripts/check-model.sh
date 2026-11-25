@@ -706,10 +706,12 @@ cleanup_own() {
 }
 
 # On exit, an interrupt or a termination: every leaf written goes back to its snapshot value,
-# the last one written first; the script's own presets and views are deleted, a turn is
-# stopped, then the pose of the snapshot (spec 9.4), its zoom written back whatever the state
-# shows (a move's zoom shows only at its group's next read). A leaf that does not show its
-# snapshot value afterwards is named and makes the exit code 1.
+# the last one written first; the script's own presets and views are deleted and a turn is
+# stopped (spec 9.4). The pose of the snapshot goes back first, its zoom written back whatever
+# the state shows (a move's zoom shows only at its group's next read), so that the leaves a pose
+# change can switch (the field of view, the tracking mode) are judged after it; asleep, the
+# pose is skipped and the output says so. A leaf that does not show its snapshot value
+# afterwards is named and makes the exit code 1.
 # shellcheck disable=SC2329 # run by the trap
 finish() {
 	local rc=$? i path st stop bad=0
@@ -729,6 +731,28 @@ finish() {
 	for stop in "${TURN_STOPS[@]}"; do
 		cli "do" "$stop" >/dev/null 2>&1
 	done
+	# The pose first: on the camera a zoom write can switch the field of view and a gimbal move
+	# the tracking mode, which the loop below then puts back and judges on a fresh state.
+	if [ "$MOVED" = 1 ] && [ "$(leaf "$st" asleep 2>/dev/null)" = true ]; then
+		echo "  skipped: the pose of the snapshot (the camera is asleep)"
+	elif [ "$MOVED" = 1 ]; then
+		if jq -e '.actions["gimbal.move"]' <<<"$DESC" >/dev/null; then
+			local pan tilt
+			pan=$(leaf "$SNAP" gimbal.pan)
+			tilt=$(leaf "$SNAP" gimbal.tilt)
+			if [ "$pan" != null ] && [ "$tilt" != null ]; then
+				cli "do" gimbal.move "pan=$pan" "tilt=$tilt" >/dev/null 2>&1
+			fi
+		fi
+		# The zoom: a move (`zoom.move`, `preset.recall`, `view.go`, `zone.go_return`,
+		# `hand.go_return`, `power_on.go`, `wake`) changes it without the state having to show
+		# it yet (its group is read on its own tier, not after the move), so the state cannot
+		# tell whether it is back. It is written back whatever it shows; the write reads it again.
+		if jq -e '.settings["zoom.factor"] | . != null and (.readonly | not)' <<<"$DESC" >/dev/null; then
+			restore_row zoom.factor 2>/dev/null
+		fi
+		st=$(full_state 2>/dev/null) || st=$SNAP
+	fi
 	for ((i = ${#CHANGED[@]} - 1; i >= 0; i--)); do
 		path=${CHANGED[i]}
 		shows "$st" "$path" "$(leaf "$SNAP" "$path")" "$(precision_of "$path")" 2>/dev/null && continue
@@ -736,21 +760,6 @@ finish() {
 	done
 	resync_own "$st"
 	cleanup_own "$st"
-	if [ "$MOVED" = 1 ] && jq -e '.actions["gimbal.move"]' <<<"$DESC" >/dev/null; then
-		local pan tilt
-		pan=$(leaf "$SNAP" gimbal.pan)
-		tilt=$(leaf "$SNAP" gimbal.tilt)
-		if [ "$pan" != null ] && [ "$tilt" != null ]; then
-			cli "do" gimbal.move "pan=$pan" "tilt=$tilt" >/dev/null 2>&1
-		fi
-	fi
-	# The zoom of the pose: a move (`zoom.move`, a recall, a return) changes it without the
-	# state having to show it yet (its group is read on its own tier, not after the move), so
-	# the state above cannot tell whether it is back. It is written back whatever it shows; the
-	# write reads it again.
-	if [ "$MOVED" = 1 ] && jq -e '.settings["zoom.factor"] | . != null and (.readonly | not)' <<<"$DESC" >/dev/null; then
-		restore_row zoom.factor 2>/dev/null
-	fi
 	st=$(full_state 2>/dev/null) || st=""
 	for path in "${CHANGED[@]}"; do
 		[ -n "${done_[$path]:-}" ] && continue
