@@ -30,7 +30,7 @@ chmod -R a+rwX "$work"
 docker run --rm -v "$work:/work" -e VER="$ver" -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   "$image" sh -ec '
   trap "chown -R \$HOST_UID:\$HOST_GID /work" EXIT
-  pacman -Syu --noconfirm --needed --disable-sandbox cargo jq
+  pacman -Syu --noconfirm --needed --disable-sandbox cargo jq python-numpy
   useradd -m builder
   chown -R builder /work
   su builder -c "cd /work && OBSBOT4LINUX_TARBALL=/work/obsbot4linux-$VER.tar.gz PKGDEST=/work/out PKGEXT=.pkg.tar.zst makepkg --noconfirm"

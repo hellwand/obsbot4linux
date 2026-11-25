@@ -5,7 +5,8 @@
 //! fake-b in CI"). The daemon runs in-process in fake mode with short poll tiers, so that a
 //! lagging readback shows within the test's time; the script runs as it would on a camera,
 //! with the command line of this crate. The person's answers of a run without `--assume-pass`
-//! come from a file (`CHECK_MODEL_TTY`). Needs bash and jq.
+//! come from a file (`CHECK_MODEL_TTY`). Needs bash and jq; the frame comparison needs python3
+//! and numpy.
 
 mod common;
 
