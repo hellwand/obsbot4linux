@@ -179,8 +179,8 @@
               <p>
                 Sleep and wake, an automatic sleep timer and the picture shown
                 while asleep. Status LED brightness and blinking, gesture
-                control and its zoom ratio, and a factory reset that asks for
-                confirmation.
+                control and its zoom ratio, and a factory reset that needs
+                explicit confirmation.
               </p>
             </li>
             <li>
@@ -418,7 +418,8 @@ obsbot4linux watch --live pose             # the state as JSON lines, as it chan
                 <li>
                   With one usable camera, commands use it. Otherwise
                   <code>--device</code> takes its id, the last four or more
-                  characters of its serial, or a model key.
+                  characters of its serial, the shortened id the output
+                  prints (<code>…0001</code>), or a model key.
                 </li>
                 <li>
                   Destructive actions need <code>confirm=true</code>:
@@ -436,7 +437,8 @@ obsbot4linux watch --live pose             # the state as JSON lines, as it chan
                 <li>
                   Exit codes: 0 ok, 1 internal error, 2 invalid input, 3 the
                   camera cannot do it now (asleep, busy, unplugged, unsupported,
-                  none), 4 the daemon cannot be reached.
+                  none), 4 the daemon cannot be reached or is of another
+                  version.
                 </li>
                 <li>
                   The protocol is documented in
