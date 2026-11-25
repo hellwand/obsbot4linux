@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build the Arch package of HEAD in an Arch container (used by the release workflow).
-# Usage: build-arch.sh IMAGE X.Y.Z OUTDIR
+# Usage: build-arch.sh IMAGE X.Y.Z OUTDIR    (or X.Y.Z-rc.N)
 #   IMAGE  archlinux / Arch Linux ARM image (its platform decides the package arch)
-#   OUTDIR receives obsbot4linux-X.Y.Z-1-<arch>.pkg.tar.zst
+#   OUTDIR receives obsbot4linux-<pkgver>-1-<arch>.pkg.tar.zst; pkgver is the version without
+#          its "-" (1.0.0-rc.1 is 1.0.0rc.1: makepkg allows no "-", and vercmp sorts it first)
 set -eu
 image=${1:?usage: build-arch.sh IMAGE X.Y.Z OUTDIR}
-ver=${2:?}
+ver=$(printf '%s' "${2:?}" | tr -d -)
 out=$(mkdir -p "${3:?}" && cd "$3" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
 

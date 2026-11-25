@@ -1,7 +1,8 @@
 # Builds the committed HEAD of the checkout this file lives in (uncommitted changes are left
 # out). The release workflow sets OBSBOT4LINUX_TARBALL to a source tarball of the tag instead.
 pkgname=obsbot4linux
-# Cargo.toml's version; scripts/changelog-section.sh fails the release unless they match.
+# Cargo.toml's version, with the "-" of a pre-release dropped (1.0.0-rc.1 is 1.0.0rc.1, which
+# vercmp sorts before 1.0.0); scripts/changelog-section.sh fails the release unless they match.
 pkgver=0.13.2
 pkgrel=1
 pkgdesc='Control OBSBOT webcams on Linux: a camera daemon and its command line'
