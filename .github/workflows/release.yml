@@ -130,6 +130,8 @@ jobs:
           --component rustfmt --component clippy --no-self-update
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # scripts/check-model-observe.py's test (check_model.rs) needs numpy
+      - run: python3 -c 'import numpy' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-numpy; }
       - run: cargo test --workspace --locked
       - run: |
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
