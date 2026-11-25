@@ -1413,6 +1413,71 @@ mod tests {
         stop(r);
     }
 
+    /// 5.7 "Asleep" (#328): the camera falls asleep between two polls (the Tiny 2 Lite about
+    /// 10 s after a wake without a video stream) and turns to its sleep pose. A pose-taking
+    /// action sent before the next poll read that pose and failed with the pose check's
+    /// message. The worker reads `asleep` right before an `ignored` action, so the action is
+    /// refused with `asleep` and nothing is sent.
+    #[test]
+    fn an_ignored_action_is_refused_when_the_camera_fell_asleep_since_the_last_poll() {
+        let (mut w, bus) = worker_timed("fake-b", fast());
+        let id = "sn:FAKEB0000001";
+        w.first_read();
+        assert!(!w.state.asleep());
+        bus.sleep(id).unwrap();
+        let before = bus.ops(id).len();
+        let (out, replies) = Outbound::new(2, None, 10_000);
+        let save = Job {
+            id: RequestId::Int(1),
+            out: Some(out),
+            conn: 2,
+            device: id.into(),
+            work: Work::Do {
+                action: "preset.save".into(),
+                params: Params::from_iter([("slot".to_string(), json!(1))]),
+            },
+            arrived: Instant::now(),
+            stop: false,
+        };
+        w.batch(vec![save], vec![false]);
+        let reply = next(&replies);
+        assert_eq!(reply["error"]["code"], "asleep", "{reply}");
+        let ops = bus.ops(id)[before..].to_vec();
+        assert!(
+            !ops.iter().any(|o| matches!(o, Op::Act(..))),
+            "nothing was sent: {ops:?}"
+        );
+    }
+
+    /// The same read the other way: the camera woke since the last poll, so an `ignored`
+    /// setting is written, not refused with the stale `asleep`.
+    #[test]
+    fn an_ignored_setting_is_written_when_the_camera_woke_since_the_last_poll() {
+        let (mut w, bus) = worker_timed("fake-b", fast());
+        let id = "sn:FAKEB0000001";
+        bus.sleep(id).unwrap();
+        w.first_read();
+        assert!(w.state.asleep());
+        bus.wake(id).unwrap();
+        let (out, replies) = Outbound::new(2, None, 10_000);
+        let set = Job {
+            id: RequestId::Int(1),
+            out: Some(out),
+            conn: 2,
+            device: id.into(),
+            work: Work::Set(Patch::new().leaf("zoom.factor", 1.5)),
+            arrived: Instant::now(),
+            stop: false,
+        };
+        w.batch(vec![set], vec![false]);
+        let reply = next(&replies);
+        assert!(reply["ok"].is_object(), "{reply}");
+        assert!(
+            bus.ops(id)
+                .contains(&Op::Apply("zoom.factor".into(), json!(1.5)))
+        );
+    }
+
     /// 4.1 rule 9: a request whose connection closed before the worker started it is not
     /// sent and not answered.
     #[test]

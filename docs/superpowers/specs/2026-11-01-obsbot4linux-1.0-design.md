@@ -667,7 +667,9 @@ factory_reset {confirm}
   `zone.return_here` and `hand.return_here`, take the live pose and the current zoom factor
   from the camera. While the camera sleeps its live pose is the parking pose, which lies
   outside the tilt range (−85, measured 2026-11-25, CAM-22), so these actions are
-  `asleep: ignored`; their error names the pose read (#328).
+  `asleep: ignored`: the daemon reads `asleep` right before each of them (5.7), so one sent
+  while the camera sleeps is refused with `asleep`; a pose read that still fails names the
+  pose (#328).
 - `preset.save` without `name` sends the preset and no name: no rename frame follows, and
   obsbot4linux invents no name (0.13.2 named it `Preset <slot + 1>`). The camera then
   reports the name of an unnamed preset as empty (`""`, measured 2026-11-25, CAM-35); the
@@ -884,7 +886,10 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
 - An unchanged read produces no new rev and no event.
 - **Asleep.** If the description has the leaf `asleep`, the worker uses its value. While it
   is true, only the groups readable while asleep are read. A setting or action with
-  `asleep: ignored` is refused with `asleep`. One with `accepted` or `unknown` is written; if
+  `asleep: ignored` is refused with `asleep`. Before a request that names one, the worker
+  reads the group that holds `asleep` once more, with the request's deadline, and checks
+  against that value (a failed read leaves the last one): the camera can fall asleep or wake
+  between two polls (#328). One with `accepted` or `unknown` is written; if
   its group cannot be read while asleep, the path stays in `pending` until the first read
   after wake, and its `settle_ms` counts from that read.
 - **Wake and retries.** When `asleep` turns false, the worker reads once every group that
@@ -2206,8 +2211,9 @@ session 1" holds the details of blocks B and C; the live tests named are those o
 | CAM-35 | answered: a preset saved without a name reads with the name `""` (empty)                                                                                                                                                        |                                                                                                                     | measured 2026-11-25 (`live_cam_35`)                                          |
 | CAM-36 | open, hypothesis: the zoom and field-of-view writes of the sweep came after the camera had fallen asleep, where the field of view is ignored                                                                                    | a rerun of `live_cam_5`, which now wakes the camera before each leaf                                                | measured 2026-11-25 (`live_cam_5`, twice)                                    |
 
-New after CS-1: #328 (a pose-taking action asleep fails with the pose check's message; the
-error now names the pose it read), #329 (a zoom or field-of-view write equal to what the
+New after CS-1: #328 (a pose-taking action failed with the pose check's message; the
+error now names the pose it read, and the asleep check reads `asleep` fresh before an
+`ignored` request, row 116; cause not confirmed, open until it happens again), #329 (a zoom or field-of-view write equal to what the
 camera's UVC control or register holds does nothing after the camera's own auto zoom).
 
 ## 15. Changes from revision 1
@@ -2345,3 +2351,4 @@ on its own.
 | 113 | 2026-11-25 | Area bounds go max first above the stored range | the model sends min, then max (U-8 open) | the model reads the stored max of the axis and sends a range whose min lies above it max first, any other min first (4.3, 9.3) | measured 2026-11-25: the camera keeps each bound within the stored other one; a min above the stored max lands at it, raised max first the range reads back | the coordinator, 2026-11-25 |
 | 114 | 2026-11-25 | The U-rows left open by CS-1 | U-5 (tilt), U-18 (effect at power-on) and U-19 open after CS-1 | the fail rule of 9.3 applied: `hand.axes.tilt` and the `power_on.settings` leaves left the description, `power_on.start.mode` names only `normal|close_up|unset` (another byte shows as `raw:<n>`; a round trip from Linux is not a confirmation) and is writable `normal|unset` only (PX-U-5, PX-U-18, PX-U-19) (4.3, 4.4, 9.1, 9.2, 9.3, 14.1) | 9.3: "The release candidate contains no row that has not passed" | stage W3, task w3-8 |
 | 115 | 2026-11-25 | Settle read after a write | `pending` is checked only at the reads of the group's own tier; no extra reads while a path is pending (row 73) | when a pending leaf's `settle_ms` has passed, the worker reads its group once, unless the group's tier is not slower than `settle_ms`; one read per write, between batches, not repeated when it fails, none after a `restart` write; the wake read also reads the group of every pending leaf (5.6, 5.7, 9.4) | a zone area the camera clamped stayed pending with the written range for up to the 60 s tier, so the command line showed the write as taken (#335) | measured 2026-11-25 (U-8 zone area writes), #335 |
+| 116 | 2026-11-25 | Fresh asleep check | the asleep check uses the worker's last read of `asleep` (5.7) | before a request that names an `asleep: ignored` setting or action, the worker reads the group that holds `asleep` once more and checks against it; a failed read leaves the last value (4.4, 5.7) | the check could act on a stale `asleep`: the camera falls asleep about 10 s after a wake without a video stream, between two polls, and asleep the live pose reads tilt −85, which fails the pose check (CAM-22); likely the cause of #328 (not confirmed) | CAM-22, the ~10 s sleep; refs #328 |

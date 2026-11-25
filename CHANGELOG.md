@@ -5,6 +5,15 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A setting or action that the camera ignores while asleep (on the Tiny 2 Lite the
+  pose-taking actions such as `preset.save`, `view.save` and `power_on.use_current`) is
+  refused with `asleep` also when the camera fell asleep since the daemon's last status read;
+  the daemon reads `asleep` right before such a request. Before, the action read the sleep
+  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0". This gap
+  is a likely cause of #328, which stays open until the cause is confirmed.
+
 ## [1.0.0-rc.1] - 2026-11-25
 
 This is a release candidate: the maintainers verify every row of the parity table on it before
@@ -58,10 +67,10 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   move at all).
 - Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
   `asleep: accepted`; `exposure.anti_flicker` no longer lists `auto` and
-  `power_on.start.mode` names only `normal`, `close_up` and `unset`, the values the vendor app
-  shows (another start mode shows as `raw:<n>`); a pose-taking action that fails for the pose
-  it read names that pose (#328); a zone or hand area whose new min lies above the stored max
-  is sent max first, so the camera does not clamp the min to the old max.
+  `power_on.start.mode` names only `normal`, `close_up` and `unset` (another start mode shows
+  as `raw:<n>`); a pose-taking action that fails for the pose it read names that pose (#328); a
+  zone or hand area whose new min lies above the stored max is sent max first, so the camera does
+  not clamp the min to the old max.
 
 ### Removed
 
