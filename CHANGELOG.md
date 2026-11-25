@@ -5,6 +5,11 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-25
+
+This is a release candidate: the maintainers verify every row of the parity table on it before
+1.0.0.
+
 obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and command line. The camera
 knowledge of 0.13 (frames, status decoding, recorded bytes and their tests) is carried over; the
 rest is new. Read "Upgrading from 0.13" below before installing.
@@ -32,8 +37,6 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 
 ### Changed
 
-- The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address
-  redirects (#109).
 - Every command is new; the map from the 0.13 commands is below. The 0.13 commands
   `gimbal [--pan P] [--tilt T]` and `gimbal rate` switched the tracking to static before they
   moved. `do gimbal.move` and `do gimbal.turn` send only the move and leave the tracking as it
@@ -78,8 +81,6 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   `pending` with the written value until its group's next periodic read, up to 60 s, so `get`
   showed it as taken. The daemon now reads the group once when the leaf's `settle_ms` has
   passed, and the camera's value shows within that time (#335).
-- The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
-  leaves the repository clean; a local build is labelled with the release version (#120).
 
 ### Upgrading from 0.13
 
@@ -97,7 +98,7 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 can be deleted. Nothing is imported, and nothing set on the camera is lost: the camera stores
 it.
 
-To go back, the 0.13.2 packages and the widget 0.29.2 stay downloadable from the releases
+To go back, the 0.14.0 packages and the widget 0.29.2 stay downloadable from the releases
 pages; a rollback beyond them is a fix forward.
 
 Command map (PX-n: the exceptions after the table):

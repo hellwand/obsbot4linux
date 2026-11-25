@@ -3275,6 +3275,8 @@ With a scratch copy at `version = "1.0.0-rc.1"`, `pkgver=1.0.0rc.1` and a `## [1
 
 **Files:** Modify: `Cargo.toml` (`version`), `Cargo.lock`, `packaging/arch/PKGBUILD` (`pkgver`), `CHANGELOG.md`.
 
+**Decision (2026-11-25):** 0.14.0 is the last 0.x release; no further 0.x intermediate releases follow. `rebuild` was rebased onto `main` (`Release 0.14.0`), so the CHANGELOG keeps the `[0.14.0]` section and the candidate's notes drop what repeated it (the repository move, the `PKGBUILD` fix). Fixes before 1.0 go to `rebuild`.
+
 - [ ] **Step 1: The version**
 
 ```diff
