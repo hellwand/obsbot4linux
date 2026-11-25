@@ -5,6 +5,8 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-25
+
 ### Changed
 
 - The repository moved to github.com/hellwand/obsbot4linux on 2026-11-12; the old address redirects (the link change itself landed in #109).
