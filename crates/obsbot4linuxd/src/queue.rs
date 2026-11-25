@@ -3,7 +3,8 @@
 //! The queue of one supported device (4.1 rules 2 and 9, 5.6): at most `MAX_QUEUED` requests,
 //! FIFO, except that a stop is taken before every queued request and is accepted whatever the
 //! length. Connection readers push, the device's worker takes batches, the deadline sweeper
-//! removes requests not started within `REQUEST_DEADLINE`. The queue also holds the
+//! removes requests not started within `REQUEST_DEADLINE`, except while the worker holds a
+//! started batch that is not answered yet (rule 2: those requests came first). The queue also holds the
 //! continuing-motion record (5.6) and the flags that cut a camera operation short.
 
 use crate::MAX_QUEUED;
@@ -122,6 +123,11 @@ struct Inner {
     closed: bool,
     stops: Vec<String>,
     record: Record,
+    /// The worker runs a batch of requests that is not answered yet (`start` to `served`).
+    /// Every queued request that is not a stop came after it, so the sweeper leaves those to
+    /// the worker, which answers them after the batch (4.1 rules 2 and 9). A batch of stops
+    /// does not hold the queue: stops are answered out of order anyway.
+    held: bool,
 }
 
 /// The queue of one device, shared by the readers, the worker and the sweeper.
@@ -146,6 +152,7 @@ impl DeviceQueue {
                 closed: false,
                 stops: Vec::new(),
                 record: Record::default(),
+                held: false,
             }),
             cv: Condvar::new(),
             cut: Arc::new(AtomicBool::new(false)),
@@ -205,11 +212,20 @@ impl DeviceQueue {
     /// Puts jobs back at the front, in their order (the requests after a failed one, 4.1 rule
     /// 9, or the rest of a batch plan). A stop pushed meanwhile stays in front of them.
     pub fn put_back(&self, jobs: Vec<Job>) {
+        put_front(&mut self.lock(), jobs);
+    }
+
+    /// The worker starts `batch`, the front of the jobs it took, and puts `rest` back, in one
+    /// step, so that the sweeper never sees the rest while the batch is not yet held.
+    pub fn start(&self, batch: &[Job], rest: Vec<Job>) {
         let mut inner = self.lock();
-        let stops = inner.jobs.iter().take_while(|j| j.stop).count();
-        for (i, job) in jobs.into_iter().enumerate() {
-            inner.jobs.insert(stops + i, job);
-        }
+        inner.held = batch.first().is_some_and(|j| !j.stop);
+        put_front(&mut inner, rest);
+    }
+
+    /// The batch `start` began is answered: the sweeper takes the queue again.
+    pub fn served(&self) {
+        self.lock().held = false;
     }
 
     pub fn len(&self) -> usize {
@@ -238,13 +254,17 @@ impl DeviceQueue {
         self.lock().record.after_act(action, motion, conn, keep);
     }
 
-    /// Removes the jobs not started within `deadline` of their arrival (4.1 rule 9).
+    /// Removes the jobs not started within `deadline` of their arrival (4.1 rule 9). While a
+    /// started batch is not answered, only stops are removed: the other jobs came after the
+    /// batch and are answered after it (rule 2), by the worker, which drops them as late when
+    /// it takes them.
     pub fn expire(&self, now: Instant, deadline: Duration) -> Vec<Job> {
         let mut inner = self.lock();
+        let held = inner.held;
         let (late, keep): (Vec<Job>, Vec<Job>) = inner
             .jobs
             .drain(..)
-            .partition(|j| now.duration_since(j.arrived) >= deadline);
+            .partition(|j| now.duration_since(j.arrived) >= deadline && (j.stop || !held));
         inner.jobs = keep.into();
         late
     }
@@ -319,6 +339,14 @@ impl DeviceQueue {
                 .unwrap_or_else(PoisonError::into_inner)
                 .0;
         }
+    }
+}
+
+/// Puts jobs at the front of the queue, in their order, behind the stops queued there.
+fn put_front(inner: &mut Inner, jobs: Vec<Job>) {
+    let stops = inner.jobs.iter().take_while(|j| j.stop).count();
+    for (i, job) in jobs.into_iter().enumerate() {
+        inner.jobs.insert(stops + i, job);
     }
 }
 
@@ -605,6 +633,41 @@ mod tests {
         let late = q.expire(t, Duration::from_secs(15));
         assert_eq!(late.iter().map(|j| j.conn).collect::<Vec<_>>(), [1]);
         assert_eq!(q.len(), 1);
+    }
+
+    /// 4.1 rules 2 and 9: while a started batch is not answered, the requests queued behind it
+    /// are not removed (they are answered after it); a stop is, and a batch of stops holds
+    /// nothing back.
+    #[test]
+    fn a_started_batch_holds_the_late_requests_behind_it() {
+        let q = DeviceQueue::new();
+        q.push(set(1, "a.b", 1)).ok().unwrap();
+        let taken = q.take_all();
+        q.start(&taken, Vec::new());
+        q.push(set(2, "c.d", 1)).ok().unwrap();
+        q.push(stop(3)).ok().unwrap();
+        let later = Instant::now() + Duration::from_secs(16);
+        let late = q.expire(later, Duration::from_secs(15));
+        assert_eq!(names(&late), ["gimbal.stop"], "only the stop");
+        assert_eq!(q.len(), 1);
+        q.served();
+        let late = q.expire(later, Duration::from_secs(15));
+        assert_eq!(
+            names(&late),
+            ["set c.d"],
+            "removed once the batch is answered"
+        );
+
+        q.push(stop(4)).ok().unwrap();
+        q.push(set(5, "c.d", 1)).ok().unwrap();
+        let mut taken = q.take_all();
+        let rest = taken.split_off(1);
+        q.start(&taken, rest);
+        assert_eq!(
+            names(&q.expire(later, Duration::from_secs(15))),
+            ["set c.d"],
+            "a stop does not hold back the requests it overtook"
+        );
     }
 
     #[test]

@@ -477,8 +477,10 @@ impl Worker {
             return;
         }
         let rest = jobs.split_off(plan.take);
-        self.queue.put_back(rest);
+        // 4.1 rule 2: the sweeper must not answer a queued request before this batch.
+        self.queue.start(&jobs, rest);
         self.batch(jobs, plan.coalesced);
+        self.queue.served();
     }
 }
 
@@ -833,25 +835,25 @@ mod tests {
     }
 
     /// Set by the test once the worker is up: the table and queue the camera ends.
-    type Hook = Arc<Mutex<Option<(Arc<Table>, Arc<DeviceQueue>)>>>;
+    /// Runs once, in the worker, right after the next `apply` the camera accepted.
+    type Hook = Arc<Mutex<Option<Box<dyn FnOnce() + Send>>>>;
 
-    /// A camera whose `apply` succeeds and then the device goes (the table entry is unplugged,
-    /// the queue ended), as the registry does on unplug.
-    struct Leaving(Box<dyn Camera>, Hook);
+    /// A camera that runs the hook after an `apply` succeeded, while its batch is not answered.
+    struct AfterApply(Box<dyn Camera>, Hook);
 
-    struct LeavingBus(Arc<FakeBus>, Hook);
+    struct AfterApplyBus(Arc<FakeBus>, Hook);
 
-    impl Bus for LeavingBus {
+    impl Bus for AfterApplyBus {
         fn scan(&self) -> Vec<Found> {
             self.0.scan()
         }
 
         fn open(&self, found: &Found) -> Result<Box<dyn Camera>, CameraError> {
-            Ok(Box::new(Leaving(self.0.open(found)?, self.1.clone())))
+            Ok(Box::new(AfterApply(self.0.open(found)?, self.1.clone())))
         }
     }
 
-    impl Camera for Leaving {
+    impl Camera for AfterApply {
         fn description(&self) -> &Description {
             self.0.description()
         }
@@ -878,9 +880,9 @@ mod tests {
 
         fn apply(&mut self, leaf: &str, value: &Value, ctx: &Ctx) -> Result<(), CameraError> {
             self.0.apply(leaf, value, ctx)?;
-            if let Some((table, queue)) = self.1.lock().unwrap().as_ref() {
-                table.unplug(1);
-                queue.end();
+            let hook = self.1.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook();
             }
             Ok(())
         }
@@ -924,11 +926,20 @@ mod tests {
     fn an_ok_after_the_device_went_carries_the_last_published_rev() {
         let slot = Arc::new(Mutex::new(None));
         let hook = slot.clone();
-        let r = rig_over("fake-b", |_| {}, move |bus| Arc::new(LeavingBus(bus, hook)));
+        let r = rig_over(
+            "fake-b",
+            |_| {},
+            move |bus| Arc::new(AfterApplyBus(bus, hook)),
+        );
         let st = until(&r.events, |v| v["event"] == "state");
         let published = st["rev"].as_u64().unwrap();
         assert!(published > 0);
-        *slot.lock().unwrap() = Some((r.table.clone(), r.queue.clone()));
+        // The device goes as the registry does on unplug: the entry is unplugged, the queue ended.
+        let (table, queue) = (r.table.clone(), r.queue.clone());
+        *slot.lock().unwrap() = Some(Box::new(move || {
+            table.unplug(1);
+            queue.end();
+        }));
         r.queue
             .push(job(
                 &r,
@@ -941,6 +952,44 @@ mod tests {
         r.handle.join().unwrap();
         let reply = next(&r.replies);
         assert_eq!(reply["ok"]["rev"], published, "{reply}");
+    }
+
+    /// 4.1 rules 2 and 9: request 2 is queued while request 1 runs, and the sweeper looks at
+    /// the queue after 2's deadline but before 1 is answered (a frame of 1 ran past 1's
+    /// deadline). Request 2 must not be answered before request 1: the sweeper leaves it, and
+    /// the worker answers it after the batch of 1.
+    #[test]
+    fn the_sweeper_never_answers_a_request_before_the_started_one_ahead_of_it() {
+        let slot = Arc::new(Mutex::new(None));
+        let hook = slot.clone();
+        let r = rig_over(
+            "fake-b",
+            |_| {},
+            move |bus| Arc::new(AfterApplyBus(bus, hook)),
+        );
+        until(&r.events, |v| v["event"] == "state");
+        let second = job(&r, 2, "sn:FAKEB0000001", Work::Get(None));
+        let queue = r.queue.clone();
+        *slot.lock().unwrap() = Some(Box::new(move || {
+            queue.push(second).ok().unwrap();
+            let sweep_at = Instant::now() + Duration::from_secs(16);
+            crate::queue::answer_late(queue.expire(sweep_at, Duration::from_secs(15)));
+        }));
+        r.queue
+            .push(job(
+                &r,
+                1,
+                "sn:FAKEB0000001",
+                Work::Set(Patch::new().leaf("led.brightness", 3)),
+            ))
+            .ok()
+            .unwrap();
+        let first = next(&r.replies);
+        assert_eq!(first["id"], 1, "request 1 is answered first: {first}");
+        assert!(first["ok"].is_object(), "{first}");
+        let then = next(&r.replies);
+        assert_eq!(then["id"], 2, "{then}");
+        stop(r);
     }
 
     /// A worker over one fake device, not started.
