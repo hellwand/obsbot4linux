@@ -228,6 +228,66 @@ fn focus_mode_manual_switches_the_uvc_autofocus_off_so_the_absolute_focus_is_tak
 }
 
 #[test]
+fn a_range_above_the_stored_one_goes_max_first() {
+    // U-8 (measured 2026-11-25): the camera keeps each bound within the stored other one. With
+    // pan -20..20 stored, 40..60 sent min first read 20..60 (the min landed at the stored max);
+    // sent max first (-20..60, then 40..60) it read 40..60. Ranges wholly below or overlapping
+    // the stored one read back as written min first. The recorded stored ranges: zone pan
+    // -100..100, zone pitch -30..30, hand pan -45..45, hand pitch -30..30.
+    let cases: &[(&str, Value, [u16; 2])] = &[
+        (
+            "zone.area.pan",
+            json!({"min": 120, "max": 140}),
+            [0x4c84, 0x4c04],
+        ),
+        (
+            "zone.area.pan",
+            json!({"min": 50, "max": 140}),
+            [0x4c04, 0x4c84],
+        ),
+        (
+            "zone.area.pan",
+            json!({"min": -140, "max": -120}),
+            [0x4c04, 0x4c84],
+        ),
+        // tilt -60..-40 is pitch 40..60, above the stored pitch max 30
+        (
+            "zone.area.tilt",
+            json!({"min": -60, "max": -40}),
+            [0x4d84, 0x4d04],
+        ),
+        (
+            "zone.area.tilt",
+            json!({"min": 40, "max": 60}),
+            [0x4d04, 0x4d84],
+        ),
+        (
+            "hand.area.pan",
+            json!({"min": 50, "max": 60}),
+            [0x20c4, 0x2044],
+        ),
+        (
+            "hand.area.pan",
+            json!({"min": 40, "max": 60}),
+            [0x2044, 0x20c4],
+        ),
+        (
+            "hand.area.tilt",
+            json!({"min": -60, "max": -40}),
+            [0x21c4, 0x2144],
+        ),
+    ];
+    for (leaf, value, order) in cases {
+        let (frames, _) = write(leaf, value.clone());
+        assert_eq!(
+            frames,
+            [framed(order[0]), framed(order[1])],
+            "{leaf} = {value}"
+        );
+    }
+}
+
+#[test]
 fn an_area_axis_sends_min_then_max_in_the_cameras_angles() {
     // capture 11: zone pan -100..100; the asymmetric tilt -30..10 is pitch -10..30 by the conversion of tilt_to_pitch_range
     let (frames, data) = write("zone.area.pan", json!({"min": -100, "max": 100}));

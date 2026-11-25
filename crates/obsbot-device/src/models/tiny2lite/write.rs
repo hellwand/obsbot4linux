@@ -90,6 +90,21 @@ fn sleep_word(link: &mut Link, memory: &mut Memory, ctx: &Ctx) -> Result<i16> {
     Ok(w)
 }
 
+/// The stored maximum of an area axis in the camera's angles (pitch for tilt), as the
+/// readback of `leaf` reads it: queries `0x4cc4` and `0x4dc4` (zone), word 1 or 3 of `0x2004`
+/// (hand). A read, not a command.
+fn stored_area_max(link: &mut Link, leaf: &str, ctx: &Ctx) -> Result<f64> {
+    let (command, word) = match leaf {
+        "zone.area.pan" => (0x4cc4, 0),
+        "zone.area.tilt" => (0x4dc4, 0),
+        "hand.area.pan" => (0x2004, 1),
+        _ => (0x2004, 3),
+    };
+    let d = link.query(FRAMED, TRACKING, command, ctx)?;
+    decode::f32_at(&d, word)
+        .ok_or_else(|| CameraError::NoAnswer(format!("query {command:#06x}: no stored area bound")))
+}
+
 /// Writes `leaf` = `value`: the frames of its ledger row, in that order.
 pub fn apply(
     link: &mut Link,
@@ -199,10 +214,19 @@ pub fn apply(
                     cmd::PITCH_LIMITS,
                 ),
             };
-            let [first, second] =
-                built(cmd::area_axis(ids, wire, limits, [link.seq(), link.seq()]))?;
-            link.send(FRAMED, &first, ctx)?;
-            link.send(FRAMED, &second, ctx)
+            let [min, max] = built(cmd::area_axis(ids, wire, limits, [link.seq(), link.seq()]))?;
+            // U-8 (measured 2026-11-25): the camera keeps each bound within the stored other
+            // one, so a min above the stored max lands at that max; such a range goes max
+            // first. Any other range goes min first (wholly below and overlapping ranges read
+            // back as written that way).
+            let stored_max = stored_area_max(link, leaf, ctx)?;
+            let order = if f64::from(wire.0) > stored_max {
+                [max, min]
+            } else {
+                [min, max]
+            };
+            link.send(FRAMED, &order[0], ctx)?;
+            link.send(FRAMED, &order[1], ctx)
         }
         "hand.side" => {
             let s = HandSide::from_u8(byte(&decode::HAND_SIDE, leaf, v)?)
