@@ -81,6 +81,21 @@ fn a_gimbal_move_needs_an_axis() {
 }
 
 #[test]
+fn a_gimbal_move_with_speed_stays_at_or_below_tilt_80() {
+    // U-9 (CAM-17, 2026-11-25): with a speed, tilt 89 never arrived (the gimbal did not move
+    // at all), tilt 80 does (#98). The model refuses what the camera would silently drop;
+    // without a speed the tilt keeps the description's range.
+    let (cam, _) = model(recorded());
+    let check = |p: Value| cam.check("gimbal.move", &params(p), &state());
+    let refused = check(json!({"tilt": 81, "speed": 50})).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::OutOfRange);
+    assert_eq!(refused.path.as_deref(), Some("tilt"));
+    assert!(check(json!({"tilt": 80, "speed": 50})).is_ok());
+    assert!(check(json!({"tilt": 89})).is_ok());
+    assert!(check(json!({"pan": 30, "speed": 100})).is_ok());
+}
+
+#[test]
 fn a_gimbal_turn_sends_only_the_turn_with_the_yaw_sign_of_mirror_xor_invert() {
     let (_, frames, data) = run(
         "gimbal.turn",

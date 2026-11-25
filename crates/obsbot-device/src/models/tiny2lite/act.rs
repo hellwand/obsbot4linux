@@ -21,6 +21,11 @@ use serde_json::{Value, json};
 /// The speeds of `zoom.move` (field ledger: slow 10, medium 30, fast 50).
 pub const ZOOM_MOVE_SPEED: [(&str, i32); 3] = [("slow", 10), ("medium", 30), ("fast", 50)];
 
+/// The highest tilt a `gimbal.move` with `speed` is sent to (U-9, the rule of spec 9.3: the range
+/// narrowed to the measured one). Measured with a speed: tilt 80 arrives (#98); tilt 89 at
+/// 90 °/s does not move the gimbal at all (2026-11-25, CAM-17), so the limit lies in 80..89.
+pub const SPEED_TILT_MAX: f64 = 80.0;
+
 /// A tilt in the units of 4.2 (positive up) as the pose commands take it (pitch, positive down);
 /// `+ 0.0` sends a tilt of 0 as +0.0.
 pub fn tilt_to_pitch(tilt: Option<f32>) -> Option<f32> {
@@ -50,6 +55,19 @@ pub fn check(action: &str, params: &Params, state: &State) -> std::result::Resul
     match action {
         "gimbal.move" if !has("pan") && !has("tilt") => {
             return refuse(ErrorCode::Invalid, action, "give pan, tilt or both");
+        }
+        "gimbal.move"
+            if has("speed")
+                && params
+                    .get("tilt")
+                    .and_then(Value::as_f64)
+                    .is_some_and(|t| t > SPEED_TILT_MAX) =>
+        {
+            return refuse(
+                ErrorCode::OutOfRange,
+                "tilt",
+                "with a speed, the camera does not move above tilt 80",
+            );
         }
         "gimbal.turn" if !has("pan_speed") && !has("tilt_speed") => {
             return refuse(
