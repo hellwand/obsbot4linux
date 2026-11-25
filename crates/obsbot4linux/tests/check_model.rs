@@ -703,6 +703,7 @@ fn observe_answers_from_the_state_and_asks_the_rest() {
         .env("CHECK_MODEL_TTY", answers("obs", &"n\n".repeat(400)))
         .env("CHECK_MODEL_SETTLE", "3")
         .env("CHECK_MODEL_QUIET", "1")
+        .env("CHECK_MODEL_BASELINE", "0.1")
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(1), "{}", report(&out));
@@ -757,4 +758,115 @@ fn observe_with_a_missing_video_node_is_a_usage_error() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("is not a video device"));
     assert!(rows.is_empty(), "{rows:#?}");
     assert!(acts(&d, 0).is_empty());
+}
+
+/// A character device that is not the device's own video node (another camera, here
+/// `/dev/null`) is refused before any row: its picture would show nothing of this camera's
+/// moves, and a person moving in it would read as a move.
+#[test]
+fn observe_with_another_devices_node_is_a_usage_error() {
+    let d = Daemon::start("obs-other");
+    let (out, rows) = d.check(
+        "obs-other",
+        &[
+            "--device",
+            "fake-a",
+            "--assume-pass",
+            "--observe",
+            "/dev/null",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", report(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not the video node of"),
+        "{}",
+        report(&out)
+    );
+    assert!(rows.is_empty(), "{rows:#?}");
+    assert!(acts(&d, 0).is_empty());
+}
+
+/// A smooth random texture (value noise on a 6 px lattice), sampled anywhere, so that a
+/// shifted or magnified copy is the same scene seen after a move or a zoom.
+fn texture(x: f64, y: f64) -> f64 {
+    fn lattice(i: i64, j: i64) -> f64 {
+        let mut h = (i.wrapping_mul(73_856_093) ^ j.wrapping_mul(19_349_663)) as u64;
+        h ^= h >> 13;
+        h = h.wrapping_mul(0x5bd1_e995);
+        h ^= h >> 15;
+        (h % 1000) as f64 / 1000.0
+    }
+    let (gx, gy) = (x / 6.0, y / 6.0);
+    let (i, j) = (gx.floor(), gy.floor());
+    let (fx, fy) = (gx - i, gy - j);
+    let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
+    let (i, j) = (i as i64, j as i64);
+    let top = lattice(i, j) * (1.0 - sx) + lattice(i + 1, j) * sx;
+    let bottom = lattice(i, j + 1) * (1.0 - sx) + lattice(i + 1, j + 1) * sx;
+    40.0 + 160.0 * (top * (1.0 - sy) + bottom * sy)
+}
+
+/// A 320x180 binary PGM, as ffmpeg writes the frames of `--observe`.
+fn pgm(dir: &Path, name: &str, pixel: impl Fn(f64, f64) -> f64) -> PathBuf {
+    let (w, h) = (320, 180);
+    let mut data = format!("P5\n{w} {h}\n255\n").into_bytes();
+    for y in 0..h {
+        for x in 0..w {
+            data.push(pixel(f64::from(x), f64::from(y)).round().clamp(0.0, 255.0) as u8);
+        }
+    }
+    let path = dir.join(name);
+    std::fs::write(&path, data).unwrap();
+    path
+}
+
+/// The comparison `--observe` passes a move on. A move must show as a shift or a scale, and
+/// sensor noise on an unchanged view must not (a still picture is what a stop passes on and
+/// what keeps a noisy scene from passing a move); a black frame, as a sleeping camera's or a
+/// dark room's, is never compared at all.
+#[test]
+fn the_frame_comparison_tells_a_move_from_noise_and_darkness() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("observe-frames");
+    std::fs::create_dir_all(&dir).unwrap();
+    let helper =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/check-model-observe.py");
+    let compare = |a: &Path, b: &Path| {
+        let out = Command::new("python3")
+            .arg("-I")
+            .arg(&helper)
+            .args([a, b])
+            .output()
+            .expect("python3 runs (with numpy)");
+        assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let before = pgm(&dir, "before.pgm", texture);
+    // the same view with sensor noise (a fixed pseudo-random +-3)
+    let noisy = pgm(&dir, "noisy.pgm", |x, y| {
+        texture(x, y) + ((x * 12.9898 + y * 78.233).sin() * 43_758.545).fract() * 6.0 - 3.0
+    });
+    let panned = pgm(&dir, "panned.pgm", |x, y| texture(x + 12.0, y));
+    let zoomed = pgm(&dir, "zoomed.pgm", |x, y| {
+        texture(159.5 + (x - 159.5) / 1.25, 89.5 + (y - 89.5) / 1.25)
+    });
+    let black = pgm(&dir, "black.pgm", |_, _| 1.0);
+
+    let still = compare(&before, &noisy);
+    assert!(still.starts_with("still "), "{still}");
+    let pan = compare(&before, &panned);
+    assert!(pan.starts_with("moved "), "{pan}");
+    assert!(pan.contains("shift=-12,+0"), "{pan}");
+    let zoom = compare(&before, &zoomed);
+    assert!(zoom.starts_with("moved "), "{zoom}");
+    let scale: f64 = zoom
+        .split_whitespace()
+        .find_map(|f| f.strip_prefix("scale="))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((scale - 1.25).abs() < 0.03, "{zoom}");
+    for pair in [(&before, &black), (&black, &before)] {
+        let dark = compare(pair.0, pair.1);
+        assert!(dark.starts_with("dark "), "{dark}");
+    }
 }
