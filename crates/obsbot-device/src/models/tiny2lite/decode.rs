@@ -61,7 +61,7 @@ pub const FIELD_OF_VIEW: [(&str, u8); 4] =
 /// `audio.noise_reduction`: short `0a 01 <v>`, status 0x08.
 pub const NOISE_REDUCTION: [(&str, u8); 4] =
     [("off", 0), ("weak", 1), ("medium", 2), ("strong", 3)];
-/// `exposure.anti_flicker`: UVC power line frequency 0–2, status 0x03 (`auto` only reads).
+/// `exposure.anti_flicker`: UVC power line frequency 0–2, status 0x03 (a 3 reads `raw:3`, U-25).
 pub const ANTI_FLICKER: [(&str, u8); 3] = [("off", 0), ("50hz", 1), ("60hz", 2)];
 /// `exposure.region` (short `03 01 <v>`, status 0x07) and `focus.region` (framed `0x3602`,
 /// status 0x0d).
@@ -72,8 +72,8 @@ pub const SLEEP_BACKGROUND: [(&str, u8); 3] = [("black", 0), ("image", 1), ("own
 pub const HAND_SIDE: [(&str, u8); 2] = [("right", 0), ("left", 1)];
 /// `focus.mode`: framed `0x3442` (u32), query `0x3642` word 0.
 pub const FOCUS_MODE: [(&str, u8); 3] = [("continuous", 1), ("single", 2), ("manual", 3)];
-/// `power_on.start.mode`: byte 0 of the initial-state block (`0x3e84` / `0x3e44`). `hand`
-/// reads as 7 or 8 and is written as neither (U-18).
+/// `power_on.start.mode`: byte 0 of the initial-state block (`0x3e84` / `0x3e44`). Only bytes
+/// read from the camera are named; another byte reads `raw:<n>` (U-18).
 pub const START_MODE: [(&str, u8); 7] = [
     ("static", 0xff),
     ("normal", 0x00),

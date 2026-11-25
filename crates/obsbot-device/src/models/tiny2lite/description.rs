@@ -686,23 +686,22 @@ pub fn description() -> Description {
                 .warning(Warning::Restart),
         )
         .limit("presets", 3);
-    // CAM-2, CAM-3 (measured 2026-11-25): written while asleep, these read back after the wake;
-    // `zoom.factor` written asleep did not
+    // CAM-2 (measured 2026-11-25): written while asleep, these read back after the wake
     for leaf in ASLEEP_ACCEPTED {
         if let Some(s) = d.settings.get_mut(leaf) {
             s.asleep = Some(Asleep::Accepted);
         }
     }
-    if let Some(s) = d.settings.get_mut("zoom.factor") {
-        s.asleep = Some(Asleep::Ignored);
-    }
     d
 }
 
-/// The leaves the camera keeps when they are written while it sleeps (CAM-2, measured
-/// 2026-11-25 with `live_cam_2_cam_3_cam_22_asleep`). The others stay `unknown`, apart from
-/// `zoom.factor` and `zoom.field_of_view` (`ignored`).
-pub const ASLEEP_ACCEPTED: [&str; 48] = [
+/// The leaves the camera keeps when they are written while it sleeps: each read back the value
+/// written asleep after the wake (CAM-2, measured 2026-11-25 with
+/// `live_cam_2_cam_3_cam_22_asleep`). The others stay `unknown` (`zoom.field_of_view` is
+/// `ignored`): among them `exposure.time` (written as 44990, before its step of 100 µs, so the
+/// value read back was not the value written) and `zoom.factor` (not kept, but in a state where
+/// zoom writes failed awake as well, CAM-36).
+pub const ASLEEP_ACCEPTED: [&str; 47] = [
     "audio.auto_gain",
     "audio.in_sleep",
     "audio.noise_reduction",
@@ -712,7 +711,6 @@ pub const ASLEEP_ACCEPTED: [&str; 48] = [
     "exposure.hdr",
     "exposure.mode",
     "exposure.region",
-    "exposure.time",
     "focus.mode",
     "focus.region",
     "framing.auto_zoom",

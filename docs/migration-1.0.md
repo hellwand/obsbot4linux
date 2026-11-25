@@ -76,7 +76,7 @@ Commands not listed are gone; the next section says why.
 | `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10, 30, 50; other speeds are gone                                    |
 | `zoom stop`                                                             | `do zoom.stop`                                                       |                                                                      |
 | `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis stays; the tracking stays as it is                    |
-| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | the tracking stays as it is                                          |
+| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | S up to 100, tilt up to 80 with a speed; the tracking stays as it is |
 | `gimbal stop`                                                           | `do gimbal.stop`                                                     |                                                                      |
 | `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | turns until `do gimbal.stop`; the tracking stays as it is            |
 | `fov wide\|medium\|narrow`                                              | `set zoom.field_of_view=…`                                           |                                                                      |
@@ -102,7 +102,7 @@ Commands not listed are gone; the next section says why.
 | `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                      |
 | `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   |                                                                      |
 | `hand area-reset`                                                       | `do hand.area_reset`                                                 |                                                                      |
-| `hand pan\|tilt on\|off`                                                | `set hand.axes.pan=…` / `set hand.axes.tilt=…`                       |                                                                      |
+| `hand pan\|tilt on\|off`                                                | `set hand.axes.tilt=…`                                               | `hand pan` is gone (below)                                           |
 | `hand return-after S`                                                   | `set hand.return_after=S`                                            |                                                                      |
 | `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | the camera does not report it                                        |
 | `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                      |
@@ -118,9 +118,9 @@ Commands not listed are gone; the next section says why.
 | `zone view go ID`                                                       | `do view.go id=ID`                                                   |                                                                      |
 | `focus mode face\|global`                                               | `set focus.region=…`                                                 |                                                                      |
 | `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                                      |
-| `focus auto off`                                                        | `set focus.mode=manual`                                              | final mapping checked on the camera before the release               |
+| `focus auto off`                                                        | `set focus.mode=manual`                                              | writes the camera's UVC autofocus off, as 0.13 did                   |
 | `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                      |
-| `focus point X Y`                                                       | `do focus.point x=X y=Y`                                             |                                                                      |
+| `focus point X Y`                                                       | –                                                                    | gone (below)                                                         |
 | `focus set N`                                                           | `set focus.mode=manual focus.position=N`                             |                                                                      |
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                      |
 | `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                      |
@@ -160,6 +160,8 @@ Commands not listed are gone; the next section says why.
   `devices --json`, or runs `status`, which exits 3 without one.
 - `zoom F --speed S` with any number S: only `slow`, `medium` and `fast`.
 - `auto-sleep 0`: the camera cannot store "off" together with 0 s.
+- `hand pan on|off`: the camera did not honour it; the hand tracking kept panning with it off.
+- `focus point X Y`: the picture blurred instead of focusing.
 
 Rows that the 1.0 release could not confirm on the camera are named in the release notes,
 with the 0.13 command they affect.

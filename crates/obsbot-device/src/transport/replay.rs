@@ -370,7 +370,10 @@ impl Transport for Replay {
         self.here()?;
         let off = |auto: &u32| self.ctrls.get(auto) == Some(&0);
         if self.inactive.contains(&id) || self.gated.get(&id).is_some_and(|a| !off(a)) {
-            return Err(crate::transport::usb::inactive_control(id));
+            return Err(crate::transport::usb::ctrl_set_error(
+                id,
+                nix::errno::Errno::EACCES,
+            ));
         }
         self.log.push(Sent::Ctrl { id, value });
         self.ctrls.insert(id, value);
