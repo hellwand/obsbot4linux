@@ -11,8 +11,8 @@ use crate::queue::{Job, Work};
 use crate::table::Cause;
 use crate::worker::Worker;
 use obsbot_device::contract::{CameraError, Ctx, Target, Tier};
-use obsbot_proto::validate::{Refusal, validate_do, validate_get, validate_set};
-use obsbot_proto::{ErrorBody, ErrorCode, OkBody, Params, RevOk, RevState, Warning};
+use obsbot_proto::validate::{Refusal, leaves, validate_do, validate_get, validate_set};
+use obsbot_proto::{Asleep, ErrorBody, ErrorCode, OkBody, Params, RevOk, RevState, State, Warning};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
@@ -70,6 +70,10 @@ impl Worker {
                 job.fail(ErrorCode::Camera, "the request was not started within 15 s");
                 outcomes.push(Outcome::Skip);
                 continue;
+            }
+            if self.names_ignored(&job.work) {
+                let ctx = Ctx::new(Some(job.arrived + deadline), Some(self.queue.ended.clone()));
+                self.read_asleep(&ctx, &mut working);
             }
             match &job.work {
                 Work::Get(paths) => {
@@ -329,6 +333,49 @@ impl Worker {
         }
         if was_asleep && !self.state.asleep() {
             self.wake();
+        }
+    }
+}
+
+impl Worker {
+    /// Whether `work` names a setting or an action the description marks `asleep: ignored`.
+    fn names_ignored(&self, work: &Work) -> bool {
+        match work {
+            Work::Get(_) => false,
+            Work::Set(patch) => leaves(&self.desc, patch).is_ok_and(|found| {
+                found.iter().any(|(leaf, _)| {
+                    self.desc
+                        .settings
+                        .get(leaf)
+                        .is_some_and(|s| s.asleep == Some(Asleep::Ignored))
+                })
+            }),
+            Work::Do { action, .. } => self
+                .desc
+                .actions
+                .get(action)
+                .is_some_and(|a| a.asleep == Asleep::Ignored),
+        }
+    }
+
+    /// 5.7 "Asleep" (#328): the group that holds `asleep` is read right before a request that
+    /// names an `ignored` setting or action, so that the asleep check uses what the camera
+    /// reports now, not the last poll. The camera falls asleep between two polls, and a
+    /// pose-taking action sent then read the sleep pose instead of being refused with `asleep`.
+    /// A failed read leaves the last value.
+    fn read_asleep(&mut self, ctx: &Ctx, working: &mut State) {
+        let Some(group) = self
+            .plan
+            .iter()
+            .find(|g| g.leaves.iter().any(|l| l == "asleep"))
+            .map(|g| g.name.clone())
+        else {
+            return;
+        };
+        if self.read_group(&group, ctx)
+            && let Some(asleep) = self.state.at("asleep").cloned()
+        {
+            working.set("asleep", asleep);
         }
     }
 }
