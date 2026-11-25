@@ -62,10 +62,9 @@ fn no_leaf_is_read_from_the_byte_that_follows_the_microphone_until_u_23() {
 /// `image.frame_rate` 0). CS-1 answered CAM-20 with no on 2026-11-25 (spec 14, field ledger):
 /// the first status read after a cold re-plug and after a factory reset returned a full block
 /// with byte 0 `0x27`, so the model has no not-ready block to recognise, and a zero block stays
-/// decoded as values. This test pins that decision (w2-7 closed without a change); the test's
-/// name predates the answer.
+/// decoded as values. This test pins that decision (w2-7 closed without a change).
 #[test]
-fn a_boot_block_decodes_as_values_until_cam_20_is_settled() {
+fn a_zero_status_block_decodes_as_values_cam_20_answered_no() {
     let values = decode::status(&[0u8; 60]);
     assert_eq!(values["asleep"], json!(false));
     assert_eq!(values["sleep.auto.seconds"], json!(0));
