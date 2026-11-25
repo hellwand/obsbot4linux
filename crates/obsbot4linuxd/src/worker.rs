@@ -121,11 +121,20 @@ pub fn run(p: Plugged) {
             w.serve(jobs);
             continue;
         }
+        if w.pending
+            .next_settle()
+            .is_some_and(|at| at <= Instant::now())
+        {
+            w.settle();
+            continue;
+        }
         if let Some(tier) = w.schedule.due(Instant::now()) {
             w.tick(tier);
             continue;
         }
-        w.queue.wait(w.schedule.next_due());
+        let next = w.schedule.next_due();
+        w.queue
+            .wait(w.pending.next_settle().map_or(next, |at| at.min(next)));
     }
 }
 
@@ -403,6 +412,45 @@ impl Worker {
         }
     }
 
+    /// The settle read (5.6, #335): a pending leaf whose bound has passed gets one read of its
+    /// group, so that `pending` ends within `settle_ms` and the camera's value stands, also
+    /// when the camera kept another value than the one written. A group whose tier is not
+    /// slower than the leaf's `settle_ms` is not read here: its own tier ends `pending` in time.
+    fn settle(&mut self) {
+        let leaves = self.pending.settle_due(Instant::now());
+        let topics = self.table.topics();
+        let slower = |g: &Group, leaf: &str| {
+            let settle = self.desc.settings.get(leaf).and_then(|s| s.settle_ms);
+            let settle = Duration::from_millis(u64::from(settle.unwrap_or(0)));
+            self.timing
+                .period(crate::schedule::effective(g, &topics))
+                .is_none_or(|period| period > settle)
+        };
+        let groups: Vec<String> = self
+            .plan
+            .iter()
+            .filter(|g| leaves.iter().any(|l| g.leaves.contains(l) && slower(g, l)))
+            .map(|g| g.name.clone())
+            .collect();
+        if groups.is_empty() {
+            return;
+        }
+        for name in groups {
+            if self.queue.halt.load(Ordering::SeqCst) {
+                break;
+            }
+            if self.queue.len() > 0 {
+                let jobs = self.queue.take_all();
+                self.serve(jobs);
+            }
+            if self.queue.halt.load(Ordering::SeqCst) {
+                break;
+            }
+            self.read_group(&name, &self.poll_ctx());
+        }
+        self.publish(Cause::Poll);
+    }
+
     /// The camera woke (5.7 "Wake and retries"): every group with a leaf in `unread` is read
     /// now, the `touched` ones included, and the next tick of each tier read counts from here.
     pub(crate) fn wake(&mut self) {
@@ -530,6 +578,16 @@ mod tests {
         setup: impl FnOnce(&FakeBus),
         wrap: impl FnOnce(Arc<FakeBus>) -> Arc<dyn Bus>,
     ) -> Rig {
+        rig_timed(model, setup, wrap, fast())
+    }
+
+    /// [`rig_over`] on the tier periods of `timing`.
+    fn rig_timed(
+        model: &str,
+        setup: impl FnOnce(&FakeBus),
+        wrap: impl FnOnce(Arc<FakeBus>) -> Arc<dyn Bus>,
+        timing: Timing,
+    ) -> Rig {
         let bus = Arc::new(FakeBus::new(&[model]).unwrap());
         setup(&bus);
         let found = bus.scan().remove(0);
@@ -557,7 +615,7 @@ mod tests {
             bus: wrap(bus.clone()),
             table: table.clone(),
             queue: queue.clone(),
-            timing: fast(),
+            timing,
         };
         let handle = std::thread::spawn(move || run(p));
         Rig {
@@ -989,6 +1047,82 @@ mod tests {
         assert!(first["ok"].is_object(), "{first}");
         let then = next(&r.replies);
         assert_eq!(then["id"], 2, "{then}");
+        stop(r);
+    }
+
+    /// 5.6 (#335): the camera keeps another value than the one written (measured on the Tiny 2
+    /// Lite: a zone area clamped to the stored bound). The leaf is pending after the touched
+    /// re-read; one read of its group when `settle_ms` (3 s) has passed ends `pending`, and the
+    /// state shows the camera's value. Without that read the leaf stayed pending, showing the
+    /// written range as if the write had taken, until the group's 60 s tier.
+    #[test]
+    fn a_value_the_camera_clamped_stops_being_pending_once_settle_ms_has_passed() {
+        let slot = Arc::new(Mutex::new(None));
+        let hook = slot.clone();
+        let r = rig_timed(
+            "fake-a",
+            |_| {},
+            move |bus| Arc::new(AfterApplyBus(bus, hook)),
+            Timing {
+                minute: Duration::from_secs(60),
+                ..fast()
+            },
+        );
+        until(&r.events, |v| v["event"] == "state");
+        let id = "sn:FAKEA0000001";
+        let clamped = json!({"min": -40, "max": 20});
+        let bus = r.bus.clone();
+        let kept = clamped.clone();
+        *slot.lock().unwrap() = Some(Box::new(move || {
+            bus.store(id, "zone.area.pan", kept).unwrap();
+        }));
+        let reads = |r: &Rig| {
+            r.bus
+                .ops(id)
+                .iter()
+                .filter(|o| **o == Op::Read("zone".into()))
+                .count()
+        };
+        let before = reads(&r);
+        r.queue
+            .push(job(
+                &r,
+                3,
+                id,
+                Work::Set(Patch::new().leaf("zone.area.pan", json!({"min": -20, "max": 20}))),
+            ))
+            .ok()
+            .unwrap();
+        let reply = next(&r.replies);
+        assert!(reply["ok"].is_object(), "{reply}");
+        let written = Instant::now();
+        let ev = until(&r.events, |v| v["rev"] == reply["ok"]["rev"]);
+        assert_eq!(
+            ev["state"]["pending"],
+            json!({"zone.area.pan": {"min": -20, "max": 20}}),
+            "the touched re-read shows the clamped range: pending"
+        );
+        let settled = loop {
+            let left = Duration::from_secs(10).saturating_sub(written.elapsed());
+            let line = r
+                .events
+                .recv_timeout(left)
+                .expect("pending ends within settle_ms, not at the 60 s tier");
+            let v: Value = serde_json::from_str(&line).unwrap();
+            if v["event"] == "state" && v["state"]["pending"] == json!({}) {
+                break v;
+            }
+        };
+        assert!(
+            written.elapsed() >= Duration::from_millis(2900),
+            "not before settle_ms"
+        );
+        assert_eq!(settled["state"]["zone"]["area"]["pan"], clamped);
+        assert_eq!(
+            reads(&r) - before,
+            2,
+            "the touched re-read and one settle read"
+        );
         stop(r);
     }
 

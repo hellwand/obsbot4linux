@@ -4,7 +4,8 @@
 //! the write and its readback does not show it yet. A path leaves `pending` when a read of its
 //! group shows the written value (after rounding to the setting's precision), or when its
 //! `settle_ms` has passed at a read of its group; then the camera's value stands. Nothing here
-//! reads the camera: the checks run at the reads the poll plan and the write path make anyway.
+//! reads the camera: the checks run at the reads the poll plan and the write path make, and at
+//! the one settle read the worker makes when a bound has passed (5.6, [`Pending::settle_due`]).
 
 use obsbot_proto::values::{number, rounded, same};
 use obsbot_proto::{Setting, SettingType};
@@ -100,6 +101,8 @@ struct Wait {
     /// cannot be read while asleep) the first read of the group after it; `None` until then.
     since: Option<Instant>,
     settle: Duration,
+    /// The settle read of this write was made or declined (5.6): one per write.
+    settle_read: bool,
 }
 
 /// The pending paths of one device.
@@ -155,6 +158,7 @@ impl Pending {
                 value: echo,
                 since: settle_from,
                 settle,
+                settle_read: false,
             },
         );
     }
@@ -184,6 +188,29 @@ impl Pending {
             now.duration_since(since) < wait.settle
         });
         before != self.waits.len()
+    }
+
+    /// When the next settle read is due (5.6): the earliest end of a started bound whose settle
+    /// read was not made yet.
+    pub fn next_settle(&self) -> Option<Instant> {
+        self.waits
+            .values()
+            .filter(|w| !w.settle_read)
+            .filter_map(|w| w.since.map(|s| s + w.settle))
+            .min()
+    }
+
+    /// The pending leaves whose bound has passed at `now` and whose settle read was not made yet
+    /// (5.6). Each is returned once per write: the caller reads its group once, or declines.
+    pub fn settle_due(&mut self, now: Instant) -> Vec<String> {
+        self.waits
+            .iter_mut()
+            .filter(|(_, w)| !w.settle_read && w.since.is_some_and(|s| s + w.settle <= now))
+            .map(|(leaf, w)| {
+                w.settle_read = true;
+                leaf.clone()
+            })
+            .collect()
     }
 
     /// The device became unavailable: `pending` is emptied (4.1 rule 4).
@@ -370,6 +397,39 @@ mod tests {
             &read("led.brightness", json!(0)),
             wake + Duration::from_millis(1000)
         ));
+    }
+
+    /// 5.6 (#335): one settle read per write, due when the bound has passed. Without the mark a
+    /// read that still does not end `pending` (a failed read, a group asleep) would be asked
+    /// for again at once, in a loop; a new write of the path asks for a new one.
+    #[test]
+    fn the_settle_read_is_due_once_per_write_when_the_bound_has_passed() {
+        let mut p = Pending::new();
+        let t = Instant::now();
+        p.written(&led(), "led.brightness", json!(3), Some(&json!(1)), Some(t));
+        p.written(&led(), "led.other", json!(3), Some(&json!(1)), None);
+        let bound = t + Duration::from_millis(1000);
+        assert_eq!(
+            p.next_settle(),
+            Some(bound),
+            "a bound not started is not due"
+        );
+        assert!(p.settle_due(bound - Duration::from_millis(1)).is_empty());
+        assert_eq!(p.settle_due(bound), ["led.brightness"]);
+        assert!(
+            p.settle_due(bound + Duration::from_secs(5)).is_empty(),
+            "once"
+        );
+        assert_eq!(p.next_settle(), None);
+        let again = t + Duration::from_secs(2);
+        p.written(
+            &led(),
+            "led.brightness",
+            json!(2),
+            Some(&json!(1)),
+            Some(again),
+        );
+        assert_eq!(p.next_settle(), Some(again + Duration::from_millis(1000)));
     }
 
     /// 4.1 rule 4: a new write of the same path replaces its pending value and restarts the bound.
