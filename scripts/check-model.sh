@@ -569,7 +569,10 @@ differing_value() {
 			printf '%s\n' "$value"
 			return 0
 		fi
-	done < <(values_of "$path"; mid_of "$path")
+	done < <(
+		values_of "$path"
+		mid_of "$path"
+	)
 	return 1
 }
 
