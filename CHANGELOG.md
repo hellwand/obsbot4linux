@@ -11,7 +11,8 @@ All notable changes to OBSBot4Linux. The format follows
   pose-taking actions such as `preset.save`, `view.save` and `power_on.use_current`) is
   refused with `asleep` also when the camera fell asleep since the daemon's last status read;
   the daemon reads `asleep` right before such a request. Before, the action read the sleep
-  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0" (#328).
+  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0". This gap
+  is a likely cause of #328, which stays open until the cause is confirmed.
 
 ## [1.0.0-rc.1] - 2026-11-25
 
