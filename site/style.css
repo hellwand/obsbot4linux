@@ -346,13 +346,25 @@ h2.h3 {
   line-height: 1.5;
 }
 .card pre code,
-pre.ver code {
+pre.ver code,
+pre.cli code {
   background: none;
   padding: 0;
 }
 .table-wrap + .card,
-.grid2 + .card {
+.grid2 + .card,
+.levels + .card,
+.install + .sub + .card,
+.enable + .grid2,
+.cli + .grid2 {
   margin-top: 24px;
+}
+.after + .sub {
+  margin: 24px 0 0;
+}
+/* The support levels under the support table. */
+.plain.levels {
+  margin-top: 16px;
 }
 .plain {
   margin: 0;
@@ -364,8 +376,10 @@ pre.ver code {
   margin-top: 6px;
 }
 
-/* The VER line; the release stamp rewrites it (and the latest-release text above it). */
-pre.ver {
+/* The VER line; the release stamp rewrites it (and the latest-release text above it). The command
+   line examples share its block. */
+pre.ver,
+pre.cli {
   margin: 0 0 24px;
   padding: 12px 16px;
   background: var(--surface);
@@ -374,6 +388,11 @@ pre.ver {
   border-radius: 8px;
   overflow-x: auto;
   font-size: 14px;
+}
+pre.cli {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .table-wrap {
@@ -483,9 +502,10 @@ footer p {
   .hero {
     padding: 40px 0 24px;
   }
+  /* Four columns in the support table: it fits at 375 px and scrolls in its frame below. */
   th,
   td {
-    padding: 8px 10px;
+    padding: 8px;
   }
 }
 
