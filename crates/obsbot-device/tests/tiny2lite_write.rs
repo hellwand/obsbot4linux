@@ -102,7 +102,6 @@ fn framed_leaves_send_one_frame_with_their_value() {
         ("zone.enabled", json!(true), 0x04, 0x08c4, vec![1]),
         ("zone.follow", json!(false), 0x04, 0x4e04, vec![0]),
         ("hand.side", json!("left"), 0x04, 0x2244, vec![1]),
-        ("hand.axes.tilt", json!(true), 0x04, 0x23c4, vec![1]),
         (
             "hand.return_after",
             json!(2.5),

@@ -133,31 +133,37 @@ fn a_missing_wrong_or_stray_row_fails() {
         ["led.colour: not a field, value or bound of the description"]
     );
 
-    // a mark of 9.3 on an aspect needs its row of level none, and a row of level none a mark
-    let anti = all
-        .iter()
-        .position(|r| r.key == "power_on.settings.hue#values")
-        .expect("the hue values (U-19) have their row of level none");
-    assert_eq!(all[anti].level, Level::None);
-    let mut no_row: Vec<Row> = all.to_vec();
-    no_row.remove(anti);
-    let p = evidence::check(entry, &d, &with(no_row), false);
-    assert_eq!(
-        p,
-        ["power_on.settings.hue#values (U-19): a mark of 9.3 without a row of level none"]
-    );
-    let mut inherited: Vec<Row> = all.to_vec();
-    inherited[anti] = Row {
-        key: "power_on.settings.hue#values",
-        level: Level::Captured,
-        evidence: "capture 08b",
+    // a mark of 9.3 on an aspect needs its row of level none, and a row of level none a mark;
+    // CS-1 left no mark, so the check runs on one put in for the test (the U-8 mark it had)
+    let marked = |rows: Vec<Row>| Evidence {
+        levels: Box::leak(rows.into_boxed_slice()),
+        unbacked: &[("zone.area.pan#order", "U-8")],
+        ..levels::EVIDENCE
     };
-    let p = evidence::check(entry, &d, &with(inherited), false);
+    let mut with_row: Vec<Row> = all.to_vec();
+    with_row.push(Row {
+        key: "zone.area.pan#order",
+        level: Level::None,
+        evidence: "none",
+    });
+    let p = evidence::check(entry, &d, &marked(with_row.clone()), false);
+    assert!(p.is_empty(), "{p:?}");
+    let p = evidence::check(entry, &d, &marked(all.to_vec()), false);
     assert_eq!(
         p,
-        [
-            "power_on.settings.hue#values (U-19): a mark of 9.3, but its row has level Captured, not none"
-        ]
+        ["zone.area.pan#order (U-8): a mark of 9.3 without a row of level none"]
+    );
+    let mut inherited = with_row;
+    let last = inherited.len() - 1;
+    inherited[last] = Row {
+        key: "zone.area.pan#order",
+        level: Level::Captured,
+        evidence: "capture 11",
+    };
+    let p = evidence::check(entry, &d, &marked(inherited), false);
+    assert_eq!(
+        p,
+        ["zone.area.pan#order (U-8): a mark of 9.3, but its row has level Captured, not none"]
     );
     let mut no_mark: Vec<Row> = all.to_vec();
     no_mark.push(Row {

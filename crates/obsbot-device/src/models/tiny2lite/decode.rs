@@ -400,7 +400,8 @@ pub fn zone(
 }
 
 /// The group `hand` from the answers to `0x2004` (yaw min, max, pitch min, max as f32; the
-/// pan and tilt flags in bytes 22 and 23) and `0x2504` (return pose, lead −1 = none).
+/// pan and tilt flags in bytes 22 and 23 are not read: PX-U-5) and `0x2504` (return pose,
+/// lead −1 = none).
 pub fn hand(area: &[u8], ret: &[u8]) -> Option<Values> {
     let (tilt_min, tilt_max) = pitch_to_tilt_range((f32_at(area, 2)?, f32_at(area, 3)?));
     let mut v = Values::new();
@@ -409,7 +410,6 @@ pub fn hand(area: &[u8], ret: &[u8]) -> Option<Values> {
         range(f32_at(area, 0)?, f32_at(area, 1)?),
     );
     v.insert("hand.area.tilt".into(), range(tilt_min, tilt_max));
-    v.insert("hand.axes.tilt".into(), flag(*area.get(23)?));
     v.insert(
         "hand.return".into(),
         presets::parse_hand_return(ret)?.map_or(Value::Null, |p| pose_value(&p)),
@@ -423,20 +423,13 @@ pub fn return_after(d: &[u8]) -> Option<Value> {
 }
 
 /// The group `power_on` from the answers to `0x3884` (lead: 3 own, 0–2 a preset slot; then
-/// the pose) and `0x3e84` (the initial-state block: byte 0 the start mode, the settings bytes,
-/// `ff` = not set).
+/// the pose) and `0x3e84` (the initial-state block: byte 0 the start mode; its settings bytes
+/// are not read: PX-U-19).
 pub fn power_on(source: &[u8], block: &[u8]) -> Option<Values> {
     let (lead, pose) = presets::parse_pose(source)?;
     if block.len() < 24 {
         return None;
     }
-    let set = |i: usize| {
-        if block[i] == 0xff {
-            Value::Null
-        } else {
-            number(f64::from(block[i]))
-        }
-    };
     let mut v = Values::new();
     v.insert(
         "power_on.start.source".into(),
@@ -448,26 +441,6 @@ pub fn power_on(source: &[u8], block: &[u8]) -> Option<Values> {
     );
     v.insert("power_on.start.pose".into(), pose_value(&pose));
     v.insert("power_on.start.mode".into(), named(&START_MODE, block[0]));
-    v.insert("power_on.settings.tracking_speed".into(), set(1));
-    v.insert("power_on.settings.autofocus".into(), set(2));
-    v.insert("power_on.settings.auto_exposure".into(), set(6));
-    v.insert(
-        "power_on.settings.exposure_compensation".into(),
-        number(f64::from(block[8])),
-    );
-    v.insert("power_on.settings.white_balance_mode".into(), set(13));
-    v.insert(
-        "power_on.settings.white_balance_temperature".into(),
-        if block[13] == 5 {
-            number(f64::from(u16::from_le_bytes([block[14], block[15]])))
-        } else {
-            Value::Null
-        },
-    );
-    v.insert("power_on.settings.contrast".into(), set(20));
-    v.insert("power_on.settings.saturation".into(), set(21));
-    v.insert("power_on.settings.sharpness".into(), set(22));
-    v.insert("power_on.settings.hue".into(), set(23));
     Some(v)
 }
 
@@ -893,7 +866,6 @@ mod tests {
             json!({
                 "hand.area.pan": {"max": 45, "min": -45},
                 "hand.area.tilt": {"max": 30, "min": -30},
-                "hand.axes.tilt": true,
                 "hand.return": null,
             })
         );
@@ -906,8 +878,8 @@ mod tests {
         assert_eq!(v["hand.area.tilt"], json!({"min": -30, "max": 10}));
         assert_eq!(v["hand.return"], json!({"pan": 20, "tilt": 5, "zoom": 1}));
         assert!(
-            hand(&area[..23], &none).is_none(),
-            "the flags need 24 bytes"
+            hand(&area[..15], &none).is_none(),
+            "the area needs 16 bytes"
         );
         assert_eq!(return_after(&2.5f32.to_le_bytes()), Some(json!(2.5)));
         assert_eq!(return_after(&[0, 0]), None);
@@ -928,16 +900,6 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&v).unwrap(),
             json!({
-                "power_on.settings.auto_exposure": null,
-                "power_on.settings.autofocus": null,
-                "power_on.settings.contrast": null,
-                "power_on.settings.exposure_compensation": 128,
-                "power_on.settings.hue": null,
-                "power_on.settings.saturation": null,
-                "power_on.settings.sharpness": null,
-                "power_on.settings.tracking_speed": null,
-                "power_on.settings.white_balance_mode": null,
-                "power_on.settings.white_balance_temperature": null,
                 "power_on.start.mode": "normal",
                 "power_on.start.pose": {"pan": -0.9, "tilt": 17.1, "zoom": 1.5},
                 "power_on.start.source": "own",
@@ -986,16 +948,6 @@ mod tests {
             power_on(&src(7), &block(0)).unwrap()["power_on.start.source"],
             json!("raw:7")
         );
-        // white balance temperature only with mode 5 (capture 08b layout: d8 0e = 3800 K)
-        let mut b = block(0);
-        b[13] = 5;
-        b[14..16].copy_from_slice(&[0xd8, 0x0e]);
-        let v = power_on(&src(3), &b).unwrap();
-        assert_eq!(
-            v["power_on.settings.white_balance_temperature"],
-            json!(3800)
-        );
-        assert_eq!(v["power_on.settings.white_balance_mode"], json!(5));
         assert!(power_on(&src(3), &block(0)[..23]).is_none());
     }
 

@@ -68,6 +68,9 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 - `hand pan on|off` and `focus point X Y` of 0.13 have no 1.0 command: on the camera the first
   did not stop the hand tracking from panning and the second blurred the picture (PX-U-5,
   PX-U-16 below).
+- `hand tilt on|off`, `startup set --ai` with `static`, `upper_body`, `headless` or `group`,
+  and the picture settings of `startup show` have no 1.0 command: their effect on the camera
+  was never verified (PX-U-5, PX-U-18, PX-U-19 below).
 
 ### Fixed
 
@@ -155,7 +158,7 @@ Command map (PX-n: the exceptions after the table):
 | `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                                                             |
 | `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   |                                                                                                             |
 | `hand area-reset`                                                       | `do hand.area_reset`                                                 |                                                                                                             |
-| `hand pan\|tilt on\|off`                                                | `set hand.axes.tilt=…`                                               | `hand pan` is PX-U-5                                                                                        |
+| `hand pan\|tilt on\|off`                                                | –                                                                    | PX-U-5                                                                                                      |
 | `hand return-after S`                                                   | `set hand.return_after=S`                                            |                                                                                                             |
 | `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | not read back                                                                                               |
 | `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                                                             |
@@ -178,9 +181,9 @@ Command map (PX-n: the exceptions after the table):
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                             |
 | `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                                                             |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | the current pose                                                                                            |
-| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   |                                                                                                             |
+| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   | M `normal` only (PX-U-18)                                                                                   |
 | `startup set <pose option> --ai M`                                      | the `do` of the pose option, then `set power_on.start.mode=M`        |                                                                                                             |
-| `startup show`                                                          | `get power_on`                                                       |                                                                                                             |
+| `startup show`                                                          | `get power_on`                                                       | without the picture settings (PX-U-19)                                                                      |
 | `startup go`                                                            | `do power_on.go`                                                     |                                                                                                             |
 | `image brightness\|contrast\|saturation\|hue\|sharpness V`              | `set image.<name>=V`                                                 |                                                                                                             |
 | `image white_balance_auto 0\|1`                                         | `set image.white_balance.auto=off\|on`                               |                                                                                                             |
@@ -221,9 +224,15 @@ Exceptions:
   only speeds with a known meaning.
 - **PX-7** `auto-sleep 0`: not offered. The camera cannot store "off" together with 0 s, and
   "on with 0 s" was never recorded.
-- **PX-U-5** `hand pan on|off`: not carried over. The camera kept panning with it off.
+- **PX-U-5** `hand pan on|off`, `hand tilt on|off`: not carried over. The camera kept panning
+  with pan off; tilt off was never verified on the camera.
 - **PX-U-16** `focus point X Y`: not carried over. The picture blurred instead of focusing
   (#99).
+- **PX-U-18** `startup set --ai M` with M `static`, `upper_body`, `headless` or `group`: not
+  carried over. Whether the camera starts in such a mode after a power cycle was never
+  verified; `normal` and `none` stay.
+- **PX-U-19** the picture settings of `startup show`: not carried over. Their values could not
+  be read with a known meaning; `get power_on` shows the start pose, source and mode.
 
 ## [0.14.0] - 2026-11-25
 

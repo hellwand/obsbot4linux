@@ -234,10 +234,6 @@ pub fn apply(
             let f = cmd::hand_side(s, link.seq());
             link.send(FRAMED, &f, ctx)
         }
-        "hand.axes.tilt" => {
-            let f = cmd::hand_tilt(boolean(leaf, v)?, link.seq());
-            link.send(FRAMED, &f, ctx)
-        }
         "hand.return_after" => {
             let f = built(cmd::hand_return_after(float(leaf, v)? as f32, link.seq()))?;
             link.send(FRAMED, &f, ctx)

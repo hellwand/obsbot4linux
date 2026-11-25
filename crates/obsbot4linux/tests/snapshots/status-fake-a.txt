@@ -39,7 +39,6 @@ gimbal
 hand
   area.pan: min -150° max 150°
   area.tilt: min -70° max 90°
-  axes.tilt: off
   move_gimbal: –
   return: –
   return_after: 0 s
@@ -62,17 +61,7 @@ on_air
   apps: (none)
 power_on
   mode: static
-  settings.auto_exposure: –
-  settings.autofocus: –
-  settings.contrast: –
-  settings.exposure_compensation: 0
-  settings.hue: –
-  settings.saturation: –
-  settings.sharpness: –
-  settings.tracking_speed: –
-  settings.white_balance_mode: –
-  settings.white_balance_temperature: –
-  start.mode: static
+  start.mode: normal
   start.pose: pan 0° tilt 0° zoom 1×
   start.source: own
 presets: (none)
