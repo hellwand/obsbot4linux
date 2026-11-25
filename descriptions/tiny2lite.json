@@ -488,16 +488,6 @@
       "precision": 0.1,
       "settle_ms": 3000
     },
-    "hand.axes.tilt": {
-      "type": "bool",
-      "label": "Hand tracking may tilt",
-      "readonly": false,
-      "nullable": false,
-      "readback": true,
-      "asleep": "accepted",
-      "no_effect": false,
-      "settle_ms": 3000
-    },
     "hand.move_gimbal": {
       "type": "bool",
       "label": "Hand tracking moves the gimbal",
@@ -776,86 +766,6 @@
       ],
       "settle_ms": 3000
     },
-    "power_on.settings.auto_exposure": {
-      "type": "number",
-      "label": "Initial automatic exposure (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.autofocus": {
-      "type": "number",
-      "label": "Initial autofocus (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.contrast": {
-      "type": "number",
-      "label": "Initial contrast (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.exposure_compensation": {
-      "type": "number",
-      "label": "Initial exposure compensation (raw)",
-      "readonly": true,
-      "nullable": false,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.hue": {
-      "type": "number",
-      "label": "Initial hue (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.saturation": {
-      "type": "number",
-      "label": "Initial saturation (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.sharpness": {
-      "type": "number",
-      "label": "Initial sharpness (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.tracking_speed": {
-      "type": "number",
-      "label": "Initial tracking speed (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.white_balance_mode": {
-      "type": "number",
-      "label": "Initial white balance mode (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
-    "power_on.settings.white_balance_temperature": {
-      "type": "number",
-      "label": "Initial white balance temperature (raw)",
-      "readonly": true,
-      "nullable": true,
-      "readback": true,
-      "no_effect": false
-    },
     "power_on.start.mode": {
       "type": "enum",
       "label": "Initial tracking mode",
@@ -874,11 +784,7 @@
         "unset"
       ],
       "writable": [
-        "static",
         "normal",
-        "upper_body",
-        "headless",
-        "group",
         "unset"
       ],
       "settle_ms": 3000

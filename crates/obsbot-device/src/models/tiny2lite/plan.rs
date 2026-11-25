@@ -167,12 +167,7 @@ pub fn groups() -> Vec<Group> {
             "hand",
             Tier::Minute,
             false,
-            &[
-                "hand.area.pan",
-                "hand.area.tilt",
-                "hand.axes.tilt",
-                "hand.return",
-            ],
+            &["hand.area.pan", "hand.area.tilt", "hand.return"],
         ),
         // its own group: the query is U-6, and an answer it does not get must not leave the
         // rest of the hand settings unread
@@ -185,16 +180,6 @@ pub fn groups() -> Vec<Group> {
                 "power_on.start.source",
                 "power_on.start.pose",
                 "power_on.start.mode",
-                "power_on.settings.tracking_speed",
-                "power_on.settings.autofocus",
-                "power_on.settings.auto_exposure",
-                "power_on.settings.exposure_compensation",
-                "power_on.settings.white_balance_mode",
-                "power_on.settings.white_balance_temperature",
-                "power_on.settings.contrast",
-                "power_on.settings.saturation",
-                "power_on.settings.sharpness",
-                "power_on.settings.hue",
             ],
         ),
         group("views", Tier::Minute, false, &["views"]),
@@ -303,7 +288,7 @@ mod tests {
         for (path, s) in &d.settings {
             assert_eq!(seen.contains_key(path), s.readback, "{path}");
         }
-        assert_eq!(seen.len(), 81);
+        assert_eq!(seen.len(), 70);
     }
 
     #[test]

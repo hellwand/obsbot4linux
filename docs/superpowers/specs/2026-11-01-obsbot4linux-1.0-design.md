@@ -486,8 +486,7 @@ tracking   { mode✎, profile✎, speed✎, target { detected, box } }
 framing    { auto_zoom✎, size✎, zoom_speed✎, offset { x✎, y✎ }, part✎ }
 gestures   { target_lock✎, zoom✎, zoom_ratio✎, dynamic_zoom✎, direction_change✎ }
 zone       { enabled✎, follow✎, area { pan✎, tilt✎ }, return }
-hand       { side✎, area { pan✎, tilt✎ }, axes { tilt✎ } (U-5),
-             return_after✎, move_gimbal✎, return }
+hand       { side✎, area { pan✎, tilt✎ }, return_after✎, move_gimbal✎, return }
 presets    [ { slot, name, pose } ]
 views      [ { id, name, pose } ]
 exposure   { mode✎, region✎, time✎, gain✎, compensation✎, hdr✎, anti_flicker✎ }
@@ -498,7 +497,7 @@ audio      { enabled✎, volume✎, noise_reduction✎, auto_gain✎, in_sleep�
 led        { brightness✎, blink✎ }
 sleep      { auto { enabled✎, seconds✎ }, background✎, background_mirror✎,
              wake_zoom✎ }
-power_on   { mode✎, start { source, pose, mode✎ (U-18) }, settings { … } (U-19) }
+power_on   { mode✎, start { source, pose, mode✎ } }
 ```
 
 Per group:
@@ -592,16 +591,14 @@ Per group:
   `preset_<slot>`, read-only; after that preset is deleted it still names the slot
   (measured 2026-11-25, U-26). `pose` is read-only and set through actions. `mode` is
   the tracking mode of the initial state: values `static|normal|upper_body|close_up|headless|`
-  `group|unset`, writable `static|normal|upper_body|headless|group|unset`; another byte shows
-  as `raw:<n>`. The written values read back, and `close_up` was read from the camera
-  (measured 2026-11-25); whether the camera starts in a mode written
-  from Linux after a power cycle is U-18. `unset` is the camera's "not set" and differs from
+  `group|unset`, writable `normal|unset` (the values recorded from the vendor app); another
+  byte shows as `raw:<n>`. The values written from Linux read back and `close_up` was read
+  from the camera (measured 2026-11-25); whether the camera starts in `static`,
+  `upper_body`, `headless` or `group` written from Linux after a power cycle was not checked,
+  so they are not writable (PX-U-18). `unset` is the camera's "not set" and differs from
   `static`.
-- `power_on.settings`: read-only leaves of the same block (`tracking_speed`, `autofocus`,
-  `auto_exposure`, `exposure_compensation`, `white_balance_mode`, `white_balance_temperature`,
-  `contrast`, `saturation`, `sharpness`, `hue`) as raw camera values; `null` where the block
-  says "not set" (U-19). Changing the pose or the mode rewrites the block and keeps these
-  values.
+- The block's other bytes (the initial picture settings) are not in the description
+  (PX-U-19). Changing the pose or the mode rewrites the block and keeps them.
 
 Live topics of the Tiny 2 Lite: `pose` (`gimbal.pan`, `gimbal.tilt`), `target`
 (`tracking.target.box`), `auto` (`exposure.time`, `exposure.gain`,
@@ -680,7 +677,7 @@ factory_reset {confirm}
   and `preset.save` while their list (`presets` or `views`) is in `unread`; 5.7 ("Wake and
   retries") reads it again.
 - `power_on.set_pose`, `power_on.use_current` and `power_on.use_preset` rewrite the initial
-  state and keep its tracking mode and `power_on.settings`.
+  state and keep its tracking mode and the rest of the block (PX-U-19).
 - `sleep` and `wake` reply when the camera accepted the command. The state shows `asleep`
   as the camera reports it; clients wait for that state, never for their own value.
 - `factory_reset`: `warning: [destructive, restart]`, needs `confirm:true`. It replies when
@@ -1412,9 +1409,9 @@ M4 is the first model that completes these steps.
 - **Asleep:** `zoom.field_of_view` is `ignored` (measured); `power_on.go` is `ignored`
   (measured, #79: no move, no error); `wake` is `accepted` (capture 13). The pose-taking
   actions of 4.4 are `ignored`: asleep the live pose reads tilt −85, outside the range, and
-  their pose check fails (CAM-22, measured 2026-11-25). The 47 leaves of `ASLEEP_ACCEPTED`
+  their pose check fails (CAM-22, measured 2026-11-25). The 46 leaves of `ASLEEP_ACCEPTED`
   in the model are `accepted`: written asleep, each read back the value written after the
-  wake (CAM-2, measured 2026-11-25). `zoom.factor` written asleep was not kept, but zoom
+  wake (CAM-2, measured 2026-11-25; the 47th, `hand.axes.tilt`, left the description, PX-U-5). `zoom.factor` written asleep was not kept, but zoom
   writes failed awake in the same state as well (CAM-36), so it stays `unknown`; so does
   `exposure.time` (written asleep before its step existed). Every group but `target` (asked
   only while tracking) answered while asleep, `audio` and `focus` too, against the 0.13.2
@@ -1514,7 +1511,7 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                                                                   |
 | `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   | a range above the stored one goes max first (U-8)                                                                 |
 | `hand area-reset`                                                       | `do hand.area_reset`                                                 |                                                                                                                   |
-| `hand pan\|tilt on\|off`                                                | `set hand.axes.tilt=…`                                               | PX-U-5 for `hand pan`; `hand tilt`: U-5                                                                           |
+| `hand pan\|tilt on\|off`                                                | –                                                                    | PX-U-5                                                                                                            |
 | `hand return-after S`                                                   | `set hand.return_after=S`                                            |                                                                                                                   |
 | `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | `readback:false`                                                                                                  |
 | `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                                                                   |
@@ -1537,9 +1534,9 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                                   |
 | `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                                                                   |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | live pose                                                                                                         |
-| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   | U-18 (effect at power-on)                                                                                         |
+| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   | M `normal` only; PX-U-18 for the other modes                                                                      |
 | `startup set <pose option> --ai M`                                      | the `do` of the pose option, then `set power_on.start.mode=M`        |                                                                                                                   |
-| `startup show`                                                          | `get power_on`                                                       | U-19                                                                                                              |
+| `startup show`                                                          | `get power_on`                                                       | PX-U-19 for the initial picture settings                                                                          |
 | `startup go`                                                            | `do power_on.go`                                                     |                                                                                                                   |
 | `image brightness\|contrast\|saturation\|hue\|sharpness V`              | `set image.<name>=V`                                                 |                                                                                                                   |
 | `image white_balance_auto 0\|1`                                         | `set image.white_balance.auto=off\|on`                               |                                                                                                                   |
@@ -1582,12 +1579,24 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
   "on with 0 s" was never recorded.
 - **PX-U-n**: a row U-n of 9.3 whose check fails becomes the exception PX-U-n, with the
   0.13.2 rows named in its "Fail" column.
-- **PX-U-5** `hand pan on|off`: not carried over. With `hand.axes.pan` off (read back) the
-  hand tracking still panned −38..+17° (measured 2026-11-25), so the camera does not honour
-  it; `hand.axes.pan` left the description.
+- **PX-U-5** `hand pan on|off`, `hand tilt on|off`: not carried over. With `hand.axes.pan`
+  off (read back) the hand tracking still panned −38..+17° (measured 2026-11-25), so the
+  camera does not honour it; `hand.axes.pan` left the description. `hand.axes.tilt` read
+  back, but its effect with tilt off was never observed (CS-1 ran the hand tracking with tilt
+  on only); by the rule of 9.3 it left the description too.
 - **PX-U-16** `focus point X Y`: not carried over. At both points tried the whole picture
   blurred instead of focusing (measured 2026-11-25, as in #99); `focus.point` left the
   description.
+- **PX-U-18** `startup set --ai M` with M `static`, `upper_body`, `headless` or `group`: not
+  carried over. These values read back when written from Linux (measured 2026-11-25), but
+  the start mode after a power cycle was not observed for any of them; they left `writable`
+  of `power_on.start.mode` and still show when the camera reports them. `normal` and `unset`
+  stay writable (recorded from the vendor app, capture 08).
+- **PX-U-19** the initial picture settings of `startup show` (tracking speed, autofocus,
+  automatic exposure, exposure compensation, white balance mode and temperature, contrast,
+  saturation, sharpness, hue): not carried over. CS-1 set one value each for four of them and
+  none for the other six (measured 2026-11-25), so the meaning of the other values is not
+  known; the `power_on.settings` leaves left the description.
 
 ### 9.3 Tiny 2 Lite fields without backing today
 
@@ -1621,22 +1630,22 @@ shows as backed (measured 2026-10-31 or captured); they are not reused.
 
 **Results of CS-1 (2026-11-25).**
 
-| U    | Result                                                                                                                                                                                      | Evidence                                                                                     |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| U-4  | answered, kept: ±0.16 read back; +x moves the person right in the picture, +y lower                                                                                                         | measured 2026-11-25 (`live_cam_23`; a person in view)                                        |
-| U-5  | `hand.axes.pan` failed: with it off the hand tracking still panned −38..+17°; it left the description (PX-U-5). `hand.axes.tilt` read back; its effect is open                              | measured 2026-11-25 (`live_cam_23`; a person in view)                                        |
-| U-6  | answered, kept: read back                                                                                                                                                                   | measured 2026-11-25 (`live_cam_23`)                                                          |
-| U-7  | answered, kept: a narrowed area went back to pan ±45, tilt ±30                                                                                                                              | measured 2026-11-25                                                                          |
-| U-8  | answered: the camera keeps each bound within the stored other one; a range whose min lies above the stored max goes max first, any other min first (4.3)                                    | measured 2026-11-25 (`live_cam_16`; a sequence with the stored range read before each write) |
-| U-9  | failed and applied: speed 1–100 °/s, tilt at most 80 with a speed; the exact limits are not needed                                                                                          | measured 2026-11-25 (`live_cam_17`, twice)                                                   |
-| U-12 | answered, kept: 1× to 2× in 4.9 s at 10, 3.2 s at 50                                                                                                                                        | measured 2026-11-25                                                                          |
-| U-16 | failed: the whole picture blurred at both points; `focus.point` left the description (PX-U-16)                                                                                              | measured 2026-11-25 (a person in view)                                                       |
-| U-18 | the written values read back and `close_up` was read; open: the start mode after a power cycle for a mode written from Linux. `lower_body` and `hand` were never read and show as `raw:<n>` | measured 2026-11-25 (`live_cam_23`)                                                          |
-| U-19 | open: one value each was read (`tracking_speed` 1, `autofocus` 1, `auto_exposure` 1, `exposure_compensation` 11); the others were not set                                                   | measured 2026-11-25                                                                          |
-| U-20 | answered: one step is 1/3 EV over −3..+3 EV, so raw 0..18 with 9 = 0 EV                                                                                                                     | measured 2026-11-25                                                                          |
-| U-23 | answered: the readback stays the presence of the audio interface; it stays away with the microphone off, also over a cold re-plug                                                           | measured 2026-11-25                                                                          |
-| U-25 | failed: the value 3 was never read and could not be set; `auto` left `values` (`raw:3`)                                                                                                     | measured 2026-11-25                                                                          |
-| U-26 | answered: `power_on.use_preset` slot N reads `preset_N` for all three; it stays after the preset is deleted                                                                                 | measured 2026-11-25                                                                          |
+| U    | Result                                                                                                                                                                                                                                                                           | Evidence                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| U-4  | answered, kept: ±0.16 read back; +x moves the person right in the picture, +y lower                                                                                                                                                                                              | measured 2026-11-25 (`live_cam_23`; a person in view)                                        |
+| U-5  | `hand.axes.pan` failed: with it off the hand tracking still panned −38..+17°; it left the description (PX-U-5). `hand.axes.tilt` read back; its effect with tilt off was not observed: it left the description (PX-U-5)                                                          | measured 2026-11-25 (`live_cam_23`; a person in view)                                        |
+| U-6  | answered, kept: read back                                                                                                                                                                                                                                                        | measured 2026-11-25 (`live_cam_23`)                                                          |
+| U-7  | answered, kept: a narrowed area went back to pan ±45, tilt ±30                                                                                                                                                                                                                   | measured 2026-11-25                                                                          |
+| U-8  | answered: the camera keeps each bound within the stored other one; a range whose min lies above the stored max goes max first, any other min first (4.3)                                                                                                                         | measured 2026-11-25 (`live_cam_16`; a sequence with the stored range read before each write) |
+| U-9  | failed and applied: speed 1–100 °/s, tilt at most 80 with a speed; the exact limits are not needed                                                                                                                                                                               | measured 2026-11-25 (`live_cam_17`, twice)                                                   |
+| U-12 | answered, kept: 1× to 2× in 4.9 s at 10, 3.2 s at 50                                                                                                                                                                                                                             | measured 2026-11-25                                                                          |
+| U-16 | failed: the whole picture blurred at both points; `focus.point` left the description (PX-U-16)                                                                                                                                                                                   | measured 2026-11-25 (a person in view)                                                       |
+| U-18 | the written values read back and `close_up` was read; the start mode after a power cycle was not observed for a mode written from Linux: `static`, `upper_body`, `headless` and `group` left `writable` (PX-U-18). `lower_body` and `hand` were never read and show as `raw:<n>` | measured 2026-11-25 (`live_cam_23`)                                                          |
+| U-19 | failed: one value each was read (`tracking_speed` 1, `autofocus` 1, `auto_exposure` 1, `exposure_compensation` 11); the others were not set, so the meaning of the other values is not known; the leaves left the description (PX-U-19)                                          | measured 2026-11-25                                                                          |
+| U-20 | answered: one step is 1/3 EV over −3..+3 EV, so raw 0..18 with 9 = 0 EV                                                                                                                                                                                                          | measured 2026-11-25                                                                          |
+| U-23 | answered: the readback stays the presence of the audio interface; it stays away with the microphone off, also over a cold re-plug                                                                                                                                                | measured 2026-11-25                                                                          |
+| U-25 | failed: the value 3 was never read and could not be set; `auto` left `values` (`raw:3`)                                                                                                                                                                                          | measured 2026-11-25                                                                          |
+| U-26 | answered: `power_on.use_preset` slot N reads `preset_N` for all three; it stays after the preset is deleted                                                                                                                                                                      | measured 2026-11-25                                                                          |
 
 ### 9.4 Check script
 
@@ -2161,7 +2170,7 @@ session 1" holds the details of blocks B and C; the live tests named are those o
 | CAM-19 | answered in part: a second writer read the presets at attach with query `0x3b44` (the used slots) and query `0x3b04` per used slot (its name); it wrote nothing and read neither selector `0x0c` nor `0x0d`                     | where that path takes the preset poses; the `0x3b44` format with 0, 1 and 3 presets; whether it replaces the rewind | measured 2026-11-25                                                          |
 | CAM-20 | answered: no: the first status read after plug-in and after the factory reset had byte 0 = `0x27`; no zero block was seen                                                                                                       |                                                                                                                     | measured 2026-11-25 (`live_cam_10_cam_20`)                                   |
 | CAM-22 | answered: asleep the live pose reads tilt −85, so the pose-taking actions fail their pose check; `gimbal.move` and `zoom.move` sent asleep did not show after the wake                                                          | the go-return actions                                                                                               | measured 2026-11-25 (`live_cam_2_cam_3_cam_22_asleep`)                       |
-| CAM-23 | see 9.3, "Results of CS-1"                                                                                                                                                                                                      | U-5 (tilt), U-18, U-19                                                                                              | 9.3                                                                          |
+| CAM-23 | see 9.3, "Results of CS-1"                                                                                                                                                                                                      |                                                                                                                     | 9.3                                                                          |
 | CAM-25 | answered: `3564:fef9`, bcdDevice `0510`, no serial, interfaces `0e 0e 01 01`, the extension unit 2 with 19 controls, video node index 0                                                                                         |                                                                                                                     | measured 2026-11-25 (`live_cam_25`)                                          |
 | CAM-33 | answered in part: no visible difference between `standard`, `sport` and `headroom` while the person sat still; `no_effect` stays false                                                                                          | the effect with a moving person; `tracking.speed`, `framing.*`                                                      | measured 2026-11-25 (a person in view)                                       |
 | CAM-34 | answered: with `upper_body` on, `tracking.mode` stayed through `gimbal.move` and `gimbal.turn`, and the pose read once a second showed no lasting move; a short swing was seen, not for certain (4.4, 8.8)                      |                                                                                                                     | measured 2026-11-25 (a person in view)                                       |
@@ -2305,3 +2314,4 @@ on its own.
 | 111 | 2026-11-25 | CS-1 complete | the U-rows of 9.3 unbacked; `asleep` `unknown` on every leaf but `zoom.field_of_view`; `exposure.anti_flicker` with `auto`; `hand.axes.pan` and `focus.point` in the description; CAM-1 to CAM-35 open | 9.3 has a results table and 14.1 the answers with their evidence files; U-4, U-6, U-7, U-12, U-20, U-23 and U-26 are backed; `hand.axes.pan` (PX-U-5) and `focus.point` (PX-U-16) left the description, and the value `auto` of `exposure.anti_flicker` (U-25); `power_on.start.mode` names only values read from the camera; 47 leaves are `asleep: accepted` (CAM-2); CAM-34 and CAM-35 texts in 4.4 and 8.8; open: U-5 (tilt), U-8, U-18 (effect at power-on), U-19, CAM-18, CAM-19, CAM-33, CAM-36 (4.3, 4.4, 8.8, 9.1, 9.2, 9.3, 14.1) | measured on the camera in CS-1 | CS-1, 2026-11-25 |
 | 112 | 2026-11-25 | `focus.mode` writes the UVC continuous autofocus | `focus.mode` sends only the camera frame `0x3442`; `focus.auto` is "the same camera bit" | `manual` also writes the UVC continuous autofocus off, `continuous` on; `single` the frame only; so `focus.position` (requires `manual`) is taken by the kernel and 0.13's `focus auto off` / `image autofocus 0` keep working (4.3, 8.8 send table, 9.1, 14.1) | CAM-14 measured 2026-11-25: off reads `manual` and makes the absolute focus writable, on reads `continuous`; the frame alone left the kernel refusing the absolute focus (CAM-15) | the coordinator, 2026-11-25 (engineering) |
 | 113 | 2026-11-25 | Area bounds go max first above the stored range | the model sends min, then max (U-8 open) | the model reads the stored max of the axis and sends a range whose min lies above it max first, any other min first (4.3, 9.3) | measured 2026-11-25: the camera keeps each bound within the stored other one; a min above the stored max lands at it, raised max first the range reads back | the coordinator, 2026-11-25 |
+| 114 | 2026-11-25 | The U-rows left open by CS-1 | U-5 (tilt), U-18 (effect at power-on) and U-19 open after CS-1 | the fail rule of 9.3 applied: `hand.axes.tilt` and the `power_on.settings` leaves left the description, `power_on.start.mode` is writable `normal|unset` only (PX-U-5, PX-U-18, PX-U-19) (4.3, 4.4, 9.1, 9.2, 9.3, 14.1) | 9.3: "The release candidate contains no row that has not passed" | stage W3, task w3-8 |

@@ -392,10 +392,10 @@ const ROWS: &[Row] = &[
         Nothing,
     ),
     row(
-        "hand tilt on|off",
+        "hand tilt on|off (PX-U-5)",
         &["set", "hand.axes.tilt=off"],
-        0,
-        Apply(&[("hand.axes.tilt", "false")]),
+        2,
+        Nothing,
     ),
     row(
         "hand return-after S",
@@ -595,15 +595,21 @@ const ROWS: &[Row] = &[
     ),
     row(
         "startup set --current --ai M (2 of 2)",
-        &["set", "power_on.start.mode=upper_body"],
+        &["set", "power_on.start.mode=normal"],
         0,
-        Apply(&[("power_on.start.mode", "\"upper_body\"")]),
+        Apply(&[("power_on.start.mode", "\"normal\"")]),
     ),
     row(
         "startup set --ai M",
-        &["set", "power_on.start.mode=upper_body"],
+        &["set", "power_on.start.mode=normal"],
         0,
-        Apply(&[("power_on.start.mode", "\"upper_body\"")]),
+        Apply(&[("power_on.start.mode", "\"normal\"")]),
+    ),
+    row(
+        "startup set --ai static|upper_body|headless|group (PX-U-18)",
+        &["set", "power_on.start.mode=upper_body"],
+        2,
+        Nothing,
     ),
     row(
         "startup set --ai none",
@@ -611,6 +617,7 @@ const ROWS: &[Row] = &[
         0,
         Apply(&[("power_on.start.mode", "\"unset\"")]),
     ),
+    // its settings part is PX-U-19
     row("startup show", &["get", "power_on"], 0, Nothing),
     row(
         "startup go",

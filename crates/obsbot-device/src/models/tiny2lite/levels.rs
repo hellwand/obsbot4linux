@@ -168,7 +168,6 @@ pub const LEVELS: &[Row] = &[
         Level::Captured,
         "capture 11; measured 2026-11-25 (CAM-16); order: measured 2026-11-25 (U-8)",
     ),
-    row("hand.axes.tilt", Level::None, "none"),
     row(
         "hand.return_after",
         Level::Measured,
@@ -358,56 +357,6 @@ pub const LEVELS: &[Row] = &[
         "capture 08 (normal, unset); written values read back: measured 2026-11-25 (U-18); close_up read: measured 2026-11-25 (U-18)",
     ),
     row(
-        "power_on.settings.tracking_speed",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.autofocus",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.auto_exposure",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.exposure_compensation",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.white_balance_mode",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.white_balance_temperature",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.contrast",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.saturation",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.sharpness",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
-        "power_on.settings.hue",
-        Level::Captured,
-        "capture 08b (one value)",
-    ),
-    row(
         "do:gimbal.move",
         Level::Captured,
         "capture 18 (`0x6444`); measured 2026-10-25; measured 2026-10-31 (#98: speed 1, 5, 100 °/s; tilt 80, pan 145); measured 2026-11-25 (CAM-17: 90 °/s, pan only and tilt only arrive; tilt 89 at 90 °/s and 180 °/s to tilt 0 do not move)",
@@ -486,37 +435,6 @@ pub const LEVELS: &[Row] = &[
         "capture 16; measured 2026-10-24",
     ),
     // marks of spec 9.3 on a value, a bound or an aspect: no backing
-    row("power_on.start.mode#power_on_effect", Level::None, "none"),
-    row(
-        "power_on.settings.tracking_speed#values",
-        Level::None,
-        "none",
-    ),
-    row("power_on.settings.autofocus#values", Level::None, "none"),
-    row(
-        "power_on.settings.auto_exposure#values",
-        Level::None,
-        "none",
-    ),
-    row(
-        "power_on.settings.exposure_compensation#values",
-        Level::None,
-        "none",
-    ),
-    row(
-        "power_on.settings.white_balance_mode#values",
-        Level::None,
-        "none",
-    ),
-    row(
-        "power_on.settings.white_balance_temperature#values",
-        Level::None,
-        "none",
-    ),
-    row("power_on.settings.contrast#values", Level::None, "none"),
-    row("power_on.settings.saturation#values", Level::None, "none"),
-    row("power_on.settings.sharpness#values", Level::None, "none"),
-    row("power_on.settings.hue#values", Level::None, "none"),
     // the camera's UVC range answers
     row("exposure.time@min", Level::Captured, "capture 01"),
     row("exposure.time@max", Level::Captured, "capture 01"),

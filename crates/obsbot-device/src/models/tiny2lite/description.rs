@@ -3,9 +3,9 @@
 //! The description of the Tiny 2 Lite as data (design spec 4.3, 4.4, 8.8; field ledger
 //! `docs/field-ledger.md`). `descriptions/tiny2lite.json` is generated from it.
 //!
-//! The fields, values and bounds of spec section 9.3 are 0.13.2 functions without backing
-//! today. They are in the description, and [`UNBACKED`] marks each with its row; camera
-//! session CS-1 keeps or removes them by a contract-change PR before the release candidate.
+//! The fields, values and bounds of spec section 9.3 were 0.13.2 functions without backing;
+//! [`UNBACKED`] marked each with its row. Camera session CS-1 kept or removed every one of
+//! them, so the list is empty: a new mark would fail the evidence test of a tested model.
 
 use obsbot_proto::{Action, Asleep, Description, Setting, SettingType, Unit, Warning};
 use serde_json::json;
@@ -29,20 +29,7 @@ pub const SETTLE_MS: u32 = 3000;
 /// value; `<path>@min` or `@max` a bound; `<path>#<aspect>` a property that is not a value or
 /// a bound; `do:<action>`, `do:<action>.<param>=<value>`, `do:<action>.<param>@max` and
 /// `do:<action>#<aspect>` the same for actions.
-pub const UNBACKED: &[(&str, &str)] = &[
-    ("hand.axes.tilt", "U-5"),
-    ("power_on.start.mode#power_on_effect", "U-18"),
-    ("power_on.settings.tracking_speed#values", "U-19"),
-    ("power_on.settings.autofocus#values", "U-19"),
-    ("power_on.settings.auto_exposure#values", "U-19"),
-    ("power_on.settings.exposure_compensation#values", "U-19"),
-    ("power_on.settings.white_balance_mode#values", "U-19"),
-    ("power_on.settings.white_balance_temperature#values", "U-19"),
-    ("power_on.settings.contrast#values", "U-19"),
-    ("power_on.settings.saturation#values", "U-19"),
-    ("power_on.settings.sharpness#values", "U-19"),
-    ("power_on.settings.hue#values", "U-19"),
-];
+pub const UNBACKED: &[(&str, &str)] = &[];
 
 /// Bounds, steps and defaults that this description holds without backing (the W0 plan's
 /// decision 12): `<path>@min`, `<path>@max`, `<path>#step`, `<path>#default`. None today: the
@@ -99,10 +86,6 @@ fn view_id() -> Setting {
 
 fn name() -> Setting {
     Setting::string("Name", 32, true)
-}
-
-fn raw_block(label: &str) -> Setting {
-    Setting::new(SettingType::Number, label).readonly()
 }
 
 /// The Tiny 2 Lite's settings (4.3), actions (4.4) and limits.
@@ -283,10 +266,6 @@ pub fn description() -> Description {
         .setting(
             "hand.area.tilt",
             angle_range("Hand tracking tilt range", -70.0, 90.0),
-        )
-        .setting(
-            "hand.axes.tilt",
-            w(Setting::boolean("Hand tracking may tilt")),
         )
         .setting(
             "hand.return_after",
@@ -472,55 +451,11 @@ pub fn description() -> Description {
         .setting(
             "power_on.start.mode",
             w(
-                Setting::enumeration("Initial tracking mode", &start_modes).writable_only(&[
-                    "static",
-                    "normal",
-                    "upper_body",
-                    "headless",
-                    "group",
-                    "unset",
-                ]),
+                // U-18: the start mode after a power cycle was never seen for a mode written from
+                // Linux; only the values recorded from the vendor app stay writable (PX-U-18)
+                Setting::enumeration("Initial tracking mode", &start_modes)
+                    .writable_only(&["normal", "unset"]),
             ),
-        )
-        .setting(
-            "power_on.settings.tracking_speed",
-            raw_block("Initial tracking speed (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.autofocus",
-            raw_block("Initial autofocus (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.auto_exposure",
-            raw_block("Initial automatic exposure (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.exposure_compensation",
-            raw_block("Initial exposure compensation (raw)"),
-        )
-        .setting(
-            "power_on.settings.white_balance_mode",
-            raw_block("Initial white balance mode (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.white_balance_temperature",
-            raw_block("Initial white balance temperature (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.contrast",
-            raw_block("Initial contrast (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.saturation",
-            raw_block("Initial saturation (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.sharpness",
-            raw_block("Initial sharpness (raw)").nullable(),
-        )
-        .setting(
-            "power_on.settings.hue",
-            raw_block("Initial hue (raw)").nullable(),
         )
         .action(
             "gimbal.move",
@@ -697,7 +632,7 @@ pub fn description() -> Description {
 /// `ignored`): among them `exposure.time` (written as 44990, before its step of 100 µs, so the
 /// value read back was not the value written) and `zoom.factor` (not kept, but in a state where
 /// zoom writes failed awake as well, CAM-36).
-pub const ASLEEP_ACCEPTED: [&str; 47] = [
+pub const ASLEEP_ACCEPTED: [&str; 46] = [
     "audio.auto_gain",
     "audio.in_sleep",
     "audio.noise_reduction",
@@ -721,7 +656,6 @@ pub const ASLEEP_ACCEPTED: [&str; 47] = [
     "gestures.zoom",
     "gestures.zoom_ratio",
     "gimbal.invert",
-    "hand.axes.tilt",
     "hand.return_after",
     "hand.side",
     "image.brightness",
@@ -762,7 +696,7 @@ mod tests {
     /// `available`, `pending` and `unread`) and every action of 4.4, and nothing else.
     #[test]
     fn it_has_exactly_the_paths_and_actions_of_the_spec() {
-        const LEAVES: [&str; 83] = [
+        const LEAVES: [&str; 72] = [
             "asleep",
             "audio.auto_gain",
             "audio.enabled",
@@ -795,7 +729,6 @@ mod tests {
             "gimbal.tilt",
             "hand.area.pan",
             "hand.area.tilt",
-            "hand.axes.tilt",
             "hand.move_gimbal",
             "hand.return",
             "hand.return_after",
@@ -814,16 +747,6 @@ mod tests {
             "on_air.active",
             "on_air.apps",
             "power_on.mode",
-            "power_on.settings.auto_exposure",
-            "power_on.settings.autofocus",
-            "power_on.settings.contrast",
-            "power_on.settings.exposure_compensation",
-            "power_on.settings.hue",
-            "power_on.settings.saturation",
-            "power_on.settings.sharpness",
-            "power_on.settings.tracking_speed",
-            "power_on.settings.white_balance_mode",
-            "power_on.settings.white_balance_temperature",
             "power_on.start.mode",
             "power_on.start.pose",
             "power_on.start.source",
@@ -995,9 +918,9 @@ mod tests {
             assert!(row.starts_with("U-"), "{key}: {row}");
         }
         let rows: BTreeSet<&str> = UNBACKED.iter().map(|(_, r)| *r).collect();
-        // CS-1 (2026-11-25) settled the others: kept and measured, or removed (PX-U-5, PX-U-16,
-        // U-25), narrowed (U-9) or applied (U-8)
-        let want: BTreeSet<&str> = ["U-5", "U-18", "U-19"].into();
+        // CS-1 (2026-11-25) settled them all: kept and measured, removed (PX-U-5, PX-U-16,
+        // PX-U-18, PX-U-19, U-25), narrowed (U-9) or applied (U-8)
+        let want: BTreeSet<&str> = BTreeSet::new();
         assert_eq!(rows, want);
     }
 

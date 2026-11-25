@@ -112,7 +112,6 @@ pub const ENTRIES: &[SendEntry] = &[
     framed(TRACKING, 0x20c4, "capture 11"),
     framed(TRACKING, 0x2144, "capture 11"),
     framed(TRACKING, 0x21c4, "capture 11"),
-    framed(TRACKING, 0x23c4, "0.13.2 only, U-5"),
     framed(TRACKING, 0x2444, "measured 2026-11-25 (U-6)"),
     framed(TRACKING, 0x26c4, "capture 11"),
     framed(POWER, 0x3442, "capture 12; measured 2026-10-31 (#97)"),
@@ -243,37 +242,15 @@ mod tests {
         assert!(ENTRIES.iter().filter(|e| e.identity).count() == 2);
     }
 
+    /// CS-1 settled every U-row with a frame of its own: the hand pan and tilt frames left
+    /// with their leaves (PX-U-5), so no frame is sent on 0.13.2's word alone.
     #[test]
-    fn the_frames_only_0_13_2_sends_are_the_u_rows() {
-        let only: BTreeSet<String> = ENTRIES
+    fn no_frame_is_sent_on_0_13_2_alone() {
+        let only: Vec<String> = ENTRIES
             .iter()
             .filter(|e| e.evidence.starts_with("0.13.2 only"))
             .map(|e| format!("{:?}", e.frame))
             .collect();
-        let want: BTreeSet<String> = [
-            // U-5: hand.axes.tilt; the pan frame left with its leaf (PX-U-5)
-            (FRAMED, TRACKING, 0x23c4u16, false),
-        ]
-        .into_iter()
-        .map(|(selector, receiver, command, is_query)| {
-            format!(
-                "{:?}",
-                if is_query {
-                    Frame::Query {
-                        selector,
-                        receiver,
-                        command,
-                    }
-                } else {
-                    Frame::Framed {
-                        selector,
-                        receiver,
-                        command,
-                    }
-                }
-            )
-        })
-        .collect();
-        assert_eq!(only, want);
+        assert_eq!(only, Vec::<String>::new());
     }
 }

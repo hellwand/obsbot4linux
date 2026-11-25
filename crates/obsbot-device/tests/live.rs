@@ -558,8 +558,9 @@ fn write_and_watch(cam: &mut dyn Camera, leaf: &str, value: &Value) -> Result<Du
 #[test]
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_23_the_u_rows_that_read_back() {
-    // U-4 (offset bounds), U-5 (hand axes), U-6 (hand return time), U-18 (start modes);
-    // each written, read back, restored. The lags are CAM-5 data.
+    // U-4 (offset bounds), U-6 (hand return time), U-18 (start modes); each written, read
+    // back, restored. The lags are CAM-5 data. U-5 (hand axes) left the description (PX-U-5),
+    // and of U-18 only `normal` and `unset` stay writable (PX-U-18).
     let Some((_, cam)) = camera(true) else {
         return;
     };
@@ -570,12 +571,9 @@ fn live_cam_23_the_u_rows_that_read_back() {
         ("framing.offset.x", json!(0.16)),
         ("framing.offset.y", json!(-0.16)),
         ("framing.offset.y", json!(0.16)),
-        ("hand.axes.tilt", json!(false)),
         ("hand.return_after", json!(3.0)),
-        ("power_on.start.mode", json!("static")),
-        ("power_on.start.mode", json!("upper_body")),
-        ("power_on.start.mode", json!("headless")),
-        ("power_on.start.mode", json!("group")),
+        ("power_on.start.mode", json!("normal")),
+        ("power_on.start.mode", json!("unset")),
     ];
     let mut failed = Vec::new();
     for (leaf, value) in rows {
