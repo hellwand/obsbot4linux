@@ -2,7 +2,8 @@
 
 //! Live tests on a connected Tiny 2 Lite (design spec 10.3 track A, 11, 14: camera session
 //! CS-1). Every test is `#[ignore]` and does nothing unless `OBSBOT_LIVE=1` is set; the tests
-//! that write also need `OBSBOT_LIVE_WRITE=1` and put back what they wrote. They talk to the
+//! that write also need `OBSBOT_LIVE_WRITE=1` and put back what they wrote, also when they fail
+//! (a [`Guard`] holds the camera). They talk to the
 //! camera only through the model, behind its send-table check, so they send only the model's
 //! send table (8.3). Stop `obsbot4linux.socket` and `obsbot4linux.service` first. Run one at a
 //! time:
@@ -14,6 +15,7 @@
 use obsbot_device::bus::SysfsBus;
 use obsbot_device::contract::{Bus, Camera, CameraError, Ctx, Found, Need};
 use obsbot_device::family::link::{Link, Timing, process_sequence};
+use obsbot_device::models::tiny2lite::description::SETTLE_MS;
 use obsbot_device::models::tiny2lite::model::SELECTORS;
 use obsbot_device::models::tiny2lite::{decode, plan, send_table};
 use obsbot_device::transport::checked::Checked;
@@ -22,6 +24,7 @@ use obsbot_proto::{
     Bound, Description, Params, Setting, SettingType, State, is_valid_serial, short_id, values,
 };
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 fn enabled(var: &str) -> bool {
@@ -182,6 +185,163 @@ fn restore(cam: &mut dyn Camera, leaf: &str, before: &Value) {
     };
     if let Err(why) = result {
         eprintln!("WARNING: {leaf} not put back: {why}");
+    }
+}
+
+/// The leaves a [`Guard`] puts back: every writable leaf with a readback that the sweeps
+/// write, and the areas. A leaf with a live topic is left out: its value is the camera's
+/// automatic one (writing it back would freeze the automatic control).
+fn guarded(cam: &dyn Camera) -> Vec<String> {
+    let desc = cam.description();
+    let leaves: Vec<&str> = desc
+        .settings
+        .iter()
+        .filter(|(path, s)| {
+            !s.readonly
+                && s.readback
+                && s.live.is_none()
+                && !NOT_SWEPT.contains(&path.as_str())
+                && matches!(
+                    s.kind,
+                    SettingType::Bool
+                        | SettingType::Enum
+                        | SettingType::Number
+                        | SettingType::Range
+                )
+        })
+        .map(|(path, _)| path.as_str())
+        .collect();
+    cam.order(&leaves)
+}
+
+/// `leaves` as one read of each of their groups shows them; a group that fails is left out.
+fn read_leaves(cam: &mut dyn Camera, leaves: &[String]) -> BTreeMap<String, Value> {
+    let mut groups: Vec<String> = leaves.iter().map(|l| group_of(cam, l)).collect();
+    groups.sort();
+    groups.dedup();
+    let mut out = BTreeMap::new();
+    for g in groups {
+        if let Ok(values) = cam.read(&g, &Ctx::none()) {
+            out.extend(values.into_iter().filter(|(l, _)| leaves.contains(l)));
+        }
+    }
+    out
+}
+
+/// The leaves of `start` that read differently now, in apply order, each with what it reads
+/// (`null` when its group did not read).
+fn moved(cam: &mut dyn Camera, start: &BTreeMap<String, Value>) -> Vec<(String, Value)> {
+    let leaves: Vec<String> = start.keys().cloned().collect();
+    let mut now = read_leaves(cam, &leaves);
+    let moved: Vec<&str> = start
+        .iter()
+        .filter(|(l, v)| !now.get(*l).is_some_and(|n| values::same(n, v)))
+        .map(|(l, _)| l.as_str())
+        .collect();
+    cam.order(&moved)
+        .into_iter()
+        .map(|l| {
+            let v = now.remove(&l).unwrap_or(Value::Null);
+            (l, v)
+        })
+        .collect()
+}
+
+/// Writes back every leaf of `start` that reads differently now, in apply order, and waits the
+/// settle bound (8.8); returns the leaves it wrote and what they read before.
+fn put_back(cam: &mut dyn Camera, start: &BTreeMap<String, Value>) -> Vec<(String, Value)> {
+    let moved = moved(cam, start);
+    for (leaf, _) in &moved {
+        restore(cam, leaf, &start[leaf]);
+    }
+    if !moved.is_empty() {
+        std::thread::sleep(Duration::from_millis(u64::from(SETTLE_MS)));
+    }
+    moved
+}
+
+/// Holds the camera of a writing test and what it read at the start, and puts that back when
+/// the test ends, also when an assertion or an `unwrap` panics: it wakes the camera if it was
+/// awake at the start and is asleep now, writes back every [`guarded`] leaf that reads differently (in apply order;
+/// a second pass for a leaf that a later write moved again, as `zoom.factor` follows
+/// `zoom.field_of_view` and an area bound is clamped to the stored other bound, CAM-16) and,
+/// when asked, moves the gimbal back. What still differs is printed as a WARNING. A leaf whose
+/// `requires` do not hold at the start is not guarded: its value then belongs to the automatic
+/// control.
+struct Guard {
+    cam: Box<dyn Camera>,
+    start: BTreeMap<String, Value>,
+    awake: bool,
+    pose: Option<(f64, f64)>,
+}
+
+impl Guard {
+    fn new(mut cam: Box<dyn Camera>, pose: bool) -> Guard {
+        let leaves = guarded(cam.as_ref());
+        let mut start = read_leaves(cam.as_mut(), &leaves);
+        let desc = cam.description().clone();
+        start.retain(|leaf, _| {
+            desc.settings[leaf].requires.iter().all(|r| {
+                read_leaf(cam.as_mut(), &r.path).is_ok_and(|v| values::same(&v, &r.equals))
+            })
+        });
+        let awake = read_leaf(cam.as_mut(), "asleep").ok() == Some(json!(false));
+        let pose = pose.then(|| read_pose(cam.as_mut())).flatten();
+        Guard {
+            cam,
+            start,
+            awake,
+            pose,
+        }
+    }
+
+    fn cam(&mut self) -> &mut dyn Camera {
+        self.cam.as_mut()
+    }
+}
+
+/// The live pose `(pan, tilt)`, when it reads.
+fn read_pose(cam: &mut dyn Camera) -> Option<(f64, f64)> {
+    let v = cam.read("pose", &Ctx::none()).ok()?;
+    Some((v["gimbal.pan"].as_f64()?, v["gimbal.tilt"].as_f64()?))
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        // nothing here may panic: a panic while a failed test unwinds aborts the run
+        let cam = self.cam.as_mut();
+        if self.awake && read_leaf(cam, "asleep").ok() == Some(json!(true)) {
+            if let Err(e) = act(cam, "wake", json!({}), &State::new(true)) {
+                eprintln!("WARNING: the camera is asleep and did not take `wake`: {e}");
+            }
+            if until_asleep_is(cam, false).is_none() {
+                eprintln!("WARNING: the camera did not wake within 20 s");
+            }
+        }
+        for _ in 0..2 {
+            if put_back(cam, &self.start).is_empty() {
+                break;
+            }
+        }
+        for (leaf, now) in moved(cam, &self.start) {
+            eprintln!(
+                "WARNING: {leaf} not put back: it reads {now}, {} at the start",
+                self.start[&leaf]
+            );
+        }
+        if let Some((pan, tilt)) = self.pose {
+            let back = json!({"pan": pan, "tilt": tilt});
+            if let Err(e) = act(cam, "gimbal.move", back, &State::new(true)) {
+                eprintln!("WARNING: the gimbal not moved back: {e}");
+            }
+            std::thread::sleep(Duration::from_secs(4));
+            match read_pose(cam) {
+                Some((p, t)) if (p - pan).abs() <= 1.0 && (t - tilt).abs() <= 1.0 => {}
+                now => eprintln!(
+                    "WARNING: the gimbal reads {now:?}, not pan {pan} tilt {tilt} as at the start"
+                ),
+            }
+        }
     }
 }
 
@@ -369,9 +529,11 @@ fn write_and_watch(cam: &mut dyn Camera, leaf: &str, value: &Value) -> Result<Du
 fn live_cam_23_the_u_rows_that_read_back() {
     // U-4 (offset bounds), U-5 (hand axes), U-6 (hand return time), U-18 (start modes);
     // each written, read back, restored. The lags are CAM-5 data.
-    let Some((_, mut cam)) = camera(true) else {
+    let Some((_, cam)) = camera(true) else {
         return;
     };
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
     let rows: &[(&str, Value)] = &[
         ("framing.offset.x", json!(-0.16)),
         ("framing.offset.x", json!(0.16)),
@@ -387,7 +549,7 @@ fn live_cam_23_the_u_rows_that_read_back() {
     ];
     let mut failed = Vec::new();
     for (leaf, value) in rows {
-        match write_and_watch(cam.as_mut(), leaf, value) {
+        match write_and_watch(cam, leaf, value) {
             Ok(lag) => println!("pass {leaf} = {value} after {} ms", lag.as_millis()),
             Err(last) => {
                 println!("FAIL {leaf} = {value}: reads {last}");
@@ -405,9 +567,11 @@ fn live_cam_23_the_u_rows_that_read_back() {
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_16_an_area_wholly_beyond_the_stored_one() {
     // U-8: the bounds go min then max; a new range wholly above or below the stored one
-    let Some((_, mut cam)) = camera(true) else {
+    let Some((_, cam)) = camera(true) else {
         return;
     };
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
     let mut failed = Vec::new();
     for leaf in [
         "zone.area.pan",
@@ -415,10 +579,10 @@ fn live_cam_16_an_area_wholly_beyond_the_stored_one() {
         "hand.area.pan",
         "hand.area.tilt",
     ] {
-        let before = read_leaf(cam.as_mut(), leaf).unwrap();
+        let before = read_leaf(cam, leaf).unwrap();
         for (lo, hi) in [(-20.0, 20.0), (40.0, 60.0), (-60.0, -40.0)] {
             let v = json!({"min": lo, "max": hi});
-            match write_and_watch(cam.as_mut(), leaf, &v) {
+            match write_and_watch(cam, leaf, &v) {
                 Ok(_) => println!("pass {leaf} = {v}"),
                 Err(last) => {
                     println!("FAIL {leaf} = {v}: reads {last}");
@@ -426,7 +590,7 @@ fn live_cam_16_an_area_wholly_beyond_the_stored_one() {
                 }
             }
         }
-        restore(cam.as_mut(), leaf, &before);
+        restore(cam, leaf, &before);
     }
     assert!(failed.is_empty(), "{failed:?}");
 }
@@ -435,11 +599,16 @@ fn live_cam_16_an_area_wholly_beyond_the_stored_one() {
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_5_every_writable_leaf_reads_back_and_its_lag() {
     // CAM-5: each writable leaf with a readback written to a value next to its own (its
-    // `requires` met first), read back once a second, put back; the lags are `settle_ms` data
-    let Some((_, mut cam)) = camera(true) else {
+    // `requires` met first), read back once a second, put back; the lags are `settle_ms` data.
+    // After each leaf, a leaf that its write moved as well is named and put back, so that every
+    // leaf starts from the state the test found (CS-1: the field of view had moved to medium
+    // before its own turn, and was then put back to medium).
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, false);
+    let start = guard.start.clone();
+    let cam = guard.cam();
     let desc = cam.description().clone();
     let mut failed = Vec::new();
     for leaf in swept(cam) {
@@ -459,6 +628,12 @@ fn live_cam_5_every_writable_leaf_reads_back_and_its_lag() {
         for (path, v) in met.iter().rev() {
             restore(cam, path, v);
         }
+        for (other, now) in put_back(cam, &start) {
+            println!(
+                "after {leaf}: {other} reads {now}, {} at the start: put back",
+                start[&other]
+            );
+        }
     }
     assert!(
         failed.is_empty(),
@@ -474,10 +649,11 @@ fn live_cam_2_cam_3_cam_22_asleep() {
     // `wake` until the status reports awake; CAM-22: the live pose asleep, the go-return
     // actions and the pose-taking actions (a save into a free preset slot, a new view, both
     // deleted again). Everything written is put back.
-    let Some((_, mut cam)) = camera(true) else {
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, true);
+    let cam = guard.cam();
     let desc = cam.description().clone();
     let awake = state(cam);
     assert_eq!(awake.at("asleep"), Some(&json!(false)), "start awake");
@@ -578,10 +754,11 @@ fn live_cam_2_cam_3_cam_22_asleep() {
 fn live_cam_4_the_zoom_readback_during_a_slow_zoom_move() {
     // CAM-4: during a speed-limited `zoom.move`, does the zoom readback show the target or the
     // factor on the way? The readings every 200 ms are the answer. The zoom is put back.
-    let Some((_, mut cam)) = camera(true) else {
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
     let before = read_leaf(cam, "zoom.factor").unwrap();
     let target = if before.as_f64().unwrap_or(1.0) < 2.5 {
         4.0
@@ -632,11 +809,14 @@ fn live_cam_4_the_zoom_readback_during_a_slow_zoom_move() {
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_13_anti_flicker_and_exposure_mode_in_both_orders() {
     // CAM-13: `exposure.anti_flicker` and `exposure.mode` written one right after the other, in
-    // both orders; both must read back for the order not to matter (8.8 apply order)
-    let Some((_, mut cam)) = camera(true) else {
+    // both orders. CS-1 (2026-11-25): `exposure.mode=manual` and then `anti_flicker=off` loses
+    // the anti-flicker write, the other order keeps both; so the model's apply order puts
+    // `exposure.anti_flicker` first (8.8). Both orders are printed; the model's must keep both.
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
     let desc = cam.description().clone();
     let leaves = ["exposure.anti_flicker", "exposure.mode"];
     let before: Vec<Value> = leaves.iter().map(|l| read_leaf(cam, l).unwrap()).collect();
@@ -645,6 +825,7 @@ fn live_cam_13_anti_flicker_and_exposure_mode_in_both_orders() {
         .zip(&before)
         .map(|(l, b)| other_value(&desc.settings[*l], b).unwrap())
         .collect();
+    let model_order = cam.order(&leaves);
     let mut failed = Vec::new();
     for order in [[0, 1], [1, 0]] {
         for i in order {
@@ -659,7 +840,7 @@ fn live_cam_13_anti_flicker_and_exposure_mode_in_both_orders() {
                 "{name}: {leaf} wrote {value}, reads {now}: {}",
                 if ok { "pass" } else { "FAIL" }
             );
-            if !ok {
+            if !ok && model_order == [leaves[order[0]], leaves[order[1]]] {
                 failed.push(format!("{name}: {leaf}"));
             }
         }
@@ -670,7 +851,7 @@ fn live_cam_13_anti_flicker_and_exposure_mode_in_both_orders() {
     }
     assert!(
         failed.is_empty(),
-        "an order that loses a write becomes an apply-order rule (8.8): {failed:?}"
+        "the model's apply order {model_order:?} loses a write (8.8): {failed:?}"
     );
 }
 
@@ -680,10 +861,11 @@ fn live_cam_15_a_manual_value_while_its_automatic_control_is_on() {
     // CAM-15: the white-balance temperature and the absolute focus written while their
     // automatic control is on (the model sends what it is given; the daemon's `requires` check
     // refuses it before). The outcome printed is the answer; both are put back.
-    let Some((_, mut cam)) = camera(true) else {
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
     let desc = cam.description().clone();
     for (auto, on, leaf) in [
         (
@@ -712,30 +894,30 @@ fn live_cam_15_a_manual_value_while_its_automatic_control_is_on() {
 #[test]
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_17_gimbal_moves_with_speed() {
-    // CAM-17 (U-9): `gimbal.move` with a speed near the tilt limit and at the speed ceiling, and
-    // with one axis only; each must arrive within 1°. The pose is put back.
-    let Some((_, mut cam)) = camera(true) else {
+    // CAM-17 (U-9): `gimbal.move` with a speed near the tilt limit, at the speed ceiling, and
+    // with one axis only; each must arrive within 1°. CS-1 (2026-11-25) sent the tilt limit and
+    // the speed ceiling in one move, which did not move at all, so which of the two the camera
+    // refuses stayed open: they are separate moves here. The guard puts the pose back, also
+    // when a move fails or panics.
+    let Some((_, cam)) = camera(true) else {
         return;
     };
-    let cam = cam.as_mut();
+    let mut guard = Guard::new(cam, true);
+    let cam = guard.cam();
     let desc = cam.description().clone();
     let p = &desc.actions["gimbal.move"].params;
     let tilt_max = number(&p["tilt"], "max").unwrap();
     let speed_max = number(&p["speed"], "max").unwrap();
     let st = State::new(true);
-    let pose = |cam: &mut dyn Camera| {
-        let v = cam.read("pose", &Ctx::none()).unwrap();
-        (
-            v["gimbal.pan"].as_f64().unwrap(),
-            v["gimbal.tilt"].as_f64().unwrap(),
-        )
-    };
-    let start = pose(cam);
     let mut failed = Vec::new();
     for (params, want) in [
         (
-            json!({"pan": 0, "tilt": tilt_max - 1.0, "speed": speed_max}),
+            json!({"pan": 0, "tilt": tilt_max - 1.0, "speed": speed_max / 2.0}),
             (Some(0.0), Some(tilt_max - 1.0)),
+        ),
+        (
+            json!({"pan": 0, "tilt": 0, "speed": speed_max}),
+            (Some(0.0), Some(0.0)),
         ),
         (
             json!({"pan": 30, "speed": speed_max / 2.0}),
@@ -746,22 +928,19 @@ fn live_cam_17_gimbal_moves_with_speed() {
             (None, Some(-10.0)),
         ),
     ] {
-        act(cam, "gimbal.move", params.clone(), &st).unwrap();
+        let sent = act(cam, "gimbal.move", params.clone(), &st);
         std::thread::sleep(Duration::from_secs(4));
-        let (pan, tilt) = pose(cam);
+        let now = read_pose(cam);
         let near = |got: f64, want: Option<f64>| want.is_none_or(|w| (got - w).abs() <= 1.0);
-        let ok = near(pan, want.0) && near(tilt, want.1);
+        let ok =
+            sent.is_ok() && now.is_some_and(|(pan, tilt)| near(pan, want.0) && near(tilt, want.1));
         println!(
-            "gimbal.move {params}: pan {pan} tilt {tilt}: {}",
+            "gimbal.move {params}: {sent:?}, pose {now:?}: {}",
             if ok { "pass" } else { "FAIL" }
         );
         if !ok {
             failed.push(params.to_string());
         }
-    }
-    let back = json!({"pan": start.0, "tilt": start.1});
-    if let Err(e) = act(cam, "gimbal.move", back, &st) {
-        eprintln!("WARNING: the gimbal not moved back: {e}");
     }
     assert!(
         failed.is_empty(),
