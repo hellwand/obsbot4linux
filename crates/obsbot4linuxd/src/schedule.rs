@@ -96,11 +96,11 @@ impl Schedule {
         }
     }
 
-    /// The groups the wake read reads (5.7): every group with a leaf in `unread`, `touched`
-    /// groups included, in poll-plan order.
-    pub fn wake_groups(plan: &[Group], unread: &[String]) -> Vec<String> {
+    /// The groups the wake read reads (5.7): every group with one of `leaves` (those in
+    /// `unread` and in `pending`), `touched` groups included, in poll-plan order.
+    pub fn wake_groups(plan: &[Group], leaves: &[String]) -> Vec<String> {
         plan.iter()
-            .filter(|g| g.leaves.iter().any(|l| unread.contains(l)))
+            .filter(|g| g.leaves.iter().any(|l| leaves.contains(l)))
             .map(|g| g.name.clone())
             .collect()
     }

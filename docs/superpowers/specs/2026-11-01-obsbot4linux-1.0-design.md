@@ -832,13 +832,16 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
   or enters `pending` with it (4.1 rule 4). Its group is then read at its own tier, and the
   pending check runs at those reads. **Settle read.** When the leaf's `settle_ms` has passed
   and it is still pending, the worker reads its group once more, unless the group's tier
-  (its live tier while that is in use) is not slower than `settle_ms`; then `pending` ends
-  within `settle_ms` and the camera's value stands, also when the camera kept another value
-  (a clamp, a step). One settle read per write; it runs between batches like a poll (queued
-  requests first, 4.1 rule 2), and a read that fails or cannot run asleep is not repeated:
-  the group's tier or the wake read ends `pending` then. For a write whose group could not be
-  read asleep, `settle_ms` counts from the first read after wake (5.7). A `readback:false`
-  leaf takes the written value once the camera accepted the write.
+  (its live tier while that is in use) is not slower than `settle_ms`. So `pending` ends
+  within `settle_ms`, or within `settle_ms` plus its group's tier when that tier is not
+  slower, and the camera's value stands, also when the camera kept another value (a clamp, a
+  step). One settle read per write; it runs between batches like a poll (queued requests
+  first, 4.1 rule 2), and it stops when a request served before it was a `restart` write
+  (below). A settle read that fails or cannot run asleep is not repeated: the group's tier
+  ends `pending` then, or the wake read, which reads the group of every pending leaf (5.7).
+  For a write whose group could not be read asleep, `settle_ms` counts from the first read
+  after wake (5.7). A `readback:false` leaf takes the written value once the camera accepted
+  the write.
 - **Restart.** A write of a leaf, or an action, whose `warning` holds `restart` (on the Tiny
   2 Lite `audio.enabled` and `factory_reset`) is answered `ok` once the camera accepted the
   frame, without a re-read of the touched groups. A written leaf enters `pending` with its
@@ -885,10 +888,10 @@ requests for it at once (4.1 rule 2): `get` from the fixed state, `set` and `do`
   its group cannot be read while asleep, the path stays in `pending` until the first read
   after wake, and its `settle_ms` counts from that read.
 - **Wake and retries.** When `asleep` turns false, the worker reads once every group that
-  has a leaf in `unread`, `touched` groups included, before the periodic tiers go on; the
-  next tick of each such group counts from this read. A `touched` group whose read failed or
-  was cut short is read again at the next wake or with the next read of the 60 s tier,
-  whichever comes first, until a read succeeds.
+  has a leaf in `unread` or in `pending`, `touched` groups included, before the periodic
+  tiers go on; the next tick of each such group counts from this read. A `touched` group
+  whose read failed or was cut short is read again at the next wake or with the next read of
+  the 60 s tier, whichever comes first, until a read succeeds.
 
 ### 5.8 Timeouts
 
@@ -1675,8 +1678,11 @@ its own description. It replaces 0.13's `check-readback.sh`.
   re-read or at a read of a 1 s group, the ledger sets `settle_ms` to the largest lag,
   rounded up to the next whole second. Where a value showed only at a later read of a 5 s
   or 60 s group, the lag is a tier artefact: the leaf keeps the model-wide bound, and the
-  ledger notes "below <tier>". A path stays pending for up to its `settle_ms`: the settle
-  read of 5.6 reads its group once when the bound has passed.
+  ledger notes "below <tier>". A value first seen at the settle read of 5.6 gives no lag
+  below `settle_ms`: that read runs when the bound has passed, so the leaf keeps the
+  model-wide bound. A path stays pending for up to its `settle_ms`, or `settle_ms` plus its
+  group's tier when that tier is not slower: the settle read reads its group once when the
+  bound has passed.
 - **`readback:false` rows** pass only when the person running the script confirms the
   effect (for example, the LED blinks); the script prints what to look for and asks.
   `no_effect` rows are checked by readback only. The script says per row which kind it is.
@@ -2325,4 +2331,4 @@ on its own.
 | 112 | 2026-11-25 | `focus.mode` writes the UVC continuous autofocus | `focus.mode` sends only the camera frame `0x3442`; `focus.auto` is "the same camera bit" | `manual` also writes the UVC continuous autofocus off, `continuous` on; `single` the frame only; so `focus.position` (requires `manual`) is taken by the kernel and 0.13's `focus auto off` / `image autofocus 0` keep working (4.3, 8.8 send table, 9.1, 14.1) | CAM-14 measured 2026-11-25: off reads `manual` and makes the absolute focus writable, on reads `continuous`; the frame alone left the kernel refusing the absolute focus (CAM-15) | the coordinator, 2026-11-25 (engineering) |
 | 113 | 2026-11-25 | Area bounds go max first above the stored range | the model sends min, then max (U-8 open) | the model reads the stored max of the axis and sends a range whose min lies above it max first, any other min first (4.3, 9.3) | measured 2026-11-25: the camera keeps each bound within the stored other one; a min above the stored max lands at it, raised max first the range reads back | the coordinator, 2026-11-25 |
 | 114 | 2026-11-25 | The U-rows left open by CS-1 | U-5 (tilt), U-18 (effect at power-on) and U-19 open after CS-1 | the fail rule of 9.3 applied: `hand.axes.tilt` and the `power_on.settings` leaves left the description, `power_on.start.mode` names only `normal|close_up|unset` (another byte shows as `raw:<n>`; a round trip from Linux is not a confirmation) and is writable `normal|unset` only (PX-U-5, PX-U-18, PX-U-19) (4.3, 4.4, 9.1, 9.2, 9.3, 14.1) | 9.3: "The release candidate contains no row that has not passed" | stage W3, task w3-8 |
-| 115 | 2026-11-25 | Settle read after a write | `pending` is checked only at the reads of the group's own tier; no extra reads while a path is pending (row 73) | when a pending leaf's `settle_ms` has passed, the worker reads its group once, unless the group's tier is not slower than `settle_ms`; one read per write, between batches, not repeated when it fails (5.6, 9.4) | a zone area the camera clamped stayed pending with the written range for up to the 60 s tier, so the command line showed the write as taken (#335) | measured 2026-11-25 (U-8 zone area writes), #335 |
+| 115 | 2026-11-25 | Settle read after a write | `pending` is checked only at the reads of the group's own tier; no extra reads while a path is pending (row 73) | when a pending leaf's `settle_ms` has passed, the worker reads its group once, unless the group's tier is not slower than `settle_ms`; one read per write, between batches, not repeated when it fails, none after a `restart` write; the wake read also reads the group of every pending leaf (5.6, 5.7, 9.4) | a zone area the camera clamped stayed pending with the written range for up to the 60 s tier, so the command line showed the write as taken (#335) | measured 2026-11-25 (U-8 zone area writes), #335 |

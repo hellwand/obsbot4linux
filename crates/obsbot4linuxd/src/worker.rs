@@ -397,7 +397,9 @@ impl Worker {
                 let jobs = self.queue.take_all();
                 self.serve(jobs);
             }
-            if self.queue.halt.load(Ordering::SeqCst) {
+            // A `restart` write in that batch: nothing more is sent until the quiet time ends
+            // (5.6 "Restart").
+            if self.queue.halt.load(Ordering::SeqCst) || self.quiet_until.is_some() {
                 break;
             }
             let ok = self.read_group(&name, &self.poll_ctx());
@@ -407,7 +409,7 @@ impl Worker {
         }
         self.schedule.ticked(tier, Instant::now(), &self.timing);
         self.publish(Cause::Poll);
-        if was_asleep && !self.state.asleep() {
+        if was_asleep && !self.state.asleep() && self.quiet_until.is_none() {
             self.wake();
         }
     }
@@ -443,7 +445,9 @@ impl Worker {
                 let jobs = self.queue.take_all();
                 self.serve(jobs);
             }
-            if self.queue.halt.load(Ordering::SeqCst) {
+            // A `restart` write in that batch: nothing more is sent until the quiet time ends
+            // (5.6 "Restart").
+            if self.queue.halt.load(Ordering::SeqCst) || self.quiet_until.is_some() {
                 break;
             }
             self.read_group(&name, &self.poll_ctx());
@@ -451,13 +455,18 @@ impl Worker {
         self.publish(Cause::Poll);
     }
 
-    /// The camera woke (5.7 "Wake and retries"): every group with a leaf in `unread` is read
-    /// now, the `touched` ones included, and the next tick of each tier read counts from here.
+    /// The camera woke (5.7 "Wake and retries"): every group with a leaf in `unread` or
+    /// `pending` is read now, the `touched` ones included, and the next tick of each tier read
+    /// counts from here.
     pub(crate) fn wake(&mut self) {
         if let Some(need) = self.series.at_wake() {
             self.attempt(need);
         }
-        let groups = Schedule::wake_groups(&self.plan, &self.state.unread);
+        // A pending leaf's group is read as well: this read ends `pending` or starts its bound
+        // (5.6, 5.7), where a settle read while asleep could not.
+        let mut leaves = self.state.unread.clone();
+        leaves.extend(self.pending.map().into_keys());
+        let groups = Schedule::wake_groups(&self.plan, &leaves);
         for name in &groups {
             if self.queue.halt.load(Ordering::SeqCst) {
                 break;
@@ -1084,6 +1093,7 @@ mod tests {
                 .count()
         };
         let before = reads(&r);
+        let written = Instant::now();
         r.queue
             .push(job(
                 &r,
@@ -1095,7 +1105,6 @@ mod tests {
             .unwrap();
         let reply = next(&r.replies);
         assert!(reply["ok"].is_object(), "{reply}");
-        let written = Instant::now();
         let ev = until(&r.events, |v| v["rev"] == reply["ok"]["rev"]);
         assert_eq!(
             ev["state"]["pending"],
@@ -1114,7 +1123,7 @@ mod tests {
             }
         };
         assert!(
-            written.elapsed() >= Duration::from_millis(2900),
+            written.elapsed() >= Duration::from_millis(3000),
             "not before settle_ms"
         );
         assert_eq!(settled["state"]["zone"]["area"]["pan"], clamped);
@@ -1128,6 +1137,11 @@ mod tests {
 
     /// A worker over one fake device, not started.
     fn worker_of(model: &str) -> Worker {
+        worker_timed(model, fast()).0
+    }
+
+    /// [`worker_of`] on the tier periods of `timing`, with its bus.
+    fn worker_timed(model: &str, timing: Timing) -> (Worker, Arc<FakeBus>) {
         let bus = Arc::new(FakeBus::new(&[model]).unwrap());
         let found = bus.scan().remove(0);
         let entry = found.model.unwrap();
@@ -1136,12 +1150,151 @@ mod tests {
             plug: 1,
             found,
             model: entry,
-            bus,
+            bus: bus.clone(),
             table: Arc::new(Table::new("test")),
             queue: DeviceQueue::new(),
-            timing: fast(),
+            timing,
         };
-        Worker::new(&p, cam)
+        (Worker::new(&p, cam), bus)
+    }
+
+    /// The fast timing with the real 60 s tier, so that only a settle read can end `pending`
+    /// of a leaf in a 60 s group within a test.
+    fn slow_minute() -> Timing {
+        Timing {
+            minute: Duration::from_secs(60),
+            ..fast()
+        }
+    }
+
+    /// Makes `leaf` pending with `value`, its bound started `ago`.
+    fn pending_since(w: &mut Worker, leaf: &str, value: Value, ago: Duration) {
+        let setting = w.desc.settings[leaf].clone();
+        w.pending
+            .written(&setting, leaf, value, None, Some(Instant::now() - ago));
+    }
+
+    fn reads(ops: &[Op]) -> usize {
+        ops.iter().filter(|o| matches!(o, Op::Read(_))).count()
+    }
+
+    /// 5.6 "Restart" (#336 review): a `restart` write served before a settle read ends the
+    /// reads; nothing more reaches the device until the quiet time is over, because the camera
+    /// is restarting and a read would be a frame it may not take.
+    #[test]
+    fn a_restart_write_served_before_a_settle_read_ends_the_reads() {
+        let (mut w, bus) = worker_timed("fake-a", slow_minute());
+        let id = "sn:FAKEA0000001";
+        // Not started: no first read listed the leaves; nothing is unread yet.
+        w.state.unread.clear();
+        pending_since(
+            &mut w,
+            "zone.area.pan",
+            json!({"min": -20, "max": 20}),
+            Duration::from_secs(4),
+        );
+        w.queue
+            .push(Job {
+                id: RequestId::Int(1),
+                out: None,
+                conn: 2,
+                device: id.into(),
+                work: Work::Set(Patch::new().leaf("audio.enabled", true)),
+                arrived: Instant::now(),
+                stop: false,
+            })
+            .ok()
+            .unwrap();
+        let before = bus.ops(id).len();
+        w.settle();
+        let ops = bus.ops(id)[before..].to_vec();
+        assert!(
+            ops.iter()
+                .any(|o| matches!(o, Op::Apply(l, _) if l == "audio.enabled")),
+            "{ops:?}"
+        );
+        assert!(w.quiet_until.is_some());
+        assert_eq!(reads(&ops), 0, "no read during the quiet time: {ops:?}");
+        // The fake records no operation while it restarts; a read tried then fails and lists the
+        // group's leaves in `unread`.
+        assert!(
+            !w.state.unread.iter().any(|l| l.starts_with("zone.")),
+            "no read was tried: {:?}",
+            w.state.unread
+        );
+    }
+
+    /// 5.6: a leaf whose group's tier is not slower than its `settle_ms` gets no settle read
+    /// (fake-b's `led.brightness`, 1000 ms, in a group read every 100 ms here): its tier ends
+    /// `pending` in time, and an extra read would only add traffic.
+    #[test]
+    fn a_group_whose_tier_is_not_slower_than_settle_ms_gets_no_settle_read() {
+        let (mut w, bus) = worker_timed("fake-b", fast());
+        let id = "sn:FAKEB0000001";
+        pending_since(&mut w, "led.brightness", json!(3), Duration::from_secs(2));
+        let before = bus.ops(id).len();
+        w.settle();
+        assert_eq!(reads(&bus.ops(id)[before..]), 0);
+        assert!(
+            w.pending.next_settle().is_none(),
+            "declined, not asked again"
+        );
+    }
+
+    /// 5.6, 5.7 (#336 review): the camera falls asleep before `settle_ms` has passed, so the
+    /// settle read cannot run (the zone group is not readable asleep). The wake read reads the
+    /// group of every pending leaf, so `pending` ends at wake, not at the 60 s tier.
+    #[test]
+    fn a_leaf_still_pending_at_wake_is_read_by_the_wake_read() {
+        let slot = Arc::new(Mutex::new(None));
+        let hook = slot.clone();
+        let r = rig_timed(
+            "fake-a",
+            |_| {},
+            move |bus| Arc::new(AfterApplyBus(bus, hook)),
+            slow_minute(),
+        );
+        until(&r.events, |v| v["event"] == "state");
+        let id = "sn:FAKEA0000001";
+        let bus = r.bus.clone();
+        *slot.lock().unwrap() = Some(Box::new(move || {
+            bus.store(id, "zone.area.pan", json!({"min": -40, "max": 20}))
+                .unwrap();
+        }));
+        r.queue
+            .push(job(
+                &r,
+                4,
+                id,
+                Work::Set(Patch::new().leaf("zone.area.pan", json!({"min": -20, "max": 20}))),
+            ))
+            .ok()
+            .unwrap();
+        let reply = next(&r.replies);
+        let ev = until(&r.events, |v| v["rev"] == reply["ok"]["rev"]);
+        assert_ne!(ev["state"]["pending"], json!({}), "{ev}");
+        r.bus.sleep(id).unwrap();
+        until(&r.events, |v| v["state"]["asleep"] == true);
+        std::thread::sleep(Duration::from_millis(3500));
+        r.bus.wake(id).unwrap();
+        let woke = Instant::now();
+        let settled = loop {
+            let left = Duration::from_secs(5).saturating_sub(woke.elapsed());
+            let line = r
+                .events
+                .recv_timeout(left)
+                .expect("pending ends at the wake read, not at the 60 s tier");
+            let v: Value = serde_json::from_str(&line).unwrap();
+            if v["event"] == "state" && v["state"]["pending"] == json!({}) {
+                break v;
+            }
+        };
+        assert_eq!(settled["state"]["asleep"], false);
+        assert_eq!(
+            settled["state"]["zone"]["area"]["pan"],
+            json!({"min": -40, "max": 20})
+        );
+        stop(r);
     }
 
     /// 4.1 rule 5 (decision of 2026-11-13): a value in `pending` counts as the current value
