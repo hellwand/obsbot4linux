@@ -86,6 +86,16 @@ pub fn inactive_control(id: u32) -> CameraError {
     ))
 }
 
+/// The error of a failed control write (`VIDIOC_S_CTRL`): EACCES is the kernel refusing an
+/// inactive control ([`inactive_control`]); any other errno as [`from_errno`]. EACCES when the
+/// node is opened stays an I/O error (a permission problem), through `from_errno`.
+pub fn ctrl_set_error(id: u32, e: Errno) -> CameraError {
+    match e {
+        Errno::EACCES => inactive_control(id),
+        other => from_errno(other),
+    }
+}
+
 fn from_io(e: std::io::Error) -> CameraError {
     from_errno(Errno::from_raw(e.raw_os_error().unwrap_or(0)))
 }
@@ -216,10 +226,7 @@ impl Transport for UsbTransport {
     fn ctrl_set(&mut self, id: u32, value: i32) -> Result<()> {
         self.with_node(|f| {
             let mut c = V4l2Control { id, value };
-            unsafe { vidioc_s_ctrl(f.as_raw_fd(), &mut c) }.map_err(|e| match e {
-                Errno::EACCES => inactive_control(id),
-                other => from_errno(other),
-            })?;
+            unsafe { vidioc_s_ctrl(f.as_raw_fd(), &mut c) }.map_err(|e| ctrl_set_error(id, e))?;
             Ok(())
         })
     }
@@ -306,6 +313,23 @@ mod tests {
         }
         assert!(matches!(from_errno(Errno::EIO), CameraError::Io(_)));
         assert!(matches!(from_errno(Errno::EACCES), CameraError::Io(_)));
+        // a control write refused by the kernel is a refusal; other errnos keep their kind
+        assert!(matches!(
+            ctrl_set_error(0x009a_090a, Errno::EACCES),
+            CameraError::Rejected(m) if m.contains("0x009a090a")
+        ));
+        assert!(matches!(
+            ctrl_set_error(0x009a_090a, Errno::EIO),
+            CameraError::Io(_)
+        ));
+        assert!(matches!(
+            ctrl_set_error(0x009a_090a, Errno::ENODEV),
+            CameraError::Gone
+        ));
+        assert!(matches!(
+            ctrl_set_error(0x009a_090a, Errno::EPERM),
+            CameraError::Io(_)
+        ));
         let mut t = UsbTransport::new("/nonexistent/obsbot-video0", 2, "/nonexistent/usb");
         let start = Instant::now();
         assert_eq!(t.xu_len(2), Err(CameraError::Gone));

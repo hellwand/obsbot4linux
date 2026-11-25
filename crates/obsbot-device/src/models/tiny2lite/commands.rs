@@ -368,7 +368,8 @@ pub fn hand_area_reset(seqs: [u16; 4]) -> [[u8; FRAME_SIZE]; 4] {
         .try_into()
         .expect("four ids, four seqs")
 }
-/// Whether the hand tracker may pan (`0x2344`).
+/// Whether the hand tracker may pan (`0x2344`). No caller since PX-U-5 (the camera did not
+/// honour it); kept with its byte-guard rows as the carried-over bytes of that frame.
 pub fn hand_pan(on: bool, seq: u16) -> [u8; FRAME_SIZE] {
     frame(TRACKING, 0x2344, &[on as u8], seq)
 }
@@ -427,7 +428,9 @@ pub fn autofocus_mode_select(mode: AutofocusMode, seq: u16) -> [u8; FRAME_SIZE] 
 }
 /// Focus once on a point of the picture, x and y in 0..1 from the top left (receiver 2): f32 x,
 /// f32 y, u32 action 1, then the search bracket towards infinity and macro, both 100 (the
-/// camera's own default window). The camera switches to single autofocus.
+/// camera's own default window). The camera switches to single autofocus. No caller since
+/// PX-U-16 (the picture blurred instead of focusing); kept with its byte-guard rows as the
+/// carried-over bytes of that frame.
 pub fn focus_point(x: f32, y: f32, seq: u16) -> Result<[u8; FRAME_SIZE]> {
     if !(0.0..=1.0).contains(&x) || !(0.0..=1.0).contains(&y) {
         return Err(invalid("focus point x and y are 0.0-1.0"));
