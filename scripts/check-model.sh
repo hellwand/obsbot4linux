@@ -4,7 +4,7 @@
 # check-model.sh: checks one device against its own description (design spec 9.4).
 #
 #   scripts/check-model.sh --device <id> [--asleep] [--destructive] [--assume-pass]
-#                          [--results <file>]
+#                          [--observe state|<video node>] [--results <file>]
 #
 # The rows come from `obsbot4linux describe --json`: every writable enum value, both values of
 # each bool, the minimum and the maximum of each number (one row each) and the full span of
@@ -33,6 +33,20 @@
 # value, the script's own presets and views are deleted, a turn is stopped and the pose is
 # moved back. Output: one line per row and a results file (tab-separated).
 #
+# `--observe` answers the questions it can measure itself and asks only the rest. Starting the
+# script with it is the person's go for every action and asleep row (a restart or destructive
+# action still asks). A move (the pose changed by at least 1 degree or 0.05 zoom) passes only
+# when the picture moved too; another action passes when the state after it shows the change
+# (a leaf of the action's group, a preset or view list, `asleep` for sleep and wake); a stop
+# passes when the picture stays still for a second after it. With a video node (for example
+# /dev/video0) the script keeps a stream open for the whole run (which keeps the camera
+# awake) and compares frames with scripts/check-model-observe.py (python3, numpy, ffmpeg);
+# with `state` it uses the state only, and a move is asked. An asleep action row whose state
+# and picture both show no change is `ignored`. Whatever it cannot decide, and every
+# `readback:false` row (an LED, a hand gesture), it asks, after printing what it measured;
+# it never fails an awake row on its own. The measurement is written into the result
+# (`pass (observed: ...)`).
+#
 # Needs bash, jq and the command line `obsbot4linux` (or the one named by $OBSBOT4LINUX); the
 # daemon is reached as the command line reaches it ($OBSBOT4LINUX_SOCKET or the default).
 # Exit: 0 every row that ran passed; 1 a row failed or a leaf could not be restored; 2 usage;
@@ -49,10 +63,16 @@ POLL=${CHECK_MODEL_POLL:-0.2}
 # Where the person's answers come from (tests: a file with one answer per line).
 ANSWERS=${CHECK_MODEL_TTY:-/dev/tty}
 
-DEVICE="" ASLEEP=0 DESTRUCTIVE=0 ASSUME=0 RESULTS=""
+# --observe: after an action, the state counts as settled when it has not changed for QUIET
+# seconds (longer than the 5 s tier that reads the zoom of the Tiny 2 Lite) and nothing is
+# pending; at most SETTLE seconds. Tests shorten them.
+SETTLE=${CHECK_MODEL_SETTLE:-20}
+QUIET=${CHECK_MODEL_QUIET:-6}
+
+DEVICE="" ASLEEP=0 DESTRUCTIVE=0 ASSUME=0 RESULTS="" OBSERVE="" VIDEO=""
 
 usage() {
-	echo "usage: check-model.sh --device <id> [--asleep] [--destructive] [--assume-pass] [--results <file>]" >&2
+	echo "usage: check-model.sh --device <id> [--asleep] [--destructive] [--assume-pass] [--observe state|<video node>] [--results <file>]" >&2
 	exit 2
 }
 
@@ -80,6 +100,12 @@ while [ $# -gt 0 ]; do
 		RESULTS=$2
 		shift 2
 		;;
+	--observe)
+		[ $# -ge 2 ] || usage
+		OBSERVE=1
+		[ "$2" = state ] || VIDEO=$2
+		shift 2
+		;;
 	-h | --help) usage ;;
 	*)
 		echo "check-model.sh: unknown argument: $1" >&2
@@ -88,6 +114,10 @@ while [ $# -gt 0 ]; do
 	esac
 done
 [ -n "$DEVICE" ] || usage
+if [ -n "$VIDEO" ] && [ ! -c "$VIDEO" ]; then
+	echo "check-model.sh: --observe: $VIDEO is not a video device" >&2
+	exit 2
+fi
 command -v jq >/dev/null || {
 	echo "check-model.sh: jq is needed" >&2
 	exit 2
@@ -242,9 +272,59 @@ wait_asleep() {
 	done
 }
 
+# A question that only asks for the go of a row: with --observe, starting the script was it.
+go() {
+	if [ "$OBSERVE" = 1 ]; then
+		echo "  go: $1 -> yes (--observe)"
+		return 0
+	fi
+	ask "$1"
+}
+
+# --observe with a video node: a stream stays open for the whole run; ffmpeg replaces one
+# small greyscale frame five times a second, and a row copies the first one written after it
+# asked. The stream ends in finish.
+OBS_DIR="" RECORDER="" OBSERVED=""
+if [ -n "$VIDEO" ]; then
+	HELPER="$(dirname "$0")/check-model-observe.py"
+	if ! { command -v ffmpeg >/dev/null && python3 -c 'import numpy' 2>/dev/null; }; then
+		echo "check-model.sh: --observe with a video node needs ffmpeg, python3 and numpy" >&2
+		exit 2
+	fi
+	OBS_DIR=$(mktemp -d) || exit 2
+	ffmpeg -nostdin -loglevel error -f v4l2 -i "$VIDEO" -vf "fps=5,scale=320:-2,format=gray" \
+		-f image2 -update 1 -atomic_writing 1 -y "$OBS_DIR/latest.pgm" 2>"$OBS_DIR/ffmpeg.log" &
+	RECORDER=$!
+	# until finish takes over (it ends the stream too): an early exit must not leave it open
+	trap 'kill "$RECORDER" 2>/dev/null; rm -rf "$OBS_DIR"' EXIT
+fi
+
+# Copies the first frame written after the call to $OBS_DIR/$1.pgm (at most $2 s, default 5).
+grab() {
+	[ -n "$OBS_DIR" ] || return 1
+	local until=$(($(date +%s) + ${2:-5}))
+	touch "$OBS_DIR/mark"
+	until [ "$OBS_DIR/latest.pgm" -nt "$OBS_DIR/mark" ]; do
+		[ "$(date +%s)" -lt "$until" ] || return 1
+		sleep 0.1
+	done
+	cp "$OBS_DIR/latest.pgm" "$OBS_DIR/$1.pgm"
+}
+
+if [ -n "$VIDEO" ]; then
+	grab first 15 || {
+		echo "check-model.sh: --observe: no frame from $VIDEO within 15 s (is it streaming elsewhere?):" >&2
+		head -n 3 "$OBS_DIR/ffmpeg.log" >&2
+		kill "$RECORDER" 2>/dev/null
+		rm -rf "$OBS_DIR"
+		exit 2
+	}
+	echo "observe: frames from $VIDEO"
+fi
+
 # The camera must be awake for the rows; a sleeping one is woken when the person agrees.
 if [ "$(jq -r .asleep <<<"$SNAP")" = true ]; then
-	ask "$SHORT is asleep: wake it for the check?" || exit 3
+	go "$SHORT is asleep: wake it for the check?" || exit 3
 	cli "do" wake >/dev/null || exit 3
 	wait_asleep "$SLEEP_WAIT" false || {
 		echo "check-model.sh: $SHORT is still asleep after ${SLEEP_WAIT} s" >&2
@@ -483,6 +563,109 @@ stop_of() {
 	return 0
 }
 
+# --observe: the state once the leaves of group $1 and the pose no longer change: the same for
+# $QUIET s, nothing pending (at most $SETTLE s; then the last read). Leaves that change on
+# their own (a tracked person's box) do not hold it up.
+settled_state() {
+	local now until=$(($(date +%s) + SETTLE)) prev="" st part since
+	since=$(date +%s)
+	while :; do
+		st=$(full_state) || return 1
+		part=$(jq -c --arg g "$1" '(.pending // {}) as $pending | [paths(scalars) as $p
+            | ($p | map(tostring) | join(".")) as $s
+            | select($s | startswith($g) or startswith("gimbal.") or startswith("zoom."))
+            | [$s, getpath($p)]] + [$pending]' <<<"$st") || part=""
+		now=$(date +%s)
+		if [ "$part" != "$prev" ] || ! jq -e '(.pending // {}) == {}' <<<"$st" >/dev/null 2>&1; then
+			since=$now
+		elif [ $((now - since)) -ge "$QUIET" ]; then
+			break
+		fi
+		[ "$now" -lt "$until" ] || break
+		prev=$part
+		sleep "$POLL"
+	done
+	printf '%s\n' "$st"
+}
+
+# The frames' comparison (check-model-observe.py), or why there is none.
+picture() {
+	[ -n "$OBS_DIR" ] || {
+		echo "none (--observe state)"
+		return
+	}
+	if ! { [ -f "$OBS_DIR/$1.pgm" ] && grab "$2"; }; then
+		echo "none (no frame)"
+		return
+	fi
+	python3 -I "$HELPER" "$OBS_DIR/$1.pgm" "$OBS_DIR/$2.pgm" 2>&1 | head -n 1
+}
+
+# --observe: what the state and the picture show after an action, compared with the state
+# `before` (and the frame `before` grabbed then); $3 `asleep` for an asleep row. Sets OBSERVED
+# to the measurement; returns 0 when it shows the effect, 2 when neither the state nor the
+# picture changed (an asleep row records that as ignored), 1 when it cannot tell.
+observed() {
+	local action=$1 before=$2 asleep=${3:-} after group=${1%.*} paths pose pic
+	OBSERVED=""
+	case $action in
+	sleep | wake)
+		local want=false
+		[ "$action" = sleep ] && want=true
+		if wait_asleep "$SLEEP_WAIT" "$want"; then
+			OBSERVED="state: asleep $want"
+			return 0
+		fi
+		OBSERVED="state: asleep not $want within ${SLEEP_WAIT} s"
+		return 1
+		;;
+	esac
+	after=$(settled_state "$group") || {
+		OBSERVED="no state"
+		return 1
+	}
+	# the leaves of the action's group (preset -> presets) that changed, the pose aside
+	paths=$(jq -rn --argjson a "$before" --argjson b "$after" --arg g "$group" '
+        [$a, $b | del(.pending, .unread) | paths(scalars)] | unique[] as $p
+        | select(($a | getpath($p)) != ($b | getpath($p)))
+        | $p | map(tostring) | join(".")
+        | select(startswith($g) and (IN("gimbal.pan", "gimbal.tilt", "zoom.factor") | not))' |
+		head -n 3 | paste -sd ' ')
+	pose=$(jq -rn --argjson a "$before" --argjson b "$after" '
+        def d($p): (($b | getpath($p) // 0) - ($a | getpath($p) // 0)) | fabs;
+        if d(["gimbal", "pan"]) >= 1 or d(["gimbal", "tilt"]) >= 1 or d(["zoom", "factor"]) >= 0.05
+        then "\($a.gimbal.pan),\($a.gimbal.tilt),\($a.zoom.factor) -> \($b.gimbal.pan),\($b.gimbal.tilt),\($b.zoom.factor)"
+        else empty end' 2>/dev/null)
+	pic=$(picture before after)
+	# a move is seen in the picture; the pose leaves alone are the daemon's own report
+	if [ -n "$pose" ]; then
+		OBSERVED="pose $pose${paths:+; state: $paths changed}; picture: $pic"
+		[[ $pic == moved* ]] && return 0
+		return 1
+	fi
+	if [ -n "$paths" ]; then
+		OBSERVED="state: $paths changed; picture: $pic"
+		return 0
+	fi
+	# a stop asleep: a still picture says nothing (nothing moved before it either)
+	case $asleep$action in
+	asleep*.stop)
+		OBSERVED="state: no change; picture: $pic (a stop asleep: nothing to tell apart)"
+		return 1
+		;;
+	*.stop)
+		sleep 1
+		pic=$(picture after later)
+		OBSERVED="state: no change; picture 1 s after: $pic"
+		[[ $pic == still* ]] && return 0
+		return 1
+		;;
+	esac
+	OBSERVED="state: no change; picture: $pic"
+	[[ $pic == still* ]] && return 2
+	return 1
+}
+
 action_row() {
 	local action=$1 before after reply params code stop
 	local how="action (person in view)"
@@ -492,13 +675,14 @@ action_row() {
 		return
 	fi
 	stop=$(stop_of "$action")
-	if ! ask "run do $action ${params[*]}? ($NOTE; person in view)"; then
+	if ! go "run do $action ${params[*]}? ($NOTE; person in view)"; then
 		record action "$action" "${params[*]}" "not run (declined)" "" "" "$how"
 		return
 	fi
 	MOVED=1
 	[ -n "$stop" ] && TURN_STOPS+=("$stop")
 	before=$(full_state)
+	[ "$OBSERVE" = 1 ] && grab before
 	if ! reply=$(cli "do" "$action" "${params[@]}" 2>&1); then
 		code=$(errcode "$reply")
 		case $code in
@@ -507,11 +691,22 @@ action_row() {
 		esac
 		return
 	fi
-	sleep "$POLL"
+	local seen=1
+	if [ "$OBSERVE" = 1 ]; then
+		observed "$action" "$before"
+		seen=$?
+	else
+		sleep "$POLL"
+	fi
 	after=$(full_state)
 	resync_own "$after"
 	echo "  state change after do $action:"
 	diff_states "$before" "$after"
+	if [ "$seen" = 0 ]; then
+		record action "$action" "${params[*]}" "pass (observed: $OBSERVED)" "" "" "$how"
+		return
+	fi
+	[ -n "$OBSERVED" ] && echo "  observed: $OBSERVED"
 	if ask "does the camera show the effect of $action (ledger: effect column)?"; then
 		record action "$action" "${params[*]}" pass "" "" "$how"
 	else
@@ -569,7 +764,10 @@ differing_value() {
 			printf '%s\n' "$value"
 			return 0
 		fi
-	done < <(values_of "$path"; mid_of "$path")
+	done < <(
+		values_of "$path"
+		mid_of "$path"
+	)
 	return 1
 }
 
@@ -606,7 +804,7 @@ ensure_own() {
 
 # An asleep row: sleep, write, wake, look for the value (spec 9.4 `--asleep`).
 asleep_row() {
-	local kind=$1 name=$2 value="" reply code stop="" how params
+	local kind=$1 name=$2 value="" reply code stop="" how params before="" seen=1
 	if [ "$kind" = setting ]; then
 		how=$(how_of "$name")
 		if cannot_restore "$name"; then
@@ -638,7 +836,7 @@ asleep_row() {
 			record asleep "$name" - "not run: no item of its own (none is free or saved)" "" "" "$how"
 			return
 		fi
-		ask "asleep row: sleep, do $name $value${stop:+, then $stop}, wake. $NOTE; person in view. Run it?" || {
+		go "asleep row: sleep, do $name $value${stop:+, then $stop}, wake. $NOTE; person in view. Run it?" || {
 			record asleep "$name" "$value" "not run (declined)" "" "" "$how"
 			return
 		}
@@ -650,6 +848,10 @@ asleep_row() {
 		value="${params[*]}"
 		MOVED=1
 		[ -n "$stop" ] && TURN_STOPS+=("$stop")
+		if [ "$OBSERVE" = 1 ]; then
+			before=$(full_state)
+			grab before
+		fi
 	fi
 	if ! { cli "do" sleep >/dev/null && wait_asleep "$SLEEP_WAIT" true; }; then
 		record asleep "$name" "$value" "fail: no asleep:true within ${SLEEP_WAIT} s" "" "" "$how"
@@ -677,10 +879,23 @@ asleep_row() {
 		else
 			record asleep "$name" "$value" "ignored (not shown after wake)" "" "" "$how"
 		fi
-	elif ask "after the wake: does the camera show $name $value? (person in view)"; then
-		record asleep "$name" "$value" accepted "" "" "$how"
 	else
-		record asleep "$name" "$value" "ignored (not confirmed)" "" "" "$how"
+		if [ -n "$before" ]; then
+			observed "$name" "$before" asleep
+			seen=$?
+		fi
+		if [ "$seen" = 0 ]; then
+			record asleep "$name" "$value" "accepted (observed: $OBSERVED)" "" "" "$how"
+		elif [ "$seen" = 2 ]; then
+			record asleep "$name" "$value" "ignored (observed: $OBSERVED)" "" "" "$how"
+		else
+			[ -n "$before" ] && echo "  observed: $OBSERVED"
+			if ask "after the wake: does the camera show $name $value? (person in view)"; then
+				record asleep "$name" "$value" accepted "" "" "$how"
+			else
+				record asleep "$name" "$value" "ignored (not confirmed)" "" "" "$how"
+			fi
+		fi
 	fi
 	if [ "$kind" = setting ]; then
 		restore_row "$name"
@@ -751,6 +966,11 @@ finish() {
 			bad=1
 		fi
 	done
+	if [ -n "$RECORDER" ]; then
+		kill "$RECORDER" 2>/dev/null
+		wait "$RECORDER" 2>/dev/null
+		rm -rf "$OBS_DIR"
+	fi
 	echo "results: $RESULTS"
 	[ "$bad" = 0 ] || [ "$rc" != 0 ] || rc=1
 	exit "$rc"
