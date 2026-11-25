@@ -52,11 +52,19 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   kernel refuses while the continuous autofocus is on fails as the camera's refusal with that
   reason, not as an I/O error; `do gimbal.move` with a `speed` takes speeds up to 100 °/s
   and tilts up to 80 (faster or higher, the camera did not move at all).
+- Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
+  `asleep: accepted`, `zoom.factor` `ignored`; `exposure.anti_flicker` no longer lists `auto`
+  and `power_on.start.mode` no longer `lower_body` and `hand` (never read from the camera;
+  such a value shows as `raw:<n>`); a pose-taking action refused for the pose it read names
+  that pose (#328).
 
 ### Removed
 
 - `obsbot4linux daemon`, `--direct`, `detect`, request forwarding in `watch`, and the files in
   `$XDG_STATE_HOME/obsbot4linux/` (see the exceptions below).
+- `hand pan on|off` and `focus point X Y` of 0.13 have no 1.0 command: on the camera the first
+  did not stop the hand tracking from panning and the second blurred the picture (PX-U-5,
+  PX-U-16 below).
 
 ### Fixed
 
@@ -144,7 +152,7 @@ Command map (PX-n: the exceptions after the table):
 | `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                                                             |
 | `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   |                                                                                                             |
 | `hand area-reset`                                                       | `do hand.area_reset`                                                 |                                                                                                             |
-| `hand pan\|tilt on\|off`                                                | `set hand.axes.pan=…` / `set hand.axes.tilt=…`                       |                                                                                                             |
+| `hand pan\|tilt on\|off` | `set hand.axes.tilt=…` | `hand pan` is PX-U-5 |
 | `hand return-after S`                                                   | `set hand.return_after=S`                                            |                                                                                                             |
 | `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | not read back                                                                                               |
 | `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                                                             |
@@ -162,8 +170,8 @@ Command map (PX-n: the exceptions after the table):
 | `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                                                                             |
 | `focus auto off`                                                        | `set focus.mode=manual`                                              |                                                                                                             |
 | `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                                                             |
-| `focus point X Y`                                                       | `do focus.point x=X y=Y`                                             |                                                                                                             |
-| `focus set N`                                                           | `set focus.mode=manual focus.position=N`                             | no visible effect on the Tiny 2 Lite (#99)                                                                  |
+| `focus point X Y` | – | PX-U-16 |
+| `focus set N` | `set focus.mode=manual focus.position=N` | no visible effect on the Tiny 2 Lite (#99); refused while the UVC continuous autofocus is on |
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                             |
 | `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                                                             |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | the current pose                                                                                            |
@@ -179,7 +187,7 @@ Command map (PX-n: the exceptions after the table):
 | `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        |                                                                                                             |
 | `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                    |
 | `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                                                                          |
-| `image focus V`                                                         | `set focus.mode=manual focus.position=V`                             | no visible effect on the Tiny 2 Lite (#99)                                                                  |
+| `image focus V` | `set focus.mode=manual focus.position=V` | no visible effect on the Tiny 2 Lite (#99); refused while the UVC continuous autofocus is on |
 | `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`                                                                                             |
 | `image gamma V`                                                         | –                                                                    | PX-2                                                                                                        |
 | `preset list`                                                           | `get presets`                                                        |                                                                                                             |
@@ -210,6 +218,9 @@ Exceptions:
   only speeds with a known meaning.
 - **PX-7** `auto-sleep 0`: not offered. The camera cannot store "off" together with 0 s, and
   "on with 0 s" was never recorded.
+- **PX-U-5** `hand pan on|off`: not carried over. The camera kept panning with it off.
+- **PX-U-16** `focus point X Y`: not carried over. The picture blurred instead of focusing
+  (#99).
 
 ## [0.13.2] - 2026-10-31
 
