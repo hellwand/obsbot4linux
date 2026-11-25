@@ -40,9 +40,10 @@
 # (a leaf of the action's group, a preset or view list, `asleep` for sleep and wake); a stop
 # passes when the picture stays still for a second after it. With a video node (for example
 # /dev/video0) the script keeps a stream open for the whole run (which keeps the camera
-# awake) and compares frames with scripts/check-model-observe.py (python3, numpy, ffmpeg);
-# with `state` it uses the state only, and a move is asked. An asleep action row whose state
-# and picture both show no change is `ignored`. Whatever it cannot decide, and every
+# awake), in the format the node already has (read with v4l2-ctl), and compares frames with
+# scripts/check-model-observe.py (python3, numpy, ffmpeg); with `state` it uses the state
+# only, and a move is asked. An asleep action row whose state and picture both show no
+# change is `ignored`. Whatever it cannot decide, and every
 # `readback:false` row (an LED, a hand gesture), it asks, after printing what it measured;
 # it never fails an awake row on its own. The measurement is written into the result
 # (`pass (observed: ...)`).
@@ -291,8 +292,28 @@ if [ -n "$VIDEO" ]; then
 		echo "check-model.sh: --observe with a video node needs ffmpeg, python3 and numpy" >&2
 		exit 2
 	fi
+	# The stream keeps the format the node has (the last app's), read with v4l2-ctl: ffmpeg's
+	# own default would change it, and the camera reads its frame rate back (image.frame_rate).
+	FMT=()
+	if fmt=$(v4l2-ctl -d "$VIDEO" --get-fmt-video --get-parm 2>/dev/null); then
+		size=$(sed -n 's#.*Width/Height *: *\([0-9]*\)/\([0-9]*\).*#\1x\2#p' <<<"$fmt")
+		pixel=$(sed -n "s/.*Pixel Format *: *'\([A-Z0-9]*\)'.*/\1/p" <<<"$fmt")
+		rate=$(sed -n 's/.*Frames per second: *\([0-9.]*\).*/\1/p' <<<"$fmt")
+		case $pixel in
+		MJPG) pixel=mjpeg ;;
+		YUYV) pixel=yuyv422 ;;
+		*) pixel="" ;;
+		esac
+		[ -n "$size" ] && [ -n "$pixel" ] && [ -n "$rate" ] &&
+			FMT=(-input_format "$pixel" -video_size "$size" -framerate "$rate")
+	fi
+	if [ ${#FMT[@]} -gt 0 ]; then
+		echo "observe: $VIDEO keeps its format: ${FMT[*]}"
+	else
+		echo "observe: the format of $VIDEO is unknown (v4l2-ctl): ffmpeg picks one, which the camera keeps until the next app sets its own"
+	fi
 	OBS_DIR=$(mktemp -d) || exit 2
-	ffmpeg -nostdin -loglevel error -f v4l2 -i "$VIDEO" -vf "fps=5,scale=320:-2,format=gray" \
+	nice ffmpeg -nostdin -loglevel error -f v4l2 "${FMT[@]}" -i "$VIDEO" -vf "fps=5,scale=320:-2,format=gray" \
 		-f image2 -update 1 -atomic_writing 1 -y "$OBS_DIR/latest.pgm" 2>"$OBS_DIR/ffmpeg.log" &
 	RECORDER=$!
 	# until finish takes over (it ends the stream too): an early exit must not leave it open
