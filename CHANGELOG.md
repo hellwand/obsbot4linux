@@ -5,6 +5,14 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A setting or action that the camera ignores while asleep (on the Tiny 2 Lite the
+  pose-taking actions such as `preset.save`, `view.save` and `power_on.use_current`) is
+  refused with `asleep` also when the camera fell asleep since the daemon's last status read;
+  the daemon reads `asleep` right before such a request. Before, the action read the sleep
+  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0" (#328).
+
 ## [1.0.0-rc.1] - 2026-11-25
 
 This is a release candidate: the maintainers verify every row of the parity table on it before
