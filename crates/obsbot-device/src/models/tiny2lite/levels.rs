@@ -403,7 +403,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "do:gimbal.move",
         Level::Captured,
-        "capture 18 (`0x6444`); measured 2026-10-25; measured 2026-10-31 (#98: speed 1, 5, 100 °/s; tilt 80, pan 145); measured 2026-11-25 (CAM-17: 90 °/s, pan only and tilt only)",
+        "capture 18 (`0x6444`); measured 2026-10-25; measured 2026-10-31 (#98: speed 1, 5, 100 °/s; tilt 80, pan 145); measured 2026-11-25 (CAM-17: 90 °/s, pan only and tilt only arrive; tilt 89 at 90 °/s and 180 °/s to tilt 0 do not move)",
     ),
     row(
         "do:gimbal.stop",
@@ -490,8 +490,6 @@ pub const LEVELS: &[Row] = &[
     row("hand.area.tilt#order", Level::None, "none"),
     row("zone.area.pan#order", Level::None, "none"),
     row("zone.area.tilt#order", Level::None, "none"),
-    row("do:gimbal.move.speed@max", Level::None, "none"),
-    row("do:gimbal.move#speed_near_tilt_limit", Level::None, "none"),
     row("do:zoom.move.speed=slow", Level::None, "none"),
     row("do:zoom.move.speed=fast", Level::None, "none"),
     row("power_on.start.mode=static", Level::None, "none"),

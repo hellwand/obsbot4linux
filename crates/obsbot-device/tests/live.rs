@@ -17,7 +17,7 @@ use obsbot_device::contract::{Bus, Camera, CameraError, Ctx, Found, Need};
 use obsbot_device::family::link::{Link, Timing, process_sequence};
 use obsbot_device::models::tiny2lite::description::SETTLE_MS;
 use obsbot_device::models::tiny2lite::model::SELECTORS;
-use obsbot_device::models::tiny2lite::{decode, plan, send_table};
+use obsbot_device::models::tiny2lite::{act, decode, plan, send_table};
 use obsbot_device::transport::checked::Checked;
 use obsbot_device::transport::usb::UsbTransport;
 use obsbot_proto::{
@@ -310,26 +310,28 @@ impl Drop for Guard {
     fn drop(&mut self) {
         // nothing here may panic: a panic while a failed test unwinds aborts the run
         let cam = self.cam.as_mut();
-        if self.awake && read_leaf(cam, "asleep").ok() == Some(json!(true)) {
-            if let Err(e) = act(cam, "wake", json!({}), &State::new(true)) {
-                eprintln!("WARNING: the camera is asleep and did not take `wake`: {e}");
+        let awake = self.awake;
+        let wake = |cam: &mut dyn Camera, why: &str| {
+            if awake {
+                wake_up(cam, why);
             }
-            if until_asleep_is(cam, false).is_none() {
-                eprintln!("WARNING: the camera did not wake within 20 s");
-            }
-        }
+        };
+        wake(cam, "putting back");
         for _ in 0..2 {
             if put_back(cam, &self.start).is_empty() {
                 break;
             }
         }
+        wake(cam, "checking what was put back");
         for (leaf, now) in moved(cam, &self.start) {
             eprintln!(
-                "WARNING: {leaf} not put back: it reads {now}, {} at the start",
-                self.start[&leaf]
+                "WARNING: {leaf} not put back: it reads {now}, {} at the start; asleep {}",
+                self.start[&leaf],
+                asleep_text(cam)
             );
         }
         if let Some((pan, tilt)) = self.pose {
+            wake(cam, "moving the gimbal back");
             let back = json!({"pan": pan, "tilt": tilt});
             if let Err(e) = act(cam, "gimbal.move", back, &State::new(true)) {
                 eprintln!("WARNING: the gimbal not moved back: {e}");
@@ -338,11 +340,40 @@ impl Drop for Guard {
             match read_pose(cam) {
                 Some((p, t)) if (p - pan).abs() <= 1.0 && (t - tilt).abs() <= 1.0 => {}
                 now => eprintln!(
-                    "WARNING: the gimbal reads {now:?}, not pan {pan} tilt {tilt} as at the start"
+                    "WARNING: the gimbal reads {now:?}, not pan {pan} tilt {tilt} as at the \
+                     start; asleep {}",
+                    asleep_text(cam)
                 ),
             }
         }
     }
+}
+
+/// `asleep` as the status reads it now, for a FAIL or WARNING line: the camera falls asleep
+/// about 10 s after a wake while no video stream is open (CAM-36), and asleep it ignores some
+/// writes and turns the gimbal down.
+fn asleep_text(cam: &mut dyn Camera) -> String {
+    match read_leaf(cam, "asleep") {
+        Ok(v) => v.to_string(),
+        Err(e) => format!("unread ({e})"),
+    }
+}
+
+/// Wakes the camera if it is asleep, saying so (`before` names the step), and waits until the
+/// status reads awake; a camera that stays asleep is a loud WARNING. Never panics (the guard
+/// calls it while a failed test unwinds). Returns whether it was asleep.
+fn wake_up(cam: &mut dyn Camera, before: &str) -> bool {
+    if read_leaf(cam, "asleep").ok() != Some(json!(true)) {
+        return false;
+    }
+    eprintln!("WARNING: the camera is asleep before {before}: waking it");
+    if let Err(e) = act(cam, "wake", json!({}), &State::new(true)) {
+        eprintln!("WARNING: the camera did not take `wake`: {e}");
+    }
+    if until_asleep_is(cam, false).is_none() {
+        eprintln!("WARNING: the camera did not wake within 20 s");
+    }
+    true
 }
 
 /// Writes the `requires` values of `s` and returns what those leaves read before.
@@ -552,7 +583,10 @@ fn live_cam_23_the_u_rows_that_read_back() {
         match write_and_watch(cam, leaf, value) {
             Ok(lag) => println!("pass {leaf} = {value} after {} ms", lag.as_millis()),
             Err(last) => {
-                println!("FAIL {leaf} = {value}: reads {last}");
+                println!(
+                    "FAIL {leaf} = {value}: reads {last}; asleep {}",
+                    asleep_text(cam)
+                );
                 failed.push(format!("{leaf} = {value}"));
             }
         }
@@ -585,7 +619,10 @@ fn live_cam_16_an_area_wholly_beyond_the_stored_one() {
             match write_and_watch(cam, leaf, &v) {
                 Ok(_) => println!("pass {leaf} = {v}"),
                 Err(last) => {
-                    println!("FAIL {leaf} = {v}: reads {last}");
+                    println!(
+                        "FAIL {leaf} = {v}: reads {last}; asleep {}",
+                        asleep_text(cam)
+                    );
                     failed.push(format!("{leaf} = {v}"));
                 }
             }
@@ -612,6 +649,7 @@ fn live_cam_5_every_writable_leaf_reads_back_and_its_lag() {
     let desc = cam.description().clone();
     let mut failed = Vec::new();
     for leaf in swept(cam) {
+        wake_up(cam, &leaf);
         let s = &desc.settings[&leaf];
         let met = meet(cam, s);
         let before = read_leaf(cam, &leaf);
@@ -620,7 +658,10 @@ fn live_cam_5_every_writable_leaf_reads_back_and_its_lag() {
             Some(value) => match write_and_watch(cam, &leaf, &value) {
                 Ok(lag) => println!("pass {leaf} = {value} after {} ms", lag.as_millis()),
                 Err(last) => {
-                    println!("FAIL {leaf} = {value}: reads {last}");
+                    println!(
+                        "FAIL {leaf} = {value}: reads {last}; asleep {}",
+                        asleep_text(cam)
+                    );
                     failed.push(format!("{leaf} = {value}"));
                 }
             },
@@ -906,14 +947,15 @@ fn live_cam_17_gimbal_moves_with_speed() {
     let cam = guard.cam();
     let desc = cam.description().clone();
     let p = &desc.actions["gimbal.move"].params;
-    let tilt_max = number(&p["tilt"], "max").unwrap();
+    // with a speed, the model refuses a tilt above SPEED_TILT_MAX (U-9)
+    let tilt_max = act::SPEED_TILT_MAX;
     let speed_max = number(&p["speed"], "max").unwrap();
     let st = State::new(true);
     let mut failed = Vec::new();
     for (params, want) in [
         (
-            json!({"pan": 0, "tilt": tilt_max - 1.0, "speed": speed_max / 2.0}),
-            (Some(0.0), Some(tilt_max - 1.0)),
+            json!({"pan": 0, "tilt": tilt_max, "speed": speed_max / 2.0}),
+            (Some(0.0), Some(tilt_max)),
         ),
         (
             json!({"pan": 0, "tilt": 0, "speed": speed_max}),
@@ -928,6 +970,7 @@ fn live_cam_17_gimbal_moves_with_speed() {
             (None, Some(-10.0)),
         ),
     ] {
+        wake_up(cam, &format!("gimbal.move {params}"));
         let sent = act(cam, "gimbal.move", params.clone(), &st);
         std::thread::sleep(Duration::from_secs(4));
         let now = read_pose(cam);
@@ -935,8 +978,9 @@ fn live_cam_17_gimbal_moves_with_speed() {
         let ok =
             sent.is_ok() && now.is_some_and(|(pan, tilt)| near(pan, want.0) && near(tilt, want.1));
         println!(
-            "gimbal.move {params}: {sent:?}, pose {now:?}: {}",
-            if ok { "pass" } else { "FAIL" }
+            "gimbal.move {params}: {sent:?}, pose {now:?}: {}; asleep {}",
+            if ok { "pass" } else { "FAIL" },
+            asleep_text(cam)
         );
         if !ok {
             failed.push(params.to_string());

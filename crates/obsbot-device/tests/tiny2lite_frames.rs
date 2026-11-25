@@ -151,7 +151,8 @@ fn action_rows() -> Vec<(&'static str, Value, Vec<Frame>)> {
         ),
         (
             "gimbal.move",
-            json!({"tilt": 90, "speed": 180}),
+            // the boundaries with a speed: 100 °/s and tilt 80 (U-9)
+            json!({"tilt": 80, "speed": 100}),
             vec![framed(0x6544)],
         ),
         ("gimbal.stop", json!({}), vec![framed(0x6704)]),

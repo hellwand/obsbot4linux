@@ -50,7 +50,8 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   dropped the anti-flicker change); `exposure.time` takes multiples of 100 µs, the camera's
   step, and refuses other values instead of rounding them down; a `focus.position` that the
   kernel refuses while the continuous autofocus is on fails as the camera's refusal with that
-  reason, not as an I/O error.
+  reason, not as an I/O error; `do gimbal.move` with a `speed` takes speeds up to 100 °/s
+  and tilts up to 80 (faster or higher, the camera did not move at all).
 
 ### Removed
 
@@ -115,7 +116,7 @@ Command map (PX-n: the exceptions after the table):
 | `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10/30/50; other S is PX-6                                                                                   |
 | `zoom stop`                                                             | `do zoom.stop`                                                       |                                                                                                             |
 | `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position; the tracking stays as it is                                              |
-| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | the tracking stays as it is                                                                                 |
+| `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | S up to 100, tilt up to 80 with a speed; the tracking stays as it is                                        |
 | `gimbal stop`                                                           | `do gimbal.stop`                                                     |                                                                                                             |
 | `gimbal rate [--pan P] [--tilt T]`                                      | `do gimbal.turn [pan_speed=P] [tilt_speed=T]`                        | the CLI sends `keep:true`; the tracking stays as it is                                                      |
 | `gimbal center X Y` (hidden)                                            | –                                                                    | PX-1                                                                                                        |

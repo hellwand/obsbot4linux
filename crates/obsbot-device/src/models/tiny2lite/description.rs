@@ -44,8 +44,6 @@ pub const UNBACKED: &[(&str, &str)] = &[
     ("hand.area.tilt#order", "U-8"),
     ("zone.area.pan#order", "U-8"),
     ("zone.area.tilt#order", "U-8"),
-    ("do:gimbal.move.speed@max", "U-9"),
-    ("do:gimbal.move#speed_near_tilt_limit", "U-9"),
     ("do:zoom.move.speed=slow", "U-12"),
     ("do:zoom.move.speed=fast", "U-12"),
     ("do:focus.point", "U-16"),
@@ -568,8 +566,10 @@ pub fn description() -> Description {
                         .optional(),
                 )
                 .param(
+                    // U-9: 100 °/s arrives (#98); 180 °/s does not move the gimbal at all
+                    // (2026-11-25, CAM-17); narrowed to the measured one (spec 9.3)
                     "speed",
-                    Setting::number("Speed", 1.0, 180.0)
+                    Setting::number("Speed", 1.0, 100.0)
                         .unit(Unit::DegPerSecond)
                         .precision(0.1)
                         .optional(),
@@ -977,8 +977,8 @@ mod tests {
         }
         let rows: BTreeSet<&str> = UNBACKED.iter().map(|(_, r)| *r).collect();
         let want: BTreeSet<&str> = [
-            "U-4", "U-5", "U-6", "U-7", "U-8", "U-9", "U-12", "U-16", "U-18", "U-19", "U-20",
-            "U-23", "U-25", "U-26",
+            "U-4", "U-5", "U-6", "U-7", "U-8", "U-12", "U-16", "U-18", "U-19", "U-20", "U-23",
+            "U-25", "U-26",
         ]
         .into();
         assert_eq!(rows, want);

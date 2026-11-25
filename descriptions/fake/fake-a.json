@@ -1427,7 +1427,7 @@
           "readback": true,
           "no_effect": false,
           "min": 1,
-          "max": 180,
+          "max": 100,
           "unit": "deg/s",
           "precision": 0.1,
           "optional": true
