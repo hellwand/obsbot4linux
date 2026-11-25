@@ -151,7 +151,7 @@ A docs-only pull request, before any W4 builder starts: the tasks name this docu
 
 ### Task w4-5 (key `w4-5-widget-r1-branch`): Widget R1 prepared
 
-**Gate:** none to prepare; the pull request opens only after the tool's `v1.0.0` (w4-13), because the `e2e` job checks out the tool at `v1.0.0`. **Repository:** `hellwand/obsbot4linux-dux`, branch `release/1.0.0` from `develop`, pushed, no pull request.
+**Gate:** none to prepare; the pull request opens only after the tool's `v1.0.0` (w4-13), because the `e2e` job checks out the tool at `v1.0.0`. **Repository:** `hellwand/obsbot4linux-dux`, branch `w4-5-widget-r1-branch` from `develop`, pushed, no pull request. It is a feature branch, not `release/1.0.0`: the rulesets on `release/*` require the `required` check on create with no bypass, so a `release/*` branch cannot exist before the tool's `v1.0.0`; the branch goes into `develop` by pull request.
 
 - [ ] **Step 1:** `plugin.json` `version` `1.0.0`; CHANGELOG: `## [1.0.0-rc.1] - 2026-11-25` becomes `## [1.0.0] - <date>` (date filled on release day), the candidate sentence replaced by the track D R1 first line ("Needs obsbot4linux 1.0 (protocol 2). Update the widget together with the tool, enable the daemon's socket once (`systemctl --user enable --now obsbot4linux.socket`) and restart the shell."), an empty `## [Unreleased]` above it; the `e2e` job's checkout of the tool `ref: v1.0.0` instead of `rebuild`, with its comment.
 - [ ] **Step 2:** `scripts/release-notes.sh HEAD v1.0.0` finds the section; the JS and QML checks pass locally. Rebase onto `develop` again if `develop` moves (M2 fixes).
@@ -216,7 +216,7 @@ A docs-only pull request, before any W4 builder starts: the tasks name this docu
 
 **Gate:** owner go (the same release day). **Repository:** the widget's.
 
-- [ ] **Step 1:** Rebase `release/1.0.0` (w4-5) onto `develop`, fill the date, open the "Release 1.0.0" pull request into `develop`; green (its `e2e` job now finds the tool's tag `v1.0.0`); land fast-forward.
+- [ ] **Step 1:** Rebase `w4-5-widget-r1-branch` (w4-5) onto `develop`, fill the date (check the `YYYY-MM-DD` placeholder by hand: `scripts/release-notes.sh` does not read it), re-sync `tests/fixtures` from the tool's `v1.0.0` on `develop` first if they differ from `1.0.0-rc.1` (the `e2e` job compares them), open the "Release 1.0.0" pull request into `develop`; green (its `e2e` job now finds the tool's tag `v1.0.0`); land fast-forward.
 - [ ] **Step 2:** A pull request from `develop` into `main` (its head is the release commit); green; fast-forward `main`; the release workflow's dry run; signed tag `v1.0.0`; check the published release.
 - [ ] **Step 3:** `dms plugins update` on the desktop moves the plugin from `develop` to `main` at `v1.0.0` (the plugin's clone switched to `main` first), shell reloaded, the widget shows the camera. Then the plugin registry entry (Q3).
 
