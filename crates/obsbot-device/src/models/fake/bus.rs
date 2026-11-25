@@ -184,6 +184,16 @@ impl FakeBus {
         }
     }
 
+    /// Stores `value` at `leaf`, as the camera's own app may store a value that the model
+    /// reads but does not write (a start mode set in the vendor app). Not on the test-control
+    /// socket: for in-process tests.
+    pub fn store(&self, id: &str, leaf: &str, value: Value) -> Result<(), String> {
+        lock(&*self.find(id)?)
+            .values
+            .insert(leaf.to_string(), value);
+        Ok(())
+    }
+
     /// The operations sent to the device with this id, oldest first.
     pub fn ops(&self, id: &str) -> Vec<Op> {
         self.find(id)

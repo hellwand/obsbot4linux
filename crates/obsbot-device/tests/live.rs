@@ -20,6 +20,7 @@ use obsbot_device::models::tiny2lite::model::SELECTORS;
 use obsbot_device::models::tiny2lite::{act, decode, plan, send_table};
 use obsbot_device::transport::checked::Checked;
 use obsbot_device::transport::usb::UsbTransport;
+use obsbot_proto::validate::{Fit, check_value};
 use obsbot_proto::{
     Bound, Description, Params, Setting, SettingType, State, is_valid_serial, short_id, values,
 };
@@ -186,6 +187,16 @@ fn restore(cam: &mut dyn Camera, leaf: &str, before: &Value) {
     if let Err(why) = result {
         eprintln!("WARNING: {leaf} not put back: {why}");
     }
+}
+
+/// Why `before` cannot be written back to `leaf`, or `None`: a value the camera reports but the
+/// model does not write (a start mode stored by the camera's own app) or `raw:<n>`. A test
+/// does not write such a leaf, since it could not put the owner's value back.
+fn not_restorable(cam: &dyn Camera, leaf: &str, before: &Value) -> Option<String> {
+    let s = &cam.description().settings[leaf];
+    check_value(s, before, Fit::Write)
+        .err()
+        .map(|(_, why)| format!("it reads {before}, which cannot be written back ({why})"))
 }
 
 /// The leaves a [`Guard`] puts back: every writable leaf with a readback that the sweeps
@@ -558,9 +569,10 @@ fn write_and_watch(cam: &mut dyn Camera, leaf: &str, value: &Value) -> Result<Du
 #[test]
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_23_the_u_rows_that_read_back() {
-    // U-4 (offset bounds), U-6 (hand return time), U-18 (start modes); each written, read
-    // back, restored. The lags are CAM-5 data. U-5 (hand axes) left the description (PX-U-5),
-    // and of U-18 only `normal` and `unset` stay writable (PX-U-18).
+    // U-4 (offset bounds), U-6 (hand return time); each written, read back, restored. The
+    // lags are CAM-5 data, the start-mode rows included: `normal` and `unset` are backed by
+    // capture 08 and check no U-row. U-5 (hand axes) left the description (PX-U-5), the other
+    // start modes left it too (PX-U-18). A leaf whose value cannot be written back is skipped.
     let Some((_, cam)) = camera(true) else {
         return;
     };
@@ -577,6 +589,13 @@ fn live_cam_23_the_u_rows_that_read_back() {
     ];
     let mut failed = Vec::new();
     for (leaf, value) in rows {
+        if let Some(why) = read_leaf(cam, leaf)
+            .ok()
+            .and_then(|before| not_restorable(cam, leaf, &before))
+        {
+            println!("skip {leaf} = {value}: {why}");
+            continue;
+        }
         match write_and_watch(cam, leaf, value) {
             Ok(lag) => println!("pass {leaf} = {value} after {} ms", lag.as_millis()),
             Err(last) => {
@@ -650,8 +669,19 @@ fn live_cam_5_every_writable_leaf_reads_back_and_its_lag() {
         let s = &desc.settings[&leaf];
         let met = meet(cam, s);
         let before = read_leaf(cam, &leaf);
-        match before.as_ref().ok().and_then(|b| other_value(s, b)) {
-            None => println!("skip {leaf}: it reads {before:?}"),
+        let why_not = before
+            .as_ref()
+            .ok()
+            .and_then(|b| not_restorable(cam, &leaf, b));
+        let value = match why_not {
+            Some(_) => None,
+            None => before.as_ref().ok().and_then(|b| other_value(s, b)),
+        };
+        match value {
+            None => println!(
+                "skip {leaf}: {}",
+                why_not.unwrap_or_else(|| format!("it reads {before:?}"))
+            ),
             Some(value) => match write_and_watch(cam, &leaf, &value) {
                 Ok(lag) => println!("pass {leaf} = {value} after {} ms", lag.as_millis()),
                 Err(last) => {

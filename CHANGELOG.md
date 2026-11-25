@@ -56,8 +56,8 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   move at all).
 - Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
   `asleep: accepted`; `exposure.anti_flicker` no longer lists `auto` and
-  `power_on.start.mode` no longer `lower_body` and `hand` (never read from the camera; such a
-  value shows as `raw:<n>`); a pose-taking action that fails for the pose it read names that
+  `power_on.start.mode` names only `normal`, `close_up` and `unset`, the values the vendor app
+  shows (another start mode shows as `raw:<n>`); a pose-taking action that fails for the pose it read names that
   pose (#328); a zone or hand area whose new min lies above the stored max is sent max
   first, so the camera does not clamp the min to the old max.
 
@@ -68,9 +68,10 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 - `hand pan on|off` and `focus point X Y` of 0.13 have no 1.0 command: on the camera the first
   did not stop the hand tracking from panning and the second blurred the picture (PX-U-5,
   PX-U-16 below).
-- `hand tilt on|off`, `startup set --ai` with `static`, `upper_body`, `headless` or `group`,
-  and the picture settings of `startup show` have no 1.0 command: their effect on the camera
-  was never verified (PX-U-5, PX-U-18, PX-U-19 below).
+- `hand tilt on|off` and `startup set --ai` with `static`, `upper_body`, `headless` or `group`
+  have no 1.0 command: their effect on the camera was never verified (PX-U-5, PX-U-18 below).
+  The picture settings of `startup show` have none either: what most of their values mean is
+  not known (PX-U-19 below).
 
 ### Fixed
 
@@ -230,7 +231,8 @@ Exceptions:
   (#99).
 - **PX-U-18** `startup set --ai M` with M `static`, `upper_body`, `headless` or `group`: not
   carried over. Whether the camera starts in such a mode after a power cycle was never
-  verified; `normal` and `none` stay.
+  verified; `normal` and `none` stay. A start mode the vendor app does not show (`close_up`
+  is shown) reads as `raw:<n>`.
 - **PX-U-19** the picture settings of `startup show`: not carried over. Their values could not
   be read with a known meaning; `get power_on` shows the start pose, source and mode.
 

@@ -71,8 +71,7 @@ pub(crate) fn lock(dev: &Mutex<Dev>) -> MutexGuard<'_, Dev> {
 }
 
 /// A first value for every leaf with a readback: `null` where nullable, else the default,
-/// the first writable enum value (a check run can write it back), `false`, 0 clamped into the
-/// bounds, the full range, an empty list.
+/// the first enum value, `false`, 0 clamped into the bounds, the full range, an empty list.
 pub(crate) fn initial_values(desc: &Description) -> Values {
     desc.settings
         .iter()
@@ -104,7 +103,7 @@ fn sample(s: &Setting) -> Value {
     }
     match &s.kind {
         SettingType::Bool => json!(false),
-        SettingType::Enum => json!(s.writable.first().unwrap_or(&s.values[0])),
+        SettingType::Enum => json!(s.values[0]),
         SettingType::Number => number(clamp0(s, None)),
         SettingType::String => json!(""),
         SettingType::List => json!([]),

@@ -775,12 +775,8 @@
       "asleep": "accepted",
       "no_effect": false,
       "values": [
-        "static",
         "normal",
-        "upper_body",
         "close_up",
-        "headless",
-        "group",
         "unset"
       ],
       "writable": [
