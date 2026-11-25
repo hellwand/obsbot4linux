@@ -161,8 +161,7 @@ fn the_recorded_camera_is_listed_and_read_through_the_daemon() {
     let d = &devices[0];
     assert_eq!(d["id"], ID, "the serial query answered at plug-in (5.5)");
     assert_eq!(d["model"], "tiny2lite");
-    // Stage W3 sets the model to `tested` (spec 8.8); its pull request changes this line.
-    assert_eq!(d["support"], "untested", "spec 8.8: untested until W3");
+    assert_eq!(d["support"], "tested", "spec 8.8: tested from W3 on");
     assert_eq!(d["firmware"], "6.2.7.4", "capture 01");
     assert_eq!(d["usb"]["vendor"], "3564");
     assert_eq!(d["usb"]["product"], "fef9");
@@ -203,8 +202,10 @@ fn reading_writes_only_the_preset_list_rewind() {
     let (code, out, err) = h.cli(&["status"]);
     assert_eq!(code, 0, "{err}");
     assert!(out.contains("tiny2lite"), "{out}");
-    // Stage W3 sets the model to `tested` (spec 8.8); its pull request changes this line.
-    assert!(out.contains("untested"), "{out}");
+    assert!(
+        !out.contains("untested"),
+        "human output names no level for a tested model (8.6): {out}"
+    );
     assert!(out.contains("…0001"), "the shortened id: {out}");
     assert_eq!(h.writes(), [], "a status reads and writes nothing");
 }

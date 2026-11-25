@@ -12,9 +12,9 @@ socket unit must be enabled.
 
 ## Supported cameras
 
-| Model              | USB         | Support  | Firmware tested |
-| ------------------ | ----------- | -------- | --------------- |
-| OBSBOT Tiny 2 Lite | `3564:fef9` | untested | –               |
+| Model              | USB         | Support | Firmware tested |
+| ------------------ | ----------- | ------- | --------------- |
+| OBSBOT Tiny 2 Lite | `3564:fef9` | tested  | 6.2.8.1         |
 
 `tested`: the maintainers test every setting and action of the model on a unit, and a release
 candidate is published before that check is finished. `untested`: built from an owner's
