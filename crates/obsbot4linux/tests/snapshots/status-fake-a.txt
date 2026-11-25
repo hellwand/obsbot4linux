@@ -39,7 +39,6 @@ gimbal
 hand
   area.pan: min -150° max 150°
   area.tilt: min -70° max 90°
-  axes.pan: off
   axes.tilt: off
   move_gimbal: –
   return: –

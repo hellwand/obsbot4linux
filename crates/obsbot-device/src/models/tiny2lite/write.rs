@@ -210,10 +210,6 @@ pub fn apply(
             let f = cmd::hand_side(s, link.seq());
             link.send(FRAMED, &f, ctx)
         }
-        "hand.axes.pan" => {
-            let f = cmd::hand_pan(boolean(leaf, v)?, link.seq());
-            link.send(FRAMED, &f, ctx)
-        }
         "hand.axes.tilt" => {
             let f = cmd::hand_tilt(boolean(leaf, v)?, link.seq());
             link.send(FRAMED, &f, ctx)

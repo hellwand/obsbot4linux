@@ -386,10 +386,10 @@ const ROWS: &[Row] = &[
         Act("hand.area_reset", "{}"),
     ),
     row(
-        "hand pan on|off",
+        "hand pan on|off (PX-U-5)",
         &["set", "hand.axes.pan=on"],
-        0,
-        Apply(&[("hand.axes.pan", "true")]),
+        2,
+        Nothing,
     ),
     row(
         "hand tilt on|off",
@@ -513,10 +513,10 @@ const ROWS: &[Row] = &[
         Apply(&[("focus.mode", "\"single\"")]),
     ),
     row(
-        "focus point X Y",
+        "focus point X Y (PX-U-16)",
         &["do", "focus.point", "x=0.5", "y=0.5"],
-        0,
-        Act("focus.point", r#"{"x":0.5,"y":0.5}"#),
+        2,
+        Nothing,
     ),
     row(
         "focus set N",

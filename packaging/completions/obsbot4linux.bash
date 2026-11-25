@@ -23,7 +23,6 @@ _obsbot4linux_values() {
         'gestures.target_lock') REPLY='false off on true' ;;
         'gestures.zoom') REPLY='false off on true' ;;
         'gimbal.invert') REPLY='false off on true' ;;
-        'hand.axes.pan') REPLY='false off on true' ;;
         'hand.axes.tilt') REPLY='false off on true' ;;
         'hand.move_gimbal') REPLY='false off on true' ;;
         'hand.side') REPLY='left right' ;;
@@ -49,7 +48,6 @@ _obsbot4linux_values() {
 _obsbot4linux_params() {
     case $1 in
         'factory_reset') REPLY='confirm=' ;;
-        'focus.point') REPLY='x= y=' ;;
         'gimbal.move') REPLY='pan= speed= tilt=' ;;
         'gimbal.turn') REPLY='pan_speed= tilt_speed=' ;;
         'power_on.set_pose') REPLY='pose=' ;;
@@ -74,11 +72,11 @@ _obsbot4linux_get_paths='
     framing framing.auto_zoom framing.offset framing.offset.x framing.offset.y framing.part
     framing.size framing.zoom_speed gestures gestures.direction_change gestures.dynamic_zoom
     gestures.target_lock gestures.zoom gestures.zoom_ratio gimbal gimbal.invert gimbal.pan
-    gimbal.tilt hand hand.area hand.area.pan hand.area.tilt hand.axes hand.axes.pan
-    hand.axes.tilt hand.move_gimbal hand.return hand.return_after hand.side image
-    image.brightness image.contrast image.frame_rate image.hue image.mirror image.saturation
-    image.sharpness image.white_balance image.white_balance.auto image.white_balance.temperature
-    led led.blink led.brightness on_air on_air.active on_air.apps pending power_on power_on.mode
+    gimbal.tilt hand hand.area hand.area.pan hand.area.tilt hand.axes hand.axes.tilt
+    hand.move_gimbal hand.return hand.return_after hand.side image image.brightness
+    image.contrast image.frame_rate image.hue image.mirror image.saturation image.sharpness
+    image.white_balance image.white_balance.auto image.white_balance.temperature led led.blink
+    led.brightness on_air on_air.active on_air.apps pending power_on power_on.mode
     power_on.settings power_on.settings.auto_exposure power_on.settings.autofocus
     power_on.settings.contrast power_on.settings.exposure_compensation power_on.settings.hue
     power_on.settings.saturation power_on.settings.sharpness power_on.settings.tracking_speed
@@ -93,17 +91,17 @@ _obsbot4linux_get_paths='
 _obsbot4linux_describe_names='
     asleep audio.auto_gain audio.enabled audio.in_sleep audio.noise_reduction audio.volume
     exposure.anti_flicker exposure.compensation exposure.gain exposure.hdr exposure.mode
-    exposure.region exposure.time factory_reset focus.mode focus.point focus.position
-    focus.region framing.auto_zoom framing.offset.x framing.offset.y framing.part framing.size
+    exposure.region exposure.time factory_reset focus.mode focus.position focus.region
+    framing.auto_zoom framing.offset.x framing.offset.y framing.part framing.size
     framing.zoom_speed gestures.direction_change gestures.dynamic_zoom gestures.target_lock
     gestures.zoom gestures.zoom_ratio gimbal.invert gimbal.move gimbal.pan gimbal.stop
-    gimbal.tilt gimbal.turn hand.area.pan hand.area.tilt hand.area_reset hand.axes.pan
-    hand.axes.tilt hand.go_return hand.move_gimbal hand.return hand.return_after
-    hand.return_clear hand.return_here hand.side image.brightness image.contrast
-    image.frame_rate image.hue image.mirror image.saturation image.sharpness
-    image.white_balance.auto image.white_balance.temperature led.blink led.brightness
-    on_air.active on_air.apps power_on.go power_on.mode power_on.set_pose
-    power_on.settings.auto_exposure power_on.settings.autofocus power_on.settings.contrast
+    gimbal.tilt gimbal.turn hand.area.pan hand.area.tilt hand.area_reset hand.axes.tilt
+    hand.go_return hand.move_gimbal hand.return hand.return_after hand.return_clear
+    hand.return_here hand.side image.brightness image.contrast image.frame_rate image.hue
+    image.mirror image.saturation image.sharpness image.white_balance.auto
+    image.white_balance.temperature led.blink led.brightness on_air.active on_air.apps
+    power_on.go power_on.mode power_on.set_pose power_on.settings.auto_exposure
+    power_on.settings.autofocus power_on.settings.contrast
     power_on.settings.exposure_compensation power_on.settings.hue power_on.settings.saturation
     power_on.settings.sharpness power_on.settings.tracking_speed
     power_on.settings.white_balance_mode power_on.settings.white_balance_temperature
@@ -122,18 +120,17 @@ _obsbot4linux_set_paths='
     exposure.region= exposure.time= focus.mode= focus.position= focus.region= framing.auto_zoom=
     framing.offset.x= framing.offset.y= framing.part= framing.size= framing.zoom_speed=
     gestures.direction_change= gestures.dynamic_zoom= gestures.target_lock= gestures.zoom=
-    gestures.zoom_ratio= gimbal.invert= hand.area.pan= hand.area.tilt= hand.axes.pan=
-    hand.axes.tilt= hand.move_gimbal= hand.return_after= hand.side= image.brightness=
-    image.contrast= image.hue= image.mirror= image.saturation= image.sharpness=
-    image.white_balance.auto= image.white_balance.temperature= led.blink= led.brightness=
-    power_on.mode= power_on.start.mode= sleep.auto.enabled= sleep.auto.seconds=
-    sleep.background= sleep.background_mirror= sleep.wake_zoom= tracking.mode= tracking.profile=
-    tracking.speed= zone.area.pan= zone.area.tilt= zone.enabled= zone.follow= zoom.factor=
-    zoom.field_of_view=
+    gestures.zoom_ratio= gimbal.invert= hand.area.pan= hand.area.tilt= hand.axes.tilt=
+    hand.move_gimbal= hand.return_after= hand.side= image.brightness= image.contrast= image.hue=
+    image.mirror= image.saturation= image.sharpness= image.white_balance.auto=
+    image.white_balance.temperature= led.blink= led.brightness= power_on.mode=
+    power_on.start.mode= sleep.auto.enabled= sleep.auto.seconds= sleep.background=
+    sleep.background_mirror= sleep.wake_zoom= tracking.mode= tracking.profile= tracking.speed=
+    zone.area.pan= zone.area.tilt= zone.enabled= zone.follow= zoom.factor= zoom.field_of_view=
 '
 
 _obsbot4linux_actions='
-    factory_reset focus.point gimbal.move gimbal.stop gimbal.turn hand.area_reset hand.go_return
+    factory_reset gimbal.move gimbal.stop gimbal.turn hand.area_reset hand.go_return
     hand.return_clear hand.return_here power_on.go power_on.set_pose power_on.use_current
     power_on.use_preset preset.delete preset.recall preset.rename preset.save sleep view.delete
     view.go view.rename view.save wake zone.go_return zone.return_here zoom.move zoom.stop

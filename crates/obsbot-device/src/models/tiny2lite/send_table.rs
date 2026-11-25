@@ -112,9 +112,8 @@ pub const ENTRIES: &[SendEntry] = &[
     framed(TRACKING, 0x20c4, "capture 11"),
     framed(TRACKING, 0x2144, "capture 11"),
     framed(TRACKING, 0x21c4, "capture 11"),
-    framed(TRACKING, 0x2344, "0.13.2 only, U-5"),
     framed(TRACKING, 0x23c4, "0.13.2 only, U-5"),
-    framed(TRACKING, 0x2444, "0.13.2 only, U-6"),
+    framed(TRACKING, 0x2444, "measured 2026-11-25 (U-6)"),
     framed(TRACKING, 0x26c4, "capture 11"),
     framed(POWER, 0x3442, "capture 12; measured 2026-10-31 (#97)"),
     framed(POWER, 0x3602, "capture 12"),
@@ -141,11 +140,10 @@ pub const ENTRIES: &[SendEntry] = &[
     framed(TRACKING, 0x24c4, "capture 11"),
     framed(TRACKING, 0x2584, "measured 2026-10-25"),
     framed(TRACKING, 0x2544, "measured 2026-10-25"),
-    framed(TRACKING, 0x25c4, "0.13.2 only, U-7"),
-    framed(TRACKING, 0x2604, "0.13.2 only, U-7"),
-    framed(TRACKING, 0x2644, "0.13.2 only, U-7"),
-    framed(TRACKING, 0x2684, "0.13.2 only, U-7"),
-    framed(POWER, 0x3582, "measured 2026-10-31 (#97); U-16"),
+    framed(TRACKING, 0x25c4, "measured 2026-11-25 (U-7)"),
+    framed(TRACKING, 0x2604, "measured 2026-11-25 (U-7)"),
+    framed(TRACKING, 0x2644, "measured 2026-11-25 (U-7)"),
+    framed(TRACKING, 0x2684, "measured 2026-11-25 (U-7)"),
     framed(TRACKING, 0x3ec4, "capture 08"),
     framed(TRACKING, 0x3e44, "capture 08"),
     framed(POWER, 0xa0c2, "capture 13"),
@@ -172,7 +170,7 @@ pub const ENTRIES: &[SendEntry] = &[
     query(TRACKING, 0x4ec4, "capture 11, 18"),
     query(TRACKING, 0x2004, "capture 11"),
     query(TRACKING, 0x2504, "capture 11"),
-    query(TRACKING, 0x2484, "0.13.2 only, U-6"),
+    query(TRACKING, 0x2484, "measured 2026-11-25 (U-6)"),
     query(TRACKING, 0x3884, "capture 08"),
     query(TRACKING, 0x3e84, "capture 08"),
     query(TRACKING, 0x1344, "capture 11, 18"),
@@ -252,14 +250,8 @@ mod tests {
             .map(|e| format!("{:?}", e.frame))
             .collect();
         let want: BTreeSet<String> = [
-            (FRAMED, TRACKING, 0x2344u16, false),
-            (FRAMED, TRACKING, 0x23c4, false),
-            (FRAMED, TRACKING, 0x2444, false),
-            (FRAMED, TRACKING, 0x2484, true),
-            (FRAMED, TRACKING, 0x25c4, false),
-            (FRAMED, TRACKING, 0x2604, false),
-            (FRAMED, TRACKING, 0x2644, false),
-            (FRAMED, TRACKING, 0x2684, false),
+            // U-5: hand.axes.tilt; the pan frame left with its leaf (PX-U-5)
+            (FRAMED, TRACKING, 0x23c4u16, false),
         ]
         .into_iter()
         .map(|(selector, receiver, command, is_query)| {

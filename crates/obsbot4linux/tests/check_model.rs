@@ -275,9 +275,15 @@ fn fake_a_passes_every_row_and_is_left_as_it_was() {
         last_two,
         ["factory_reset", "audio.enabled", "audio.enabled"]
     );
-    // asleep rows only for `asleep: unknown`; zoom.field_of_view is `ignored` (measured)
+    // asleep rows only for `asleep: unknown`; zoom.field_of_view is `ignored` and audio.volume
+    // `accepted` (measured)
     assert!(
         rows.iter()
+            .any(|r| r.kind == "asleep" && r.path == "exposure.anti_flicker")
+    );
+    assert!(
+        !rows
+            .iter()
             .any(|r| r.kind == "asleep" && r.path == "audio.volume")
     );
     assert!(
@@ -302,8 +308,8 @@ fn fake_a_passes_every_row_and_is_left_as_it_was() {
     }
     assert!(
         rows.iter()
-            .any(|r| r.kind == "asleep" && r.path == "exposure.time" && r.result == "accepted"),
-        "exposure.time asleep, after its setup: {rows:#?}"
+            .any(|r| r.kind == "asleep" && r.path == "focus.position" && r.result == "accepted"),
+        "focus.position asleep, after its setup: {rows:#?}"
     );
     // every row says which kind it is (spec 9.4)
     assert!(rows.iter().all(|r| !r.how.is_empty()), "{rows:#?}");

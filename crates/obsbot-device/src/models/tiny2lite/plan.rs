@@ -170,7 +170,6 @@ pub fn groups() -> Vec<Group> {
             &[
                 "hand.area.pan",
                 "hand.area.tilt",
-                "hand.axes.pan",
                 "hand.axes.tilt",
                 "hand.return",
             ],
@@ -237,7 +236,6 @@ pub fn touched(plan: &[Group], target: Target<'_>) -> Vec<String> {
             "view.save" | "view.rename" | "view.delete" => &["views"],
             "zone.return_here" => &["zone"],
             "hand.return_here" | "hand.return_clear" | "hand.area_reset" => &["hand"],
-            "focus.point" => &["focus"],
             "power_on.set_pose" | "power_on.use_current" => &["power_on"],
             "power_on.use_preset" => &["power_on"],
             "sleep" | "wake" => &["status"],
@@ -305,7 +303,7 @@ mod tests {
         for (path, s) in &d.settings {
             assert_eq!(seen.contains_key(path), s.readback, "{path}");
         }
-        assert_eq!(seen.len(), 82);
+        assert_eq!(seen.len(), 81);
     }
 
     #[test]

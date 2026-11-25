@@ -14,7 +14,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -37,7 +37,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -47,7 +47,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "off",
@@ -69,7 +69,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -89,8 +89,7 @@
       "values": [
         "off",
         "50hz",
-        "60hz",
-        "auto"
+        "60hz"
       ],
       "writable": [
         "off",
@@ -105,7 +104,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 18,
@@ -120,7 +119,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 1,
       "max": 64,
@@ -136,7 +135,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -146,7 +145,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "auto",
@@ -164,7 +163,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "face",
@@ -182,7 +181,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 100,
       "max": 250000,
@@ -205,7 +204,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "continuous",
@@ -246,7 +245,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "face",
@@ -264,7 +263,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -274,7 +273,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": -0.16,
       "max": 0.16,
@@ -288,7 +287,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": -0.16,
       "max": 0.16,
@@ -302,7 +301,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "normal",
@@ -322,7 +321,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "long_shot",
@@ -348,7 +347,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "slow",
@@ -368,7 +367,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -378,7 +377,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -388,7 +387,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -398,7 +397,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -408,7 +407,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 1,
       "max": 4,
@@ -423,7 +422,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -489,23 +488,13 @@
       "precision": 0.1,
       "settle_ms": 3000
     },
-    "hand.axes.pan": {
-      "type": "bool",
-      "label": "Hand tracking may pan",
-      "readonly": false,
-      "nullable": false,
-      "readback": true,
-      "asleep": "unknown",
-      "no_effect": false,
-      "settle_ms": 3000
-    },
     "hand.axes.tilt": {
       "type": "bool",
       "label": "Hand tracking may tilt",
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -552,7 +541,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "unit": "s",
@@ -565,7 +554,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "left",
@@ -583,7 +572,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -598,7 +587,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -624,7 +613,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -639,7 +628,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -649,7 +638,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -664,7 +653,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 100,
@@ -679,7 +668,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "default": true,
       "settle_ms": 3000
@@ -690,7 +679,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 2000,
       "max": 10000,
@@ -722,7 +711,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 0,
       "max": 3,
@@ -763,7 +752,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "static",
@@ -873,7 +862,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "static",
@@ -881,8 +870,6 @@
         "upper_body",
         "close_up",
         "headless",
-        "lower_body",
-        "hand",
         "group",
         "unset"
       ],
@@ -1003,7 +990,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -1013,7 +1000,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "min": 1,
       "max": 32767,
@@ -1028,7 +1015,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "black",
@@ -1047,7 +1034,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -1057,7 +1044,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": true,
       "min": 1,
       "max": 4,
@@ -1071,7 +1058,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "static",
@@ -1101,7 +1088,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "standard",
@@ -1121,7 +1108,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "values": [
         "lazy",
@@ -1276,7 +1263,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -1286,7 +1273,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "accepted",
       "no_effect": false,
       "settle_ms": 3000
     },
@@ -1324,7 +1311,7 @@
       "readonly": false,
       "nullable": false,
       "readback": true,
-      "asleep": "unknown",
+      "asleep": "ignored",
       "no_effect": false,
       "min": 1,
       "max": 4,
@@ -1372,36 +1359,6 @@
         "destructive",
         "restart"
       ]
-    },
-    "focus.point": {
-      "label": "Focus on a point",
-      "params": {
-        "x": {
-          "type": "number",
-          "label": "x",
-          "readonly": false,
-          "nullable": false,
-          "readback": true,
-          "no_effect": false,
-          "min": 0,
-          "max": 1,
-          "unit": "fraction",
-          "precision": 0.01
-        },
-        "y": {
-          "type": "number",
-          "label": "y",
-          "readonly": false,
-          "nullable": false,
-          "readback": true,
-          "no_effect": false,
-          "min": 0,
-          "max": 1,
-          "unit": "fraction",
-          "precision": 0.01
-        }
-      },
-      "asleep": "unknown"
     },
     "gimbal.move": {
       "label": "Move the gimbal",
