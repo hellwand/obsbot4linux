@@ -161,6 +161,7 @@ pub struct Replay {
     reads: BTreeMap<u8, VecDeque<[u8; FRAME_SIZE]>>,
     ctrls: BTreeMap<u32, i32>,
     inactive: BTreeSet<u32>,
+    gated: BTreeMap<u32, u32>,
     ranges: BTreeMap<u32, ControlRange>,
     usb: Option<Usb>,
     serial: Option<String>,
@@ -180,6 +181,7 @@ impl Replay {
             reads: BTreeMap::new(),
             ctrls: BTreeMap::new(),
             inactive: BTreeSet::new(),
+            gated: BTreeMap::new(),
             ranges: BTreeMap::new(),
             usb: None,
             serial: None,
@@ -242,6 +244,14 @@ impl Replay {
     /// fails as on the USB transport and changes nothing.
     pub fn inactive(mut self, id: u32) -> Replay {
         self.inactive.insert(id);
+        self
+    }
+
+    /// A control the kernel takes only while the automatic control `auto` reads 0, as uvcvideo
+    /// does for a control whose automatic counterpart is on: a write fails as on the USB
+    /// transport while `auto` is not 0 (or not recorded).
+    pub fn gated(mut self, id: u32, auto: u32) -> Replay {
+        self.gated.insert(id, auto);
         self
     }
 
@@ -358,7 +368,8 @@ impl Transport for Replay {
 
     fn ctrl_set(&mut self, id: u32, value: i32) -> Result<()> {
         self.here()?;
-        if self.inactive.contains(&id) {
+        let off = |auto: &u32| self.ctrls.get(auto) == Some(&0);
+        if self.inactive.contains(&id) || self.gated.get(&id).is_some_and(|a| !off(a)) {
             return Err(crate::transport::usb::inactive_control(id));
         }
         self.log.push(Sent::Ctrl { id, value });

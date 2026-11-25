@@ -191,6 +191,7 @@ pub const ENTRIES: &[SendEntry] = &[
     uvc(0x0098_090c, "capture 08b, 12"),
     uvc(0x0098_091a, "capture 08b, 12"),
     uvc(0x009a_090a, "capture 12"),
+    uvc(0x009a_090c, "measured 2026-11-25 (CAM-14)"),
     // the preset list rewind (8.8): the one known exception of section 2 until CAM-19
     SendEntry {
         frame: Frame::Block {

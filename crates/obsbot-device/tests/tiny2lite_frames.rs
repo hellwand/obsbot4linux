@@ -268,7 +268,12 @@ fn every_setting_at_its_boundaries_sends_exactly_its_ledger_row() {
             let (mut cam, log) = model(recorded());
             cam.apply(&leaf, &value, &Ctx::none())
                 .unwrap_or_else(|e| panic!("{leaf} = {value}: {e}"));
-            assert_eq!(commands(&log), ledger_row(&leaf), "{leaf} = {value}");
+            let mut want = ledger_row(&leaf);
+            // CAM-14: `manual` and `continuous` also write the UVC continuous autofocus
+            if leaf == "focus.mode" && value != json!("single") {
+                want.push(uvc(0x009a_090c));
+            }
+            assert_eq!(commands(&log), want, "{leaf} = {value}");
         }
     }
 }

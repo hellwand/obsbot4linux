@@ -263,7 +263,16 @@ pub fn apply(
             let m = AutofocusMode::from_u8(byte(&decode::FOCUS_MODE, leaf, v)?)
                 .ok_or_else(|| wrong(leaf, v))?;
             let f = cmd::autofocus_mode_select(m, link.seq());
-            link.send(FRAMED, &f, ctx)
+            link.send(FRAMED, &f, ctx)?;
+            // the kernel takes no absolute focus while the UVC continuous autofocus is on, and
+            // the frame above does not switch it: `manual` writes it off (the camera then reads
+            // `manual` and takes `focus.position`), `continuous` on (CAM-14, measured
+            // 2026-11-25); `single` leaves it as it is
+            match v.as_str() {
+                Some("manual") => link.ctrl_set(decode::FOCUS_AUTO, 0, ctx),
+                Some("continuous") => link.ctrl_set(decode::FOCUS_AUTO, 1, ctx),
+                _ => Ok(()),
+            }
         }
         "focus.region" => {
             let face = byte(&decode::REGION, leaf, v)? == 1;
@@ -272,13 +281,12 @@ pub fn apply(
         }
         "focus.position" => {
             // the kernel gates the absolute focus on the UVC continuous autofocus, which
-            // `focus.mode` does not switch (measured 2026-11-25: refused after
-            // `focus.mode=manual` too); what does is CAM-14
+            // `focus.mode=manual` switches off (CAM-14); refused while it is on (CAM-15)
             link.ctrl_set(decode::FOCUS_ABSOLUTE, int(leaf, v)?, ctx)
                 .map_err(|e| match e {
                     CameraError::Rejected(_) => CameraError::Rejected(
                         "focus.position: the kernel takes no absolute focus while the UVC \
-                         continuous autofocus is on, and focus.mode does not switch that off"
+                         continuous autofocus is on; set focus.mode=manual first"
                             .into(),
                     ),
                     other => other,

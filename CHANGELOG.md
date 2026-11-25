@@ -50,8 +50,10 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   dropped the anti-flicker change); `exposure.time` takes multiples of 100 µs, the camera's
   step, and refuses other values instead of rounding them down; a `focus.position` that the
   kernel refuses while the continuous autofocus is on fails as the camera's refusal with that
-  reason, not as an I/O error; `do gimbal.move` with a `speed` takes speeds up to 100 °/s
-  and tilts up to 80 (faster or higher, the camera did not move at all).
+  reason, not as an I/O error, and `focus.mode=manual` switches the UVC continuous autofocus
+  off (`continuous` on) so that the kernel takes `focus.position`; `do gimbal.move` with a
+  `speed` takes speeds up to 100 °/s and tilts up to 80 (faster or higher, the camera did not
+  move at all).
 - Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
   `asleep: accepted`, `zoom.factor` `ignored`; `exposure.anti_flicker` no longer lists `auto`
   and `power_on.start.mode` no longer `lower_body` and `hand` (never read from the camera;
@@ -171,7 +173,7 @@ Command map (PX-n: the exceptions after the table):
 | `focus auto off`                                                        | `set focus.mode=manual`                                              |                                                                                                             |
 | `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                                                             |
 | `focus point X Y` | – | PX-U-16 |
-| `focus set N` | `set focus.mode=manual focus.position=N` | no visible effect on the Tiny 2 Lite (#99); refused while the UVC continuous autofocus is on |
+| `focus set N` | `set focus.mode=manual focus.position=N` | no visible effect on the Tiny 2 Lite (#99) |
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                             |
 | `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      |                                                                                                             |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | the current pose                                                                                            |
@@ -187,7 +189,7 @@ Command map (PX-n: the exceptions after the table):
 | `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        |                                                                                                             |
 | `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                    |
 | `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                                                                          |
-| `image focus V` | `set focus.mode=manual focus.position=V` | no visible effect on the Tiny 2 Lite (#99); refused while the UVC continuous autofocus is on |
+| `image focus V` | `set focus.mode=manual focus.position=V` | no visible effect on the Tiny 2 Lite (#99) |
 | `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`                                                                                             |
 | `image gamma V`                                                         | –                                                                    | PX-2                                                                                                        |
 | `preset list`                                                           | `get presets`                                                        |                                                                                                             |

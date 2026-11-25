@@ -265,7 +265,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "focus.mode",
         Level::Captured,
-        "capture 12 (focus auto); measured 2026-10-31 (#97)",
+        "capture 12 (focus auto); measured 2026-10-31 (#97); UVC focus auto: measured 2026-11-25 (CAM-14)",
     ),
     row(
         "focus.region",

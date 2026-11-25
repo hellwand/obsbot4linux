@@ -565,10 +565,13 @@ Per group:
   topic `auto`. `frame_rate` is read-only (fps).
 - `focus.mode`: `continuous|single|manual`. `focus.region`: `face|global`.
   `focus.position` 0–100, `requires` `focus.mode=manual`, `no_effect` on this model (#99).
-  The kernel refuses it (EACCES) while the camera's UVC continuous autofocus is on, and
-  `focus.mode=manual` does not switch that off (measured 2026-11-25, CAM-15); the write
-  fails with the camera's refusal and that reason (`camera`), not an I/O error. What makes it
-  writable is CAM-14.
+  The kernel refuses it (EACCES) while the camera's UVC continuous autofocus is on
+  (measured 2026-11-25, CAM-15), and the camera's focus-mode frame does not switch that
+  control. So `focus.mode=manual` sends the frame and then writes the UVC continuous
+  autofocus off, `continuous` the frame and then on; with it off the camera reads `manual`
+  and takes `focus.position` (CAM-14, measured 2026-11-25). `single` sends the frame only.
+  A refused write fails with the camera's refusal and that reason (`camera`), not an I/O
+  error.
 - `audio.enabled`: `warning: [restart]`; the camera restarts on every write, both values;
   the restart lasts about 18 s (measured; how long until the device is enumerated again and
   answers is timed in CAM-1). The write is answered once the camera accepted it, and the
@@ -610,8 +613,9 @@ Removed from the 0.13.2 output (no settable function is lost; section 9):
 - `model_info`, `digital_zoom_percent`, `sleep_images`, and the raw V4L2 fields.
 - `device` (the device path): now `video_node`. `streaming`: now `on_air`.
 
-Merged duplicates: `focus.auto` (UVC continuous autofocus) is the same camera bit as
-`focus.mode=continuous`. `audio.pickup` is `audio.volume` quantised (below 50 near, 50–84
+Merged duplicates: `focus.auto` (UVC continuous autofocus) is `focus.mode`: off reads as
+`manual`, on as `continuous` (CAM-14), and `focus.mode` writes it. `audio.pickup` is
+`audio.volume` quantised (below 50 near, 50–84
 standard, from 85 far); UIs may offer those three as volume presets.
 
 Not offered in 1.0: flipping the image, resetting the start pose, resetting the zone area.
@@ -1522,10 +1526,10 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `zone view go ID`                                                       | `do view.go id=ID`                                                   |                                                                                                                   |
 | `focus mode face\|global`                                               | `set focus.region=…`                                                 |                                                                                                                   |
 | `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                                                                                   |
-| `focus auto off` | `set focus.mode=manual` | CAM-14: UVC autofocus off reads as `manual`; `focus.mode=manual` does not open `focus.position` (CAM-15) |
+| `focus auto off` | `set focus.mode=manual` | CAM-14: writes the UVC continuous autofocus off, as 0.13 did; reads `manual` |
 | `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                                                                   |
 | `focus point X Y` | – | PX-U-16 |
-| `focus set N` | `set focus.mode=manual focus.position=N` | `no_effect` (#99); refused by the kernel while the UVC continuous autofocus is on (CAM-14, CAM-15) |
+| `focus set N` | `set focus.mode=manual focus.position=N` | `no_effect` (#99) |
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                                   |
 | `startup set --preset N` | `do power_on.use_preset slot=N` |  |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | live pose                                                                                                         |
@@ -1541,8 +1545,8 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `image backlight_compensation V` | `set exposure.compensation=V` | 1/3 EV per step, 9 = 0 EV |
 | `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                          |
 | `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                                                                                |
-| `image focus V` | `set focus.mode=manual focus.position=V` | `no_effect` (#99); refused by the kernel while the UVC continuous autofocus is on (CAM-14, CAM-15) |
-| `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`; CAM-14                                                                                           |
+| `image focus V` | `set focus.mode=manual focus.position=V` | `no_effect` (#99) |
+| `image autofocus 0\|1` | `set focus.mode=manual\|continuous` | as `focus auto` (CAM-14) |
 | `image gamma V`                                                         | –                                                                    | PX-2                                                                                                              |
 | `preset list`                                                           | `get presets`                                                        |                                                                                                                   |
 | `preset save N`                                                         | `do preset.save slot=N`                                              | live pose; no name (12.2, CAM-35)                                                                                 |
@@ -2145,8 +2149,8 @@ blocks B and C.
 | CAM-8  | answered: with the microphone off the audio interface is absent, also after a cold re-plug; on again it is back after about 20 s                       | a status-block value that follows the microphone (not read)        | `cs1-E-observations.txt`                                                                      |
 | CAM-10 | answered: a cold read of every group took 1.4 s (2.4 s after the factory reset)                                                                        |                                                                    | `cs1A-live_cam_10_*.txt`, `cs1F-live_cam_10_*.txt`                                            |
 | CAM-13 | answered: `exposure.anti_flicker` before `exposure.mode` (8.8)                                                                                         | the change back to `auto` in the losing order                      | `cs1-live_cam_13_*.txt`                                                                       |
-| CAM-14 | answered: with the UVC continuous autofocus off, `focus.mode` reads `manual` and `focus.position` becomes writable (60 read back)                       | whether `focus.mode=manual` should write the UVC control           | `cs1-E-quick-U7-U12-CAM14.txt`                                                                |
-| CAM-15 | answered: both are refused (EACCES) while their automatic control is on; `focus.mode=manual` alone does not open `focus.position`                       |                                                                    | `cs1-live_cam_15_*.txt`, `cs1-live_cam_5_*.txt`                                               |
+| CAM-14 | answered: with the UVC continuous autofocus off, `focus.mode` reads `manual` and `focus.position` becomes writable (60 read back); on, it reads `continuous`. `focus.mode=manual` and `continuous` now write that control (4.3, PR #327) |  | `cs1-E-quick-U7-U12-CAM14.txt` |
+| CAM-15 | answered: both are refused (EACCES) while their automatic control is on; the focus-mode frame alone did not open `focus.position`, so `focus.mode=manual` now also writes the UVC control off (CAM-14) |  | `cs1-live_cam_15_*.txt`, `cs1-live_cam_5_*.txt` |
 | CAM-16 | answered in part: see U-8                                                                                                                               | max first                                                          | `cs1-live_cam_16_*.txt`                                                                       |
 | CAM-17 | answered: see U-9                                                                                                                                       | the exact limits                                                   | `cs1-live_cam_17_*.txt`, `rerun-live_cam_17_*.txt`                                            |
 | CAM-18 | answered in part: after the vendor app deleted preset 1, presets 0 and 2 were unchanged. The capture holds no delete frame (only Center's read and a save into slot 1, which matches our `0x3944` layout) | which preset the second (clearing) frame addresses: needs a new capture | `cam18-presets-before.txt`, `cam18-presets-after.json`, `cam18-capture/cam18b-framed.txt` |
@@ -2295,3 +2299,4 @@ on its own.
 | 109 | 2026-11-24 | Milestones | 0.14.0 = groundwork, #47 and #61 in it, 0.15.0 and 0.16.0 after 1.0 (10.5) | 0.14.0 = groundwork; #47 and #61 in 1.0.0; research and other apps in the Backlog, no milestone | #47 and #61 are fixed in the rebuild; no camera for research | the W2/W3 cross-check |
 | 110 | 2026-11-25 | CS-1 blocks B and C in the contract | the order of `exposure.anti_flicker` and `exposure.mode` is CAM-13; `exposure.time` without a step ("the camera rounds down"); `focus.position` writable after `focus.mode=manual`; the area frames min then max (U-8 open); U-9 with one axis unmeasured | `exposure.anti_flicker` goes before `exposure.mode` (8.8); `exposure.time` has step 100 µs and refuses a time between steps; a kernel refusal of `focus.position` is the camera's refusal with its reason, and CAM-14 decides what makes it writable; the area rule measured for one direction is recorded and U-8 stays open; U-9 failed and is applied: speed 1–100 °/s, a tilt above 80 with a speed refused; new CAM-36 (field of view and zoom); the live tests put back what they wrote also when they fail (4.3, 8.8, 9.3, 14) | measured on the camera in CS-1 on 2026-11-25 (live tests `live_cam_5`, `_13`, `_15`, `_16`, `_17`, and the rerun of `_5` and `_17`) | CS-1, 2026-11-25 |
 | 111 | 2026-11-25 | CS-1 complete | the U-rows of 9.3 unbacked; `asleep` `unknown` on every leaf but `zoom.field_of_view`; `exposure.anti_flicker` with `auto`; `hand.axes.pan` and `focus.point` in the description; CAM-1 to CAM-35 open | 9.3 has a results table and 14.1 the answers with their evidence files; U-4, U-6, U-7, U-12, U-20, U-23 and U-26 are backed; `hand.axes.pan` (PX-U-5) and `focus.point` (PX-U-16) left the description, and the value `auto` of `exposure.anti_flicker` (U-25); `power_on.start.mode` names only values read from the camera; 48 leaves are `asleep: accepted` and `zoom.factor` `ignored` (CAM-2, CAM-3); CAM-34 and CAM-35 texts in 4.4 and 8.8; open: U-5 (tilt), U-8, U-18 (effect at power-on), U-19, CAM-18, CAM-19, CAM-33, CAM-36 (4.3, 4.4, 8.8, 9.1, 9.2, 9.3, 14.1) | measured on the camera and against the vendor app in CS-1 | CS-1, 2026-11-25 |
+| 112 | 2026-11-25 | `focus.mode` writes the UVC continuous autofocus | `focus.mode` sends only the camera frame `0x3442`; `focus.auto` is "the same camera bit" | `manual` also writes the UVC continuous autofocus off, `continuous` on; `single` the frame only; so `focus.position` (requires `manual`) is taken by the kernel and 0.13's `focus auto off` / `image autofocus 0` keep working (4.3, 8.8 send table, 9.1, 14.1) | CAM-14 measured 2026-11-25: off reads `manual` and makes the absolute focus writable, on reads `continuous`; the frame alone left the kernel refusing the absolute focus (CAM-15) | the coordinator, 2026-11-25 (engineering) |
