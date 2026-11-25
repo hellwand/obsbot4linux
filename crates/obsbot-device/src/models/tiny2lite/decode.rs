@@ -348,6 +348,8 @@ pub const UVC: [(&str, u32); 11] = [
 pub const ZOOM_ABSOLUTE: u32 = 0x009a_090d;
 /// UVC focus absolute (`focus.position` is written here).
 pub const FOCUS_ABSOLUTE: u32 = 0x009a_090a;
+/// UVC continuous autofocus (`focus.mode` `manual` writes it off, `continuous` on, CAM-14).
+pub const FOCUS_AUTO: u32 = 0x009a_090c;
 /// UVC power line frequency (`exposure.anti_flicker` is written here).
 pub const POWER_LINE: u32 = 0x0098_0918;
 

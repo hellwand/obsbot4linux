@@ -113,10 +113,10 @@ fn framed_leaves_send_one_frame_with_their_value() {
         ("hand.move_gimbal", json!(false), 0x04, 0x26c4, vec![0]),
         (
             "focus.mode",
-            json!("manual"),
+            json!("single"),
             0x02,
             0x3442,
-            3u32.to_le_bytes().to_vec(),
+            2u32.to_le_bytes().to_vec(),
         ),
         (
             "focus.region",
@@ -189,6 +189,42 @@ fn an_absolute_focus_the_kernel_refuses_is_a_refusal_that_names_the_cause() {
     };
     assert!(why.contains("continuous autofocus"), "{why}");
     assert!(commands(&log).is_empty(), "nothing reached the camera");
+}
+
+#[test]
+fn focus_mode_manual_switches_the_uvc_autofocus_off_so_the_absolute_focus_is_taken() {
+    // CAM-14 (measured 2026-11-25): the kernel takes no absolute focus while the UVC continuous
+    // autofocus is on (EACCES, CAM-15), and the camera's own focus-mode frame does not switch
+    // that control. With it off the camera reads `manual` and takes the absolute focus; on, it
+    // reads `continuous`. So `manual` and `continuous` write it, `single` leaves it alone.
+    let replay = recorded()
+        .ctrl(0x009a_090c, 1)
+        .gated(0x009a_090a, 0x009a_090c);
+    let (mut cam, log) = model(replay);
+    let position = |cam: &mut dyn Camera| cam.apply("focus.position", &json!(60), &Ctx::none());
+    assert!(matches!(position(&mut cam), Err(CameraError::Rejected(_))));
+    cam.apply("focus.mode", &json!("manual"), &Ctx::none())
+        .unwrap();
+    position(&mut cam).unwrap();
+    cam.apply("focus.mode", &json!("continuous"), &Ctx::none())
+        .unwrap();
+    assert!(matches!(position(&mut cam), Err(CameraError::Rejected(_))));
+    log.clear();
+    cam.apply("focus.mode", &json!("single"), &Ctx::none())
+        .unwrap();
+    assert_eq!(
+        commands(&log),
+        [framed_to(0x02, 0x3442)],
+        "single: the frame only"
+    );
+    log.clear();
+    cam.apply("focus.mode", &json!("manual"), &Ctx::none())
+        .unwrap();
+    assert_eq!(
+        commands(&log),
+        [framed_to(0x02, 0x3442), uvc(0x009a_090c)],
+        "manual: the frame, then the UVC autofocus off"
+    );
 }
 
 #[test]
