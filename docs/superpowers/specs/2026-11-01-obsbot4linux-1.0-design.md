@@ -539,8 +539,8 @@ Per group:
 - `zone.area` and `hand.area`: the model sends the min frame, then the max frame (in the
   camera's angles; for tilt the bounds swap and change sign). Measured 2026-11-25 (CAM-16): a
   range wholly below the stored one on the wire reads back as written; for a range wholly
-  above it, the min reads back as the stored max (the camera keeps min ≤ max at each frame),
-  and the max as written. So `zone.area.pan` 40..60 over −20..20 reads 20..60, and a tilt
+  above it, the min reads back as the stored max (as if the camera kept min ≤ max after each
+  frame), and the max as written. So `zone.area.pan` 40..60 over −20..20 reads 20..60, and a tilt
   −60..−40 over −30..30 reads −60..−30. Whether max first fixes such a range is U-8.
 - `hand.side`: `left|right`. `hand.area` defaults to pan −45..45, tilt −30..30.
   `hand.return_after` in seconds. `hand.move_gimbal`: `readback: false`; the camera does not
