@@ -42,13 +42,17 @@ struct Daemon {
 
 impl Daemon {
     fn start(name: &str) -> Daemon {
+        Daemon::start_with(name, FAST)
+    }
+
+    fn start_with(name: &str, timing: Timing) -> Daemon {
         let socket = common::socket(&format!("m-{name}"));
         let _ = std::fs::remove_file(&socket);
         let bus = Arc::new(FakeBus::new(&["fake-a", "fake-b", "unknown"]).expect("the fakes"));
         let mut config = Config::new(socket.clone());
         config.fake = Some(Arc::clone(&bus));
         let stop = Arc::clone(&config.stop);
-        let thread = thread::spawn(move || obsbot4linuxd::run_with(config, FAST));
+        let thread = thread::spawn(move || obsbot4linuxd::run_with(config, timing));
         let until = Instant::now() + Duration::from_secs(20);
         while UnixStream::connect(&socket).is_err() {
             assert!(!thread.is_finished(), "the fake daemon ended");
@@ -620,6 +624,53 @@ fn a_value_that_cannot_be_written_back_is_left_alone() {
         .collect();
     assert!(written.is_empty(), "{written:?}");
     assert_eq!(d.state(A)["power_on"]["start"]["mode"], "close_up");
+}
+
+/// The zoom of the pose is put back after the action rows although the state does not show
+/// that a move changed it: `zoom.move` is not followed by a read, the zoom group shows the new
+/// factor only at its next 5 s tick. Here that tick does not come during the run, so the state
+/// shows the snapshot's zoom to the end; a restore that trusted it would leave the camera
+/// zoomed in, and the run would still exit 0. With the spec's tiers the same stale state made
+/// the outcome depend on where the tick fell: a run left the camera zoomed in and passed, or
+/// named `zoom.factor` as not restored although every row passed (#347).
+#[test]
+fn the_zoom_a_move_changed_is_put_back_although_the_state_does_not_show_it_yet() {
+    const NO_FIVE_SECOND_TICK: Timing = Timing {
+        five_seconds: Duration::from_secs(3600),
+        minute: Duration::from_secs(3600),
+        ..FAST
+    };
+    let d = Daemon::start_with("zoom", NO_FIVE_SECOND_TICK);
+    let snapshot = d.state(A)["zoom"]["factor"]
+        .as_f64()
+        .expect("a zoom factor");
+    let from = d.bus.ops(A).len();
+    let (out, _) = d.check("zoom", &["--device", "fake-a", "--assume-pass"]);
+    assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    let ops = &d.bus.ops(A)[from..];
+    let zoom = |op: &Op| match op {
+        Op::Act(a, p) if a == "zoom.move" => p.get("factor").and_then(Value::as_f64),
+        Op::Apply(leaf, v) if leaf == "zoom.factor" => v.as_f64(),
+        _ => None,
+    };
+    let moved = ops
+        .iter()
+        .rposition(|op| matches!(op, Op::Act(a, _) if a == "zoom.move"))
+        .expect("the zoom.move row ran");
+    assert_ne!(
+        zoom(&ops[moved]),
+        Some(snapshot),
+        "the move changes the zoom"
+    );
+    assert_eq!(
+        ops[moved..].iter().filter_map(zoom).next_back(),
+        Some(snapshot),
+        "the camera's last zoom after the move is the snapshot's: {:?}",
+        ops[moved..]
+            .iter()
+            .filter(|op| !matches!(op, Op::Read(_)))
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

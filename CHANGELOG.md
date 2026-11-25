@@ -13,6 +13,10 @@ All notable changes to OBSBot4Linux. The format follows
   the daemon reads `asleep` right before such a request. Before, the action read the sleep
   pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0". This gap
   is a likely cause of #328, which stays open until the cause is confirmed.
+- `scripts/check-model.sh` puts the zoom back at its end whenever an action row ran, whatever the
+  state shows. Before, it trusted a state that did not yet show the zoom of `zoom.move` (the
+  zoom is read every 5 s): most runs left the camera zoomed in and exited 0, some exited 1 with
+  `not restored: zoom.factor` although every row passed (#347).
 
 ## [1.0.0-rc.1] - 2026-11-25
 
@@ -268,6 +272,7 @@ Exceptions:
   mode and the firmware version are no longer listed as missing; gestures are read back (#122).
 - `audio --help` says that every microphone change restarts the camera, not only turning it off, and
   `gimbal rate --help` says that an omitted axis is stopped (#123).
+
 ## [0.13.2] - 2026-10-31
 
 ### Fixed

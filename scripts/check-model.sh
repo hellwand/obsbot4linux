@@ -707,8 +707,9 @@ cleanup_own() {
 
 # On exit, an interrupt or a termination: every leaf written goes back to its snapshot value,
 # the last one written first; the script's own presets and views are deleted, a turn is
-# stopped, then the pose of the snapshot (spec 9.4). A leaf that does not show its snapshot
-# value afterwards is named and makes the exit code 1.
+# stopped, then the pose of the snapshot (spec 9.4), its zoom written back whatever the state
+# shows (a move's zoom shows only at its group's next read). A leaf that does not show its
+# snapshot value afterwards is named and makes the exit code 1.
 # shellcheck disable=SC2329 # run by the trap
 finish() {
 	local rc=$? i path st stop bad=0
@@ -742,6 +743,13 @@ finish() {
 		if [ "$pan" != null ] && [ "$tilt" != null ]; then
 			cli "do" gimbal.move "pan=$pan" "tilt=$tilt" >/dev/null 2>&1
 		fi
+	fi
+	# The zoom of the pose: a move (`zoom.move`, a recall, a return) changes it without the
+	# state having to show it yet (its group is read on its own tier, not after the move), so
+	# the state above cannot tell whether it is back. It is written back whatever it shows; the
+	# write reads it again.
+	if [ "$MOVED" = 1 ] && jq -e '.settings["zoom.factor"] | . != null and (.readonly | not)' <<<"$DESC" >/dev/null; then
+		restore_row zoom.factor 2>/dev/null
 	fi
 	st=$(full_state 2>/dev/null) || st=""
 	for path in "${CHANGED[@]}"; do
