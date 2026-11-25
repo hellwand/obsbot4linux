@@ -81,6 +81,8 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update
+      # scripts/check-model-observe.py's test (check_model.rs) needs numpy
+      - run: python3 -c 'import numpy' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-numpy; }
       - run: cargo test --workspace --locked
       - run: scripts/check-cli-deps.sh
       # the user units, with the binaries the tests built (no camera, no user manager)
@@ -95,6 +97,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # scripts/check-model-observe.py's test (check_model.rs) needs numpy
+      - run: python3 -c 'import numpy' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-numpy; }
       - run: |
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
           test -n "$msrv"
