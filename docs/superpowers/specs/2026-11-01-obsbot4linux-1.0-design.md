@@ -1706,12 +1706,17 @@ its own description. It replaces 0.13's `check-readback.sh`.
   date from it.
 - `--observe state|<video node>` answers the questions it can measure and asks only the
   rest; starting the script with it is the go for every action and asleep row (restart and
-  destructive rows still ask). An action passes when the state shows its change; a move (the
-  pose changed) only when the frames of the video node, compared by
-  `scripts/check-model-observe.py`, moved too; a stop when the picture stays still. An asleep
-  action whose state and picture show no change is `ignored`. `readback:false` rows and
-  whatever the measurement does not decide are asked, with the measurement printed; the
-  result names the measurement (`pass (observed: …)`). It never fails an awake row on its own.
+  destructive rows still ask). Before each action it takes a one-second baseline of the state
+  and the picture. An action passes when the state shows its change, except a gimbal or zoom
+  action; a move (the pose changed) only when the frames of the video node, compared by
+  `scripts/check-model-observe.py`, moved too and the baseline was steady; a stop only when the
+  picture moved in its baseline and stays still from a second after it until the state has
+  settled. An asleep action whose state and picture show no change is `ignored`; a pose change
+  in an asleep row counts only when a plain sleep and wake brought back the same pose and
+  picture. The video node must be the device's own and its format one the script can read and
+  keep (MJPG, YUYV), else exit 2. `readback:false` rows and whatever the measurement does not
+  decide are asked, with the measurement printed; the result names the measurement
+  (`pass (observed: …)`). It never fails an awake row on its own.
 - CI runs it against `fake-a` and `fake-b` with `--assume-pass`, which answers every
   question to the person with pass. In stage W4 the release PR maps its results to every row
   of 9.1.
