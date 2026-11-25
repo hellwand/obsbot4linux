@@ -133,31 +133,29 @@ fn a_missing_wrong_or_stray_row_fails() {
         ["led.colour: not a field, value or bound of the description"]
     );
 
-    // a mark of 9.3 on a value needs its row of level none, and a row of level none a mark
+    // a mark of 9.3 on an aspect needs its row of level none, and a row of level none a mark
     let anti = all
         .iter()
-        .position(|r| r.key == "exposure.anti_flicker=auto")
-        .expect("the value `auto` (U-25) has its row of level none");
+        .position(|r| r.key == "zone.area.pan#order")
+        .expect("the area order (U-8) has its row of level none");
     assert_eq!(all[anti].level, Level::None);
     let mut no_row: Vec<Row> = all.to_vec();
     no_row.remove(anti);
     let p = evidence::check(entry, &d, &with(no_row), false);
     assert_eq!(
         p,
-        ["exposure.anti_flicker=auto (U-25): a mark of 9.3 without a row of level none"]
+        ["zone.area.pan#order (U-8): a mark of 9.3 without a row of level none"]
     );
     let mut inherited: Vec<Row> = all.to_vec();
     inherited[anti] = Row {
-        key: "exposure.anti_flicker=auto",
+        key: "zone.area.pan#order",
         level: Level::Captured,
-        evidence: "capture 12",
+        evidence: "capture 11",
     };
     let p = evidence::check(entry, &d, &with(inherited), false);
     assert_eq!(
         p,
-        [
-            "exposure.anti_flicker=auto (U-25): a mark of 9.3, but its row has level Captured, not none"
-        ]
+        ["zone.area.pan#order (U-8): a mark of 9.3, but its row has level Captured, not none"]
     );
     let mut no_mark: Vec<Row> = all.to_vec();
     no_mark.push(Row {

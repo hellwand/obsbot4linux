@@ -195,11 +195,21 @@ pub fn live_pose(link: &mut Link, ctx: &Ctx) -> Result<Pose> {
     };
     let zoom = decode::zoom_factor(&link.query(FRAMED, TRACKING, 0x6804, ctx)?)
         .ok_or_else(|| CameraError::NoAnswer("query 0x6804: no zoom factor".into()))?;
-    Ok(Pose {
+    let pose = Pose {
         pan: tenths(yaw) as f32,
         tilt: (-tenths(pitch)) as f32 + 0.0,
         zoom: (zoom as f32).clamp(1.0, MAX_ZOOM),
-    })
+    };
+    // a pose the builders refuse is named here, so the refusal says which value it was (#328;
+    // asleep the camera turns to tilt -85)
+    if !cmd::gimbal_angles_ok(pose.pan, pose.tilt) || pose.zoom.is_nan() {
+        return Err(CameraError::Io(format!(
+            "not sent: the live pose reads pan {} tilt {} zoom {zoom}, outside pan -150..150, \
+             tilt -70..90, zoom 1.0-4.0 (asleep, the camera turns to tilt -85)",
+            pose.pan, pose.tilt
+        )));
+    }
+    Ok(pose)
 }
 
 /// The pose of a `pose` parameter, else the live pose.
@@ -394,12 +404,6 @@ pub fn act(
             for f in cmd::hand_area_reset(seqs) {
                 send(link, f)?;
             }
-        }
-        "focus.point" => {
-            let x = f32_param(params, "x").ok_or_else(|| wrong(action, "x"))?;
-            let y = f32_param(params, "y").ok_or_else(|| wrong(action, "y"))?;
-            let f = built(cmd::focus_point(x, y, link.seq()))?;
-            send(link, f)?;
         }
         "power_on.set_pose" => {
             let pose = params

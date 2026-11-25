@@ -62,7 +62,7 @@ pub const FIELD_OF_VIEW: [(&str, u8); 4] =
 pub const NOISE_REDUCTION: [(&str, u8); 4] =
     [("off", 0), ("weak", 1), ("medium", 2), ("strong", 3)];
 /// `exposure.anti_flicker`: UVC power line frequency 0–2, status 0x03 (`auto` only reads).
-pub const ANTI_FLICKER: [(&str, u8); 4] = [("off", 0), ("50hz", 1), ("60hz", 2), ("auto", 3)];
+pub const ANTI_FLICKER: [(&str, u8); 3] = [("off", 0), ("50hz", 1), ("60hz", 2)];
 /// `exposure.region` (short `03 01 <v>`, status 0x07) and `focus.region` (framed `0x3602`,
 /// status 0x0d).
 pub const REGION: [(&str, u8); 2] = [("global", 0), ("face", 1)];
@@ -74,15 +74,12 @@ pub const HAND_SIDE: [(&str, u8); 2] = [("right", 0), ("left", 1)];
 pub const FOCUS_MODE: [(&str, u8); 3] = [("continuous", 1), ("single", 2), ("manual", 3)];
 /// `power_on.start.mode`: byte 0 of the initial-state block (`0x3e84` / `0x3e44`). `hand`
 /// reads as 7 or 8 and is written as neither (U-18).
-pub const START_MODE: [(&str, u8); 10] = [
+pub const START_MODE: [(&str, u8); 7] = [
     ("static", 0xff),
     ("normal", 0x00),
     ("upper_body", 0x01),
     ("close_up", 0x02),
     ("headless", 0x03),
-    ("lower_body", 0x04),
-    ("hand", 0x07),
-    ("hand", 0x08),
     ("group", 0x09),
     ("unset", 0xfe),
 ];
@@ -410,7 +407,6 @@ pub fn hand(area: &[u8], ret: &[u8]) -> Option<Values> {
         range(f32_at(area, 0)?, f32_at(area, 1)?),
     );
     v.insert("hand.area.tilt".into(), range(tilt_min, tilt_max));
-    v.insert("hand.axes.pan".into(), flag(*area.get(22)?));
     v.insert("hand.axes.tilt".into(), flag(*area.get(23)?));
     v.insert(
         "hand.return".into(),
@@ -895,7 +891,6 @@ mod tests {
             json!({
                 "hand.area.pan": {"max": 45, "min": -45},
                 "hand.area.tilt": {"max": 30, "min": -30},
-                "hand.axes.pan": true,
                 "hand.axes.tilt": true,
                 "hand.return": null,
             })
@@ -907,7 +902,6 @@ mod tests {
         let set = hex::decode("000000000000a0410000a0c0000000000000803f00000000").unwrap();
         let v = hand(&area2, &set).unwrap();
         assert_eq!(v["hand.area.tilt"], json!({"min": -30, "max": 10}));
-        assert_eq!(v["hand.axes.pan"], json!(false));
         assert_eq!(v["hand.return"], json!({"pan": 20, "tilt": 5, "zoom": 1}));
         assert!(
             hand(&area[..23], &none).is_none(),
@@ -966,8 +960,10 @@ mod tests {
         for (byte, name) in [
             (0xffu8, "static"),
             (0xfe, "unset"),
-            (7, "hand"),
-            (8, "hand"),
+            // U-18: never read from the camera, so not named
+            (7, "raw:7"),
+            (8, "raw:8"),
+            (4, "raw:4"),
             (9, "group"),
             (2, "close_up"),
         ] {
@@ -1112,7 +1108,8 @@ mod tests {
                 assert_eq!(named(table, *byte), json!(name));
             }
         }
-        assert_eq!(byte_of(&START_MODE, "hand"), Some(7));
+        // U-18: lower_body and hand were never read from the initial state (raw:<n>)
+        assert_eq!(named(&START_MODE, 7), json!("raw:7"));
         assert_eq!(mode_pair("close_up"), Some([2, 2]));
         assert_eq!(mode_pair("off"), None);
     }

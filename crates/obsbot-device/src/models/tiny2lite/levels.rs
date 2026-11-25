@@ -95,12 +95,12 @@ pub const LEVELS: &[Row] = &[
     row(
         "framing.offset.x",
         Level::Measured,
-        "measured 2026-10-31 (#98: read back; bounds and direction not checked)",
+        "measured 2026-10-31 (#98: read back); bounds and direction: measured 2026-11-25 (U-4)",
     ),
     row(
         "framing.offset.y",
         Level::Measured,
-        "measured 2026-10-31 (#98: read back; bounds and direction not checked)",
+        "measured 2026-10-31 (#98: read back); bounds and direction: measured 2026-11-25 (U-4)",
     ),
     row(
         "framing.part",
@@ -168,9 +168,12 @@ pub const LEVELS: &[Row] = &[
         Level::Captured,
         "capture 11; measured 2026-11-25 (CAM-16)",
     ),
-    row("hand.axes.pan", Level::None, "none"),
     row("hand.axes.tilt", Level::None, "none"),
-    row("hand.return_after", Level::None, "none"),
+    row(
+        "hand.return_after",
+        Level::Measured,
+        "measured 2026-11-25 (U-6)",
+    ),
     row("hand.move_gimbal", Level::Captured, "capture 11"),
     row(
         "hand.return",
@@ -203,7 +206,11 @@ pub const LEVELS: &[Row] = &[
         Level::Captured,
         "capture 12; bounds, step and default: capture 01 (UVC range answers)",
     ),
-    row("exposure.compensation", Level::Captured, "capture 08b, 12"),
+    row(
+        "exposure.compensation",
+        Level::Captured,
+        "capture 08b, 12; EV scale: measured 2026-11-25 (U-20)",
+    ),
     row(
         "exposure.hdr",
         Level::Captured,
@@ -212,7 +219,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "exposure.anti_flicker",
         Level::Captured,
-        "capture 12; measured 2026-10-24 (0–2); order with `exposure.mode`: measured 2026-11-25 (CAM-13); value `auto`: none",
+        "capture 12; measured 2026-10-24 (0–2); order with `exposure.mode`: measured 2026-11-25 (CAM-13)",
     ),
     row(
         "image.brightness",
@@ -273,7 +280,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "audio.enabled",
         Level::Captured,
-        "capture 14; measured 2026-10-24 (restart; the interface goes and returns)",
+        "capture 14; measured 2026-10-24 (restart; the interface goes and returns); readback: measured 2026-11-25 (CAM-8: the interface stays away with the microphone off, also over a cold re-plug)",
     ),
     row(
         "audio.volume",
@@ -338,7 +345,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "power_on.start.source",
         Level::Captured,
-        "capture 08; measured 2026-10-25 (`own`); `preset_<slot>`: none",
+        "capture 08; measured 2026-10-25 (`own`); `preset_<slot>`: measured 2026-11-25 (U-26)",
     ),
     row(
         "power_on.start.pose",
@@ -348,7 +355,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "power_on.start.mode",
         Level::Captured,
-        "capture 08 (normal, unset)",
+        "capture 08 (normal, unset); written values read back: measured 2026-11-25 (U-18); close_up: measured 2026-11-25 (U-19)",
     ),
     row(
         "power_on.settings.tracking_speed",
@@ -418,7 +425,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "do:zoom.move",
         Level::Captured,
-        "capture 11 (30); measured 2026-10-31 (#98)",
+        "capture 11 (30); measured 2026-10-31 (#98); 10 and 50: measured 2026-11-25 (U-12)",
     ),
     row("do:zoom.stop", Level::Measured, "measured 2026-10-31 (#98)"),
     row("do:preset.save", Level::Captured, "capture 10"),
@@ -446,11 +453,10 @@ pub const LEVELS: &[Row] = &[
         Level::Measured,
         "measured 2026-10-25",
     ),
-    row("do:hand.area_reset", Level::None, "none"),
     row(
-        "do:focus.point",
+        "do:hand.area_reset",
         Level::Measured,
-        "measured 2026-10-31 (#97: accepted, point read back; #99: the picture blurs instead of focusing)",
+        "measured 2026-11-25 (U-7)",
     ),
     row(
         "do:power_on.set_pose",
@@ -480,25 +486,11 @@ pub const LEVELS: &[Row] = &[
         "capture 16; measured 2026-10-24",
     ),
     // marks of spec 9.3 on a value, a bound or an aspect: no backing
-    row("framing.offset.x@min", Level::None, "none"),
-    row("framing.offset.x@max", Level::None, "none"),
-    row("framing.offset.y@min", Level::None, "none"),
-    row("framing.offset.y@max", Level::None, "none"),
-    row("framing.offset.x#direction", Level::None, "none"),
-    row("framing.offset.y#direction", Level::None, "none"),
     row("hand.area.pan#order", Level::None, "none"),
     row("hand.area.tilt#order", Level::None, "none"),
     row("zone.area.pan#order", Level::None, "none"),
     row("zone.area.tilt#order", Level::None, "none"),
-    row("do:zoom.move.speed=slow", Level::None, "none"),
-    row("do:zoom.move.speed=fast", Level::None, "none"),
-    row("power_on.start.mode=static", Level::None, "none"),
-    row("power_on.start.mode=upper_body", Level::None, "none"),
-    row("power_on.start.mode=close_up", Level::None, "none"),
-    row("power_on.start.mode=headless", Level::None, "none"),
-    row("power_on.start.mode=lower_body", Level::None, "none"),
-    row("power_on.start.mode=hand", Level::None, "none"),
-    row("power_on.start.mode=group", Level::None, "none"),
+    row("power_on.start.mode#power_on_effect", Level::None, "none"),
     row(
         "power_on.settings.tracking_speed#values",
         Level::None,
@@ -529,12 +521,6 @@ pub const LEVELS: &[Row] = &[
     row("power_on.settings.saturation#values", Level::None, "none"),
     row("power_on.settings.sharpness#values", Level::None, "none"),
     row("power_on.settings.hue#values", Level::None, "none"),
-    row("exposure.compensation#ev_scale", Level::None, "none"),
-    row("audio.enabled#readback", Level::None, "none"),
-    row("exposure.anti_flicker=auto", Level::None, "none"),
-    row("power_on.start.source=preset_0", Level::None, "none"),
-    row("power_on.start.source=preset_1", Level::None, "none"),
-    row("power_on.start.source=preset_2", Level::None, "none"),
     // the camera's UVC range answers
     row("exposure.time@min", Level::Captured, "capture 01"),
     row("exposure.time@max", Level::Captured, "capture 01"),

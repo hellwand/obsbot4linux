@@ -30,30 +30,12 @@ pub const SETTLE_MS: u32 = 3000;
 /// a bound; `do:<action>`, `do:<action>.<param>=<value>`, `do:<action>.<param>@max` and
 /// `do:<action>#<aspect>` the same for actions.
 pub const UNBACKED: &[(&str, &str)] = &[
-    ("framing.offset.x@min", "U-4"),
-    ("framing.offset.x@max", "U-4"),
-    ("framing.offset.y@min", "U-4"),
-    ("framing.offset.y@max", "U-4"),
-    ("framing.offset.x#direction", "U-4"),
-    ("framing.offset.y#direction", "U-4"),
-    ("hand.axes.pan", "U-5"),
     ("hand.axes.tilt", "U-5"),
-    ("hand.return_after", "U-6"),
-    ("do:hand.area_reset", "U-7"),
     ("hand.area.pan#order", "U-8"),
     ("hand.area.tilt#order", "U-8"),
     ("zone.area.pan#order", "U-8"),
     ("zone.area.tilt#order", "U-8"),
-    ("do:zoom.move.speed=slow", "U-12"),
-    ("do:zoom.move.speed=fast", "U-12"),
-    ("do:focus.point", "U-16"),
-    ("power_on.start.mode=static", "U-18"),
-    ("power_on.start.mode=upper_body", "U-18"),
-    ("power_on.start.mode=close_up", "U-18"),
-    ("power_on.start.mode=headless", "U-18"),
-    ("power_on.start.mode=lower_body", "U-18"),
-    ("power_on.start.mode=hand", "U-18"),
-    ("power_on.start.mode=group", "U-18"),
+    ("power_on.start.mode#power_on_effect", "U-18"),
     ("power_on.settings.tracking_speed#values", "U-19"),
     ("power_on.settings.autofocus#values", "U-19"),
     ("power_on.settings.auto_exposure#values", "U-19"),
@@ -64,12 +46,6 @@ pub const UNBACKED: &[(&str, &str)] = &[
     ("power_on.settings.saturation#values", "U-19"),
     ("power_on.settings.sharpness#values", "U-19"),
     ("power_on.settings.hue#values", "U-19"),
-    ("exposure.compensation#ev_scale", "U-20"),
-    ("audio.enabled#readback", "U-23"),
-    ("exposure.anti_flicker=auto", "U-25"),
-    ("power_on.start.source=preset_0", "U-26"),
-    ("power_on.start.source=preset_1", "U-26"),
-    ("power_on.start.source=preset_2", "U-26"),
 ];
 
 /// Bounds, steps and defaults that this description holds without backing (the W0 plan's
@@ -135,9 +111,15 @@ fn raw_block(label: &str) -> Setting {
 
 /// The Tiny 2 Lite's settings (4.3), actions (4.4) and limits.
 pub fn description() -> Description {
-    let mut start_modes: Vec<&str> = MODES.to_vec();
+    // U-18: lower_body and hand were never read from the camera's initial state; such a byte
+    // shows as raw:<n>
+    let mut start_modes: Vec<&str> = MODES
+        .iter()
+        .copied()
+        .filter(|m| !["lower_body", "hand"].contains(m))
+        .collect();
     start_modes.push("unset");
-    Description::default()
+    let mut d = Description::default()
         .setting("asleep", Setting::boolean("Asleep").readonly())
         .setting("on_air.active", Setting::boolean("On air").readonly())
         .setting(
@@ -307,10 +289,6 @@ pub fn description() -> Description {
             angle_range("Hand tracking tilt range", -70.0, 90.0),
         )
         .setting(
-            "hand.axes.pan",
-            w(Setting::boolean("Hand tracking may pan")),
-        )
-        .setting(
             "hand.axes.tilt",
             w(Setting::boolean("Hand tracking may tilt")),
         )
@@ -374,8 +352,8 @@ pub fn description() -> Description {
         .setting(
             "exposure.anti_flicker",
             w(
-                Setting::enumeration("Anti-flicker", &["off", "50hz", "60hz", "auto"])
-                    .writable_only(&["off", "50hz", "60hz"]),
+                // U-25: the camera's 3 (automatic) was never seen; it shows as raw:3
+                Setting::enumeration("Anti-flicker", &["off", "50hz", "60hz"]),
             ),
         )
         .setting("image.brightness", uvc("Brightness", 0.0, 100.0, 50.0))
@@ -683,22 +661,6 @@ pub fn description() -> Description {
             Action::new("Reset the hand tracking area", Asleep::Unknown),
         )
         .action(
-            "focus.point",
-            Action::new("Focus on a point", Asleep::Unknown)
-                .param(
-                    "x",
-                    Setting::number("x", 0.0, 1.0)
-                        .unit(Unit::Fraction)
-                        .precision(0.01),
-                )
-                .param(
-                    "y",
-                    Setting::number("y", 0.0, 1.0)
-                        .unit(Unit::Fraction)
-                        .precision(0.01),
-                ),
-        )
-        .action(
             "power_on.set_pose",
             Action::new("Set the initial pose", Asleep::Unknown).param("pose", pose("Pose")),
         )
@@ -723,8 +685,73 @@ pub fn description() -> Description {
                 .warning(Warning::Destructive)
                 .warning(Warning::Restart),
         )
-        .limit("presets", 3)
+        .limit("presets", 3);
+    // CAM-2, CAM-3 (measured 2026-11-25): written while asleep, these read back after the wake;
+    // `zoom.factor` written asleep did not
+    for leaf in ASLEEP_ACCEPTED {
+        if let Some(s) = d.settings.get_mut(leaf) {
+            s.asleep = Some(Asleep::Accepted);
+        }
+    }
+    if let Some(s) = d.settings.get_mut("zoom.factor") {
+        s.asleep = Some(Asleep::Ignored);
+    }
+    d
 }
+
+/// The leaves the camera keeps when they are written while it sleeps (CAM-2, measured
+/// 2026-11-25 with `live_cam_2_cam_3_cam_22_asleep`). The others stay `unknown`, apart from
+/// `zoom.factor` and `zoom.field_of_view` (`ignored`).
+pub const ASLEEP_ACCEPTED: [&str; 48] = [
+    "audio.auto_gain",
+    "audio.in_sleep",
+    "audio.noise_reduction",
+    "audio.volume",
+    "exposure.compensation",
+    "exposure.gain",
+    "exposure.hdr",
+    "exposure.mode",
+    "exposure.region",
+    "exposure.time",
+    "focus.mode",
+    "focus.region",
+    "framing.auto_zoom",
+    "framing.offset.x",
+    "framing.offset.y",
+    "framing.part",
+    "framing.size",
+    "framing.zoom_speed",
+    "gestures.direction_change",
+    "gestures.dynamic_zoom",
+    "gestures.target_lock",
+    "gestures.zoom",
+    "gestures.zoom_ratio",
+    "gimbal.invert",
+    "hand.axes.tilt",
+    "hand.return_after",
+    "hand.side",
+    "image.brightness",
+    "image.contrast",
+    "image.hue",
+    "image.mirror",
+    "image.saturation",
+    "image.sharpness",
+    "image.white_balance.auto",
+    "image.white_balance.temperature",
+    "led.brightness",
+    "power_on.mode",
+    "power_on.start.mode",
+    "sleep.auto.enabled",
+    "sleep.auto.seconds",
+    "sleep.background",
+    "sleep.background_mirror",
+    "sleep.wake_zoom",
+    "tracking.mode",
+    "tracking.profile",
+    "tracking.speed",
+    "zone.enabled",
+    "zone.follow",
+];
 
 #[cfg(test)]
 mod tests {
@@ -741,7 +768,7 @@ mod tests {
     /// `available`, `pending` and `unread`) and every action of 4.4, and nothing else.
     #[test]
     fn it_has_exactly_the_paths_and_actions_of_the_spec() {
-        const LEAVES: [&str; 84] = [
+        const LEAVES: [&str; 83] = [
             "asleep",
             "audio.auto_gain",
             "audio.enabled",
@@ -774,7 +801,6 @@ mod tests {
             "gimbal.tilt",
             "hand.area.pan",
             "hand.area.tilt",
-            "hand.axes.pan",
             "hand.axes.tilt",
             "hand.move_gimbal",
             "hand.return",
@@ -827,9 +853,8 @@ mod tests {
             "zoom.factor",
             "zoom.field_of_view",
         ];
-        const ACTIONS: [&str; 27] = [
+        const ACTIONS: [&str; 26] = [
             "factory_reset",
-            "focus.point",
             "gimbal.move",
             "gimbal.stop",
             "gimbal.turn",
@@ -976,11 +1001,9 @@ mod tests {
             assert!(row.starts_with("U-"), "{key}: {row}");
         }
         let rows: BTreeSet<&str> = UNBACKED.iter().map(|(_, r)| *r).collect();
-        let want: BTreeSet<&str> = [
-            "U-4", "U-5", "U-6", "U-7", "U-8", "U-12", "U-16", "U-18", "U-19", "U-20", "U-23",
-            "U-25", "U-26",
-        ]
-        .into();
+        // CS-1 (2026-11-25) settled the others: kept and measured, or removed (PX-U-5, PX-U-16,
+        // U-25) or narrowed (U-9)
+        let want: BTreeSet<&str> = ["U-5", "U-8", "U-18", "U-19"].into();
         assert_eq!(rows, want);
     }
 

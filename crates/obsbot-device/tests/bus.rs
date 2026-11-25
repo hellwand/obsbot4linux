@@ -68,7 +68,7 @@ fn opening_builds_the_model_and_sends_nothing() {
     let found = bus.scan();
     // /dev/video2 does not exist here: opening must not touch it
     let camera = bus.open(&found[0]).unwrap();
-    assert_eq!(camera.description().settings.len(), 84);
+    assert_eq!(camera.description().settings.len(), 83);
     assert!(!camera.send_table().entries.is_empty());
 }
 

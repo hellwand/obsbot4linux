@@ -50,7 +50,6 @@ fn ledger_row(leaf: &str) -> Vec<Frame> {
         "hand.side" => one(0x2244),
         "hand.area.pan" => vec![framed(0x2044), framed(0x20c4)],
         "hand.area.tilt" => vec![framed(0x2144), framed(0x21c4)],
-        "hand.axes.pan" => one(0x2344),
         "hand.axes.tilt" => one(0x23c4),
         "hand.return_after" => one(0x2444),
         "hand.move_gimbal" => one(0x26c4),
@@ -213,11 +212,6 @@ fn action_rows() -> Vec<(&'static str, Value, Vec<Frame>)> {
             ],
         ),
         (
-            "focus.point",
-            json!({"x": 0, "y": 1}),
-            vec![framed_to(0x02, 0x3582)],
-        ),
-        (
             "power_on.set_pose",
             json!({"pose": pose_lo}),
             vec![framed(0x3ec4), framed(0x3e44)],
@@ -268,7 +262,7 @@ fn every_setting_at_its_boundaries_sends_exactly_its_ledger_row() {
         .filter(|(_, s)| !s.readonly)
         .map(|(p, s)| (p.clone(), s.clone()))
         .collect();
-    assert_eq!(settings.len(), 60, "every writable leaf of 4.3 is driven");
+    assert_eq!(settings.len(), 59, "every writable leaf of 4.3 is driven");
     for (leaf, setting) in settings {
         for value in boundaries(&setting) {
             let (mut cam, log) = model(recorded());

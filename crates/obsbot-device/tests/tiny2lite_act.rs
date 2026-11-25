@@ -390,13 +390,6 @@ fn sleep_wake_focus_point_and_factory_reset() {
     );
     let (_, _, data) = run("wake", json!({}), &state());
     assert_eq!(data, [0u32.to_le_bytes().to_vec()]);
-    let (_, frames, data) = run("focus.point", json!({"x": 0.3, "y": 0.4}), &state());
-    assert_eq!(frames, [framed_to(0x02, 0x3582)]);
-    let mut want = floats(&[0.3, 0.4]);
-    for v in [1u32, 100, 100] {
-        want.extend(v.to_le_bytes());
-    }
-    assert_eq!(data, [want]);
     let (_, frames, data) = run("factory_reset", json!({"confirm": true}), &state());
     assert_eq!(
         (frames, data),
@@ -415,4 +408,25 @@ fn every_action_of_the_description_is_known_to_act() {
             "{name}: {r:?}"
         );
     }
+}
+
+#[test]
+fn a_live_pose_outside_the_range_is_refused_with_its_values() {
+    // #328: power_on.use_current failed with "start pose needs ... zoom 1.0-4.0" and no value.
+    // Asleep the camera turns to tilt -85 (CS-1): the refusal names the pose it read and sends
+    // nothing.
+    let mut sleep_pose = vec![0u8; 12];
+    sleep_pose[8..10].copy_from_slice(&8500i16.to_le_bytes());
+    let (mut cam, log) = model(recorded().answer(0x03, 0x0043, &sleep_pose));
+    let r = cam.act(
+        "power_on.use_current",
+        &params(json!({})),
+        &state(),
+        &Ctx::none(),
+    );
+    let Err(CameraError::Io(why)) = r else {
+        panic!("{r:?}");
+    };
+    assert!(why.contains("tilt -85"), "{why}");
+    assert!(commands(&log).is_empty(), "nothing sent");
 }

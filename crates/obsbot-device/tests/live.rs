@@ -570,7 +570,6 @@ fn live_cam_23_the_u_rows_that_read_back() {
         ("framing.offset.x", json!(0.16)),
         ("framing.offset.y", json!(-0.16)),
         ("framing.offset.y", json!(0.16)),
-        ("hand.axes.pan", json!(false)),
         ("hand.axes.tilt", json!(false)),
         ("hand.return_after", json!(3.0)),
         ("power_on.start.mode", json!("static")),

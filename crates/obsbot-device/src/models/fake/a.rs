@@ -46,7 +46,6 @@ fn touched(target: Target<'_>) -> Vec<&'static str> {
             "view.save" | "view.rename" | "view.delete" => vec!["views"],
             "zone.return_here" => vec!["zone"],
             "hand.return_here" | "hand.return_clear" | "hand.area_reset" => vec!["hand"],
-            "focus.point" => vec!["focus"],
             "sleep" | "wake" => vec!["status"],
             _ => vec![],
         },
@@ -163,9 +162,6 @@ fn act(values: &mut Values, action: &str, p: &Params) -> Option<Params> {
         "hand.area_reset" => {
             values.insert("hand.area.pan".into(), json!({"min": -45, "max": 45}));
             values.insert("hand.area.tilt".into(), json!({"min": -30, "max": 30}));
-        }
-        "focus.point" => {
-            values.insert("focus.mode".into(), json!("single"));
         }
         "power_on.set_pose" | "power_on.use_current" => {
             values.insert("power_on.start.pose".into(), pose(values));
