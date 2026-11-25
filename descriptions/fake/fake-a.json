@@ -186,6 +186,7 @@
       "no_effect": false,
       "min": 100,
       "max": 250000,
+      "step": 100,
       "unit": "us",
       "precision": 1,
       "requires": [

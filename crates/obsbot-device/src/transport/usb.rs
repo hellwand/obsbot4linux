@@ -77,6 +77,15 @@ pub fn from_errno(e: Errno) -> CameraError {
     }
 }
 
+/// The refusal of a V4L2 control write that the kernel answers with EACCES: uvcvideo takes no
+/// value for a control while its automatic counterpart is on (measured 2026-11-25, CAM-15: the
+/// white-balance temperature and the absolute focus). A refusal, not an I/O error.
+pub fn inactive_control(id: u32) -> CameraError {
+    CameraError::Rejected(format!(
+        "control {id:#010x}: the kernel takes no value for it while its automatic control is on"
+    ))
+}
+
 fn from_io(e: std::io::Error) -> CameraError {
     from_errno(Errno::from_raw(e.raw_os_error().unwrap_or(0)))
 }
@@ -207,7 +216,10 @@ impl Transport for UsbTransport {
     fn ctrl_set(&mut self, id: u32, value: i32) -> Result<()> {
         self.with_node(|f| {
             let mut c = V4l2Control { id, value };
-            unsafe { vidioc_s_ctrl(f.as_raw_fd(), &mut c) }.map_err(from_errno)?;
+            unsafe { vidioc_s_ctrl(f.as_raw_fd(), &mut c) }.map_err(|e| match e {
+                Errno::EACCES => inactive_control(id),
+                other => from_errno(other),
+            })?;
             Ok(())
         })
     }

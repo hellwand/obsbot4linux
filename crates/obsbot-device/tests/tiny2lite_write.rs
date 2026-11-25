@@ -179,6 +179,20 @@ fn uvc_leaves_write_their_control_and_no_other() {
 }
 
 #[test]
+fn an_absolute_focus_the_kernel_refuses_is_a_refusal_that_names_the_cause() {
+    // CAM-15 (measured 2026-11-25): while the UVC continuous autofocus is on, the kernel
+    // refuses the absolute focus with EACCES, also right after `focus.mode=manual`. The
+    // client gets the camera's refusal and why, not "I/O error: Permission denied".
+    let (mut cam, log) = model(recorded().inactive(0x009a_090a));
+    let r = cam.apply("focus.position", &json!(99), &Ctx::none());
+    let Err(CameraError::Rejected(why)) = r else {
+        panic!("{r:?}");
+    };
+    assert!(why.contains("continuous autofocus"), "{why}");
+    assert!(commands(&log).is_empty(), "nothing reached the camera");
+}
+
+#[test]
 fn an_area_axis_sends_min_then_max_in_the_cameras_angles() {
     // capture 11: zone pan -100..100; the asymmetric tilt -30..10 is pitch -10..30 by the conversion of tilt_to_pitch_range
     let (frames, data) = write("zone.area.pan", json!({"min": -100, "max": 100}));

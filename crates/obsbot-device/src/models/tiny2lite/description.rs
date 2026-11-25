@@ -46,7 +46,6 @@ pub const UNBACKED: &[(&str, &str)] = &[
     ("zone.area.tilt#order", "U-8"),
     ("do:gimbal.move.speed@max", "U-9"),
     ("do:gimbal.move#speed_near_tilt_limit", "U-9"),
-    ("do:gimbal.move#speed_one_axis", "U-9"),
     ("do:zoom.move.speed=slow", "U-12"),
     ("do:zoom.move.speed=fast", "U-12"),
     ("do:focus.point", "U-16"),
@@ -359,7 +358,9 @@ pub fn description() -> Description {
         )
         .setting(
             "exposure.time",
+            // the camera's unit is 100 µs (capture 01); 44990 µs read back as 44900 (CAM-5)
             w(Setting::number("Exposure time", 100.0, 250_000.0)
+                .step(100.0)
                 .unit(Unit::Microseconds)
                 .precision(1.0))
             .requires("exposure.mode", json!("manual"))
@@ -901,6 +902,20 @@ mod tests {
                 assert_eq!(s.settle_ms, Some(SETTLE_MS), "{path}");
             }
         }
+    }
+
+    /// The camera holds the exposure time in 100 µs units (capture 01): a time between two
+    /// steps would be sent rounded down and read back as another value (CAM-5, 2026-11-25:
+    /// 44990 read 44900), so `set` refuses it instead.
+    #[test]
+    fn an_exposure_time_between_two_steps_is_refused() {
+        use obsbot_proto::validate::{Fit, check_value};
+        let d = description();
+        let time = &d.settings["exposure.time"];
+        assert!(check_value(time, &json!(44_900), Fit::Write).is_ok());
+        assert!(check_value(time, &json!(100), Fit::Write).is_ok());
+        let (code, why) = check_value(time, &json!(44_990), Fit::Write).unwrap_err();
+        assert_eq!(code, obsbot_proto::ErrorCode::OutOfRange, "{why}");
     }
 
     /// Every mark names something the description has, and every row of 9.3 is marked.

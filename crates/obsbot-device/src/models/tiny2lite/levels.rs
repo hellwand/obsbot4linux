@@ -145,12 +145,12 @@ pub const LEVELS: &[Row] = &[
     row(
         "zone.area.pan",
         Level::Captured,
-        "capture 11; measured 2026-10-25, 2026-10-27 (#58)",
+        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16)",
     ),
     row(
         "zone.area.tilt",
         Level::Captured,
-        "capture 11; measured 2026-10-25, 2026-10-27 (#58)",
+        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16)",
     ),
     row(
         "zone.return",
@@ -158,8 +158,16 @@ pub const LEVELS: &[Row] = &[
         "capture 11, 18; measured 2026-10-25",
     ),
     row("hand.side", Level::Captured, "capture 11, 17"),
-    row("hand.area.pan", Level::Captured, "capture 11"),
-    row("hand.area.tilt", Level::Captured, "capture 11"),
+    row(
+        "hand.area.pan",
+        Level::Captured,
+        "capture 11; measured 2026-11-25 (CAM-16)",
+    ),
+    row(
+        "hand.area.tilt",
+        Level::Captured,
+        "capture 11; measured 2026-11-25 (CAM-16)",
+    ),
     row("hand.axes.pan", Level::None, "none"),
     row("hand.axes.tilt", Level::None, "none"),
     row("hand.return_after", Level::None, "none"),
@@ -204,7 +212,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "exposure.anti_flicker",
         Level::Captured,
-        "capture 12; measured 2026-10-24 (0–2); value `auto`: none",
+        "capture 12; measured 2026-10-24 (0–2); order with `exposure.mode`: measured 2026-11-25 (CAM-13); value `auto`: none",
     ),
     row(
         "image.brightness",
@@ -260,7 +268,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "focus.position",
         Level::Captured,
-        "capture 12; measured 2026-10-31 (#97: read back; #99: no visible effect); default: capture 14, 16, 18 (UVC range answers)",
+        "capture 12; measured 2026-10-31 (#97: read back; #99: no visible effect); default: capture 14, 16, 18 (UVC range answers); refused while the continuous autofocus is on: measured 2026-11-25 (CAM-15)",
     ),
     row(
         "audio.enabled",
@@ -395,7 +403,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "do:gimbal.move",
         Level::Captured,
-        "capture 18 (`0x6444`); measured 2026-10-25; measured 2026-10-31 (#98: speed 1, 5, 100 °/s; tilt 80, pan 145)",
+        "capture 18 (`0x6444`); measured 2026-10-25; measured 2026-10-31 (#98: speed 1, 5, 100 °/s; tilt 80, pan 145); measured 2026-11-25 (CAM-17: 90 °/s, pan only and tilt only)",
     ),
     row(
         "do:gimbal.stop",
@@ -484,7 +492,6 @@ pub const LEVELS: &[Row] = &[
     row("zone.area.tilt#order", Level::None, "none"),
     row("do:gimbal.move.speed@max", Level::None, "none"),
     row("do:gimbal.move#speed_near_tilt_limit", Level::None, "none"),
-    row("do:gimbal.move#speed_one_axis", Level::None, "none"),
     row("do:zoom.move.speed=slow", Level::None, "none"),
     row("do:zoom.move.speed=fast", Level::None, "none"),
     row("power_on.start.mode=static", Level::None, "none"),
@@ -533,6 +540,7 @@ pub const LEVELS: &[Row] = &[
     // the camera's UVC range answers
     row("exposure.time@min", Level::Captured, "capture 01"),
     row("exposure.time@max", Level::Captured, "capture 01"),
+    row("exposure.time#step", Level::Captured, "capture 01"),
     row("exposure.time#default", Level::Captured, "capture 01"),
     row("exposure.gain#default", Level::Captured, "capture 01"),
     row(
