@@ -483,23 +483,22 @@ on_air     { active, apps[] }                    daemon: the on-air probe, read-
 gimbal     { pan, tilt, invert✎ }                pan, tilt: live topic "pose"
 zoom       { factor✎, field_of_view✎ }
 tracking   { mode✎, profile✎, speed✎, target { detected, box } }
-framing    { auto_zoom✎, size✎, zoom_speed✎, offset { x✎, y✎ } (U-4), part✎ }
+framing    { auto_zoom✎, size✎, zoom_speed✎, offset { x✎, y✎ }, part✎ }
 gestures   { target_lock✎, zoom✎, zoom_ratio✎, dynamic_zoom✎, direction_change✎ }
 zone       { enabled✎, follow✎, area { pan✎, tilt✎ }, return }
-hand       { side✎, area { pan✎, tilt✎ }, axes { pan✎, tilt✎ } (U-5),
-             return_after✎ (U-6), move_gimbal✎, return }
+hand       { side✎, area { pan✎, tilt✎ }, axes { tilt✎ } (U-5),
+             return_after✎, move_gimbal✎, return }
 presets    [ { slot, name, pose } ]
 views      [ { id, name, pose } ]
-exposure   { mode✎, region✎, time✎, gain✎, compensation✎ (U-20), hdr✎,
-             anti_flicker✎ (U-25: the value auto) }
+exposure   { mode✎, region✎, time✎, gain✎, compensation✎, hdr✎, anti_flicker✎ }
 image      { brightness✎, contrast✎, saturation✎, hue✎, sharpness✎,
              white_balance { auto✎, temperature✎ }, mirror✎, frame_rate }
 focus      { mode✎, region✎, position✎ }
-audio      { enabled✎ (U-23), volume✎, noise_reduction✎, auto_gain✎, in_sleep✎ }
+audio      { enabled✎, volume✎, noise_reduction✎, auto_gain✎, in_sleep✎ }
 led        { brightness✎, blink✎ }
 sleep      { auto { enabled✎, seconds✎ }, background✎, background_mirror✎,
              wake_zoom✎ }
-power_on   { mode✎, start { source (U-26), pose, mode✎ (U-18) }, settings { … } (U-19) }
+power_on   { mode✎, start { source, pose, mode✎ (U-18) }, settings { … } (U-19) }
 ```
 
 Per group:
@@ -531,7 +530,8 @@ Per group:
   `target`.
 - `framing`: `size` `long_shot|medium_long_shot|medium_shot|medium_close_up|close_up|big_close_up`;
   `zoom_speed` `slow|medium|fast`; `offset.x` and `offset.y` −0.16..0.16 (fraction);
-  `part` `normal|head_removal|lower_body`.
+  `part` `normal|head_removal|lower_body`. A positive `offset.x` moves the person to the
+  right of the picture, a positive `offset.y` lower (measured 2026-11-25, U-4).
 - `gestures.zoom_ratio`: 1.0–4.0, step and precision 0.1 (the readback has one decimal).
   `gestures.direction_change` reverses the direction of the dynamic zoom gesture.
 - `zone.area.pan` −150..150, `zone.area.tilt` −70..90 (degrees, ranges). `zone.return` is a
@@ -555,9 +555,10 @@ Per group:
   44900); it `requires` `exposure.mode=manual` (a time written while automatic freezes the
   automatic exposure). `exposure.gain` 1–64. `exposure.time` and
   `exposure.gain` have the live topic `auto`. `exposure.compensation`: the camera's raw
-  value 0–18, default 9 (U-20). `exposure.anti_flicker`: values `off|50hz|60hz|auto`,
-  writable `off|50hz|60hz` (the kernel driver offers no way to set `auto` on this camera),
-  no `default`. The value `auto` was never read from the camera (U-25).
+  value 0–18, default 9; one step is 1/3 EV and 9 is 0 EV, so 0–18 is −3..+3 EV (measured
+  2026-11-25 against the vendor app, U-20). `exposure.anti_flicker`: values `off|50hz|60hz`,
+  no `default`. The camera's 3 (automatic) was never read and the vendor app offers no
+  automatic anti-flicker (U-25), so a 3 shows as `raw:3`.
 - `image`: brightness, contrast, saturation, hue and sharpness are UVC controls with the
   ranges and defaults the camera reports (constants of the model). The camera has no gamma
   control. `white_balance.temperature` `requires` `white_balance.auto=false` and has the live
@@ -584,11 +585,14 @@ Per group:
 - `power_on.mode`: the tracking mode the camera starts in at power-on (0.13 `wake mode`), all
   eight modes (measured, #102).
 - `power_on.start`: the camera's initial state (0.13 `startup`). `source` is `own` or
-  `preset_<slot>` (U-26), read-only. `pose` is read-only and set through actions. `mode` is
+  `preset_<slot>`, read-only; after that preset is deleted it still names the slot
+  (measured 2026-11-25, U-26). `pose` is read-only and set through actions. `mode` is
   the tracking mode of the initial state: values `static|normal|upper_body|close_up|headless|`
-  `lower_body|hand|group|unset`, writable `static|normal|upper_body|headless|group|unset`
-  (all but `normal` and `unset` are U-18). `unset` is the camera's "not set" and differs
-  from `static`.
+  `group|unset`, writable `static|normal|upper_body|headless|group|unset`; another byte shows
+  as `raw:<n>`. The written values read back and `close_up` is what the vendor app's
+  "AI Close-up" stores (measured 2026-11-25); whether the camera starts in a mode written
+  from Linux after a power cycle is U-18. `unset` is the camera's "not set" and differs from
+  `static`.
 - `power_on.settings`: read-only leaves of the same block (`tracking_speed`, `autofocus`,
   `auto_exposure`, `exposure_compensation`, `white_balance_mode`, `white_balance_temperature`,
   `contrast`, `saturation`, `sharpness`, `hue`) as raw camera values; `null` where the block
@@ -618,15 +622,14 @@ No recording of any of them exists, and 0.13.2 does not offer them (CAM-11, CAM-
 ```
 gimbal.move {pan?, tilt?, speed?}           gimbal.stop
 gimbal.turn {pan_speed?, tilt_speed?, keep?}
-zoom.move {factor, speed (U-12)}            zoom.stop
+zoom.move {factor, speed}                   zoom.stop
 preset.save {slot, name?, pose?}            preset.recall {slot}
 preset.rename {slot, name}                  preset.delete {slot}
 view.save {name, pose?} → {id}              view.go {id}
 view.rename {id, name}                      view.delete {id}
 zone.return_here                            zone.go_return
 hand.return_here                            hand.go_return
-hand.return_clear                           hand.area_reset (U-7)
-focus.point {x, y} (U-16)
+hand.return_clear                           hand.area_reset
 power_on.set_pose {pose}                    power_on.use_current
 power_on.use_preset {slot}                  power_on.go
 sleep                                       wake
@@ -650,18 +653,21 @@ factory_reset {confirm}
   does (field ledger, measured).
 - `gimbal.move` and `gimbal.turn` send only the move (section 2). They leave `tracking.mode`
   alone, as `zoom.move`, `zoom.stop` and `gimbal.stop` do, and they are not refused while the
-  tracking is on. What the camera does with a manual move while it tracks is CAM-34; the
-  state after the reply shows what the camera reports. A client that wants the tracking off
+  tracking is on. While it tracks, the camera starts the move and the tracking pulls the
+  gimbal back to the person; `tracking.mode` stays (measured 2026-11-25 with `upper_body`,
+  CAM-34). The state after the reply shows what the camera reports. A client that wants the tracking off
   first sends `set tracking.mode=static` itself, as its own request.
-- `zoom.move`: `speed` is `slow|medium|fast` (`slow` and `fast` are U-12).
+- `zoom.move`: `speed` is `slow|medium|fast`; 1× to 2× took 4.9 s at `slow` and 3.2 s at
+  `fast` (measured 2026-11-25, U-12).
 - `preset.save`, `view.save` and `power_on.use_current` without `pose`, and
   `zone.return_here` and `hand.return_here`, take the live pose and the current zoom factor
   from the camera. While the camera sleeps its live pose is the parking pose, which lies
-  outside the tilt range, so these actions are `asleep: ignored` until CAM-22 shows
-  otherwise.
+  outside the tilt range (−85, measured 2026-11-25, CAM-22), so these actions are
+  `asleep: ignored`; their refusal names the pose read (#328).
 - `preset.save` without `name` sends the preset and no name: no rename frame follows, and
-  obsbot4linux invents no name (0.13.2 named it `Preset <slot + 1>`). What the camera then
-  reports as the name of an unnamed preset is CAM-35; the state shows it as reported.
+  obsbot4linux invents no name (0.13.2 named it `Preset <slot + 1>`). The camera then
+  reports the name of an unnamed preset as empty (`""`, measured 2026-11-25, CAM-35); the
+  state shows it so.
   `view.save` needs a name. Names are validated before the first frame is sent.
 - `preset.recall`, `preset.rename`, `preset.delete` and `power_on.use_preset` on an empty
   slot, and `view.*` with an unknown id, are refused with `conflict`. So are these actions
@@ -1395,13 +1401,18 @@ M4 is the first model that completes these steps.
 - **Touched groups:** `tracking.mode` touches tracking and framing; `zoom.field_of_view`
   and the gesture settings touch zoom; `preset.recall` touches zoom and the live pose;
   `gimbal.move`, `gimbal.turn`, `gimbal.stop`, `zoom.stop` and `zoom.move` touch nothing.
-  The moves touch the tracking group only if CAM-34 shows that the camera changes the
-  tracking mode itself on a manual move; until it is recorded they do not.
-- **Asleep:** `zoom.field_of_view` is `ignored` (measured); `power_on.go` is `ignored`
-  (measured, #79: no move, no error); `wake` is `accepted` (capture 13). The
-  pose-taking actions of 4.4 are `ignored` until CAM-22. The readbacks of `audio.volume`
-  and `focus.*` do not answer while asleep (0.13.2 behaviour), so a write to them stays
-  pending until the first read after wake. Every other field is `unknown` until CAM-2.
+  The moves touch no group: the camera keeps the tracking mode on a manual move (CAM-34,
+  measured 2026-11-25).
+- **Asleep:** `zoom.field_of_view` and `zoom.factor` are `ignored` (measured; CAM-3 for
+  the factor); `power_on.go` is `ignored` (measured, #79: no move, no error); `wake` is
+  `accepted` (capture 13). The pose-taking actions of 4.4 are `ignored`: asleep the live
+  pose reads tilt −85, outside the range, and their pose check refuses it (CAM-22,
+  measured 2026-11-25). The 48 leaves of `ASLEEP_ACCEPTED` in the model are `accepted`:
+  written asleep, they read back after the wake (CAM-2, measured 2026-11-25). Every group
+  answered while asleep, `audio` and `focus` too, against the 0.13.2 note; the poll plan
+  still reads only the status block while asleep. The other leaves and actions stay
+  `unknown`. Without a video stream this camera falls asleep about 10 s after a wake,
+  although auto-sleep is set to 30 s.
 - **`readback:false`:** `hand.move_gimbal`, `led.blink` (CAM-6).
 - **`settle_ms`:** 3000 for every writable leaf with a readback. This is one model-wide
   bound taken from the worst measured case (zone tracking follows 1–3 s after the write,
@@ -1456,7 +1467,7 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `framing auto-zoom on\|off`                                             | `set framing.auto_zoom=…`                                            | effect: CAM-33                                                                                                    |
 | `framing size S`                                                        | `set framing.size=S`                                                 | effect: CAM-33                                                                                                    |
 | `framing zoom-speed S`                                                  | `set framing.zoom_speed=S`                                           | effect: CAM-33                                                                                                    |
-| `framing offset [--x X] [--y Y]`                                        | `set [framing.offset.x=X] [framing.offset.y=Y]`                      | U-4                                                                                                               |
+| `framing offset [--x X] [--y Y]` | `set [framing.offset.x=X] [framing.offset.y=Y]` |  |
 | `framing part P`                                                        | `set framing.part=P`                                                 | effect: CAM-33                                                                                                    |
 | `hdr on\|off`                                                           | `set exposure.hdr=…`                                                 |                                                                                                                   |
 | `exposure global\|face`                                                 | `set exposure.mode=auto exposure.region=…`                           |                                                                                                                   |
@@ -1464,7 +1475,7 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `exposure manual --time T`                                              | `set exposure.mode=manual exposure.time=<T×100>`                     | time now in µs                                                                                                    |
 | `exposure manual --gain G`                                              | `set exposure.mode=manual exposure.gain=G`                           |                                                                                                                   |
 | `zoom F`                                                                | `set zoom.factor=F`                                                  |                                                                                                                   |
-| `zoom F --speed S`                                                      | `do zoom.move factor=F speed=slow\|medium\|fast`                     | 10/30/50; U-12; other S is PX-6                                                                                   |
+| `zoom F --speed S` | `do zoom.move factor=F speed=slow\|medium\|fast` | 10/30/50; other S is PX-6 |
 | `zoom stop`                                                             | `do zoom.stop`                                                       |                                                                                                                   |
 | `gimbal [--pan P] [--tilt T]`                                           | `do gimbal.move [pan=P] [tilt=T]`                                    | a missing axis keeps its position; the tracking stays as it is (12.2)                                             |
 | `gimbal … --speed S`                                                    | `do gimbal.move … speed=S`                                           | speed up to 100 °/s, tilt up to 80 with a speed (U-9); the tracking stays as it is (12.2)                                                                           |
@@ -1486,7 +1497,7 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `audio distance near\|standard\|far`                                    | `set audio.volume=10\|50\|100`                                       | pickup is the volume in bands (4.3): near < 50, standard 50–84, far ≥ 85; 10, 50 and 100 are a choice inside them |
 | `audio volume N`                                                        | `set audio.volume=N`                                                 |                                                                                                                   |
 | `audio sleep-mic on\|off`                                               | `set audio.in_sleep=…`                                               |                                                                                                                   |
-| `audio mic on\|off`                                                     | `set audio.enabled=…`                                                | the camera restarts on both values; U-23                                                                          |
+| `audio mic on\|off` | `set audio.enabled=…` | the camera restarts on both values |
 | `gesture set target-lock\|zoom\|dynamic-zoom\|direction-change on\|off` | `set gestures.<name>=…`                                              | names with `_`                                                                                                    |
 | `gesture zoom-ratio R`                                                  | `set gestures.zoom_ratio=R`                                          | precision 0.1                                                                                                     |
 | `hand right\|left`                                                      | `set hand.side=…`                                                    |                                                                                                                   |
@@ -1494,9 +1505,9 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `hand return-go`                                                        | `do hand.go_return`                                                  |                                                                                                                   |
 | `hand return-reset`                                                     | `do hand.return_clear`                                               |                                                                                                                   |
 | `hand area --pan MIN MAX --tilt MIN MAX`                                | `set hand.area.pan=MIN,MAX hand.area.tilt=MIN,MAX`                   | U-8                                                                                                               |
-| `hand area-reset`                                                       | `do hand.area_reset`                                                 | U-7                                                                                                               |
-| `hand pan\|tilt on\|off`                                                | `set hand.axes.pan=…` / `set hand.axes.tilt=…`                       | U-5                                                                                                               |
-| `hand return-after S`                                                   | `set hand.return_after=S`                                            | U-6                                                                                                               |
+| `hand area-reset` | `do hand.area_reset` |  |
+| `hand pan\|tilt on\|off` | `set hand.axes.tilt=…` | PX-U-5 for `hand pan`; `hand tilt`: U-5 |
+| `hand return-after S` | `set hand.return_after=S` |  |
 | `hand gimbal on\|off`                                                   | `set hand.move_gimbal=…`                                             | `readback:false`                                                                                                  |
 | `zone on\|off`                                                          | `set zone.enabled=…`                                                 |                                                                                                                   |
 | `zone follow on\|off`                                                   | `set zone.follow=…`                                                  |                                                                                                                   |
@@ -1511,14 +1522,14 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `zone view go ID`                                                       | `do view.go id=ID`                                                   |                                                                                                                   |
 | `focus mode face\|global`                                               | `set focus.region=…`                                                 |                                                                                                                   |
 | `focus auto on`                                                         | `set focus.mode=continuous`                                          |                                                                                                                   |
-| `focus auto off`                                                        | `set focus.mode=manual`, or `single` if CAM-14 shows that            | CAM-14                                                                                                            |
+| `focus auto off` | `set focus.mode=manual` | CAM-14: UVC autofocus off reads as `manual`; `focus.mode=manual` does not open `focus.position` (CAM-15) |
 | `focus af continuous\|single\|manual`                                   | `set focus.mode=…`                                                   |                                                                                                                   |
-| `focus point X Y`                                                       | `do focus.point x=X y=Y`                                             | U-16                                                                                                              |
-| `focus set N`                                                           | `set focus.mode=manual focus.position=N`                             | `no_effect` (#99)                                                                                                 |
+| `focus point X Y` | – | PX-U-16 |
+| `focus set N` | `set focus.mode=manual focus.position=N` | `no_effect` (#99); refused by the kernel while the UVC continuous autofocus is on (CAM-14, CAM-15) |
 | `startup set --pan P --tilt T --zoom Z`                                 | `do power_on.set_pose pose=P,T,Z`                                    |                                                                                                                   |
-| `startup set --preset N`                                                | `do power_on.use_preset slot=N`                                      | `power_on.start.source`: U-26                                                                                     |
+| `startup set --preset N` | `do power_on.use_preset slot=N` |  |
 | `startup set --current`                                                 | `do power_on.use_current`                                            | live pose                                                                                                         |
-| `startup set --ai M\|none`                                              | `set power_on.start.mode=M\|unset`                                   | U-18                                                                                                              |
+| `startup set --ai M\|none` | `set power_on.start.mode=M\|unset` | U-18 (effect at power-on) |
 | `startup set <pose option> --ai M`                                      | the `do` of the pose option, then `set power_on.start.mode=M`        |                                                                                                                   |
 | `startup show`                                                          | `get power_on`                                                       | U-19                                                                                                              |
 | `startup go`                                                            | `do power_on.go`                                                     |                                                                                                                   |
@@ -1527,10 +1538,10 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
 | `image white_balance_temperature V`                                     | `set image.white_balance.auto=off image.white_balance.temperature=V` | `requires`; CAM-15                                                                                                |
 | `image gain V`                                                          | `set exposure.gain=V`                                                |                                                                                                                   |
 | `image power_line_frequency 0\|1\|2`                                    | `set exposure.anti_flicker=off\|50hz\|60hz`                          |                                                                                                                   |
-| `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        | U-20                                                                                                              |
+| `image backlight_compensation V` | `set exposure.compensation=V` | 1/3 EV per step, 9 = 0 EV |
 | `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                          |
 | `image exposure_time V`                                                 | `set exposure.mode=manual exposure.time=<V×100>`                     | µs                                                                                                                |
-| `image focus V`                                                         | `set focus.mode=manual focus.position=V`                             | `no_effect` (#99)                                                                                                 |
+| `image focus V` | `set focus.mode=manual focus.position=V` | `no_effect` (#99); refused by the kernel while the UVC continuous autofocus is on (CAM-14, CAM-15) |
 | `image autofocus 0\|1`                                                  | `set focus.mode=manual\|continuous`                                  | as `focus auto`; CAM-14                                                                                           |
 | `image gamma V`                                                         | –                                                                    | PX-2                                                                                                              |
 | `preset list`                                                           | `get presets`                                                        |                                                                                                                   |
@@ -1563,6 +1574,12 @@ exception (9.2). 1.0 is released only when every row is verified on the real Tin
   "on with 0 s" was never recorded.
 - **PX-U-n**: a row U-n of 9.3 whose check fails becomes the exception PX-U-n, with the
   0.13.2 rows named in its "Fail" column.
+- **PX-U-5** `hand pan on|off`: not carried over. With `hand.axes.pan` off (read back) the
+  hand tracking still panned −38..+17° (measured 2026-11-25), so the camera does not honour
+  it; `hand.axes.pan` left the description.
+- **PX-U-16** `focus point X Y`: not carried over. At both points tried the whole picture
+  blurred instead of focusing (measured 2026-11-25, as in #99); `focus.point` left the
+  description.
 
 ### 9.3 Tiny 2 Lite fields without backing today
 
@@ -1593,6 +1610,25 @@ shows as backed (measured 2026-10-31 or captured); they are not reused.
 | U-23 | `audio.enabled` readback                                                                                                         | the audio interface disappears and returns on toggle (measured); cold plug with the microphone off not measured | cold plug with the microphone off; look for a status-block value that follows the microphone                                             | readback from the status block if one follows; else `readback:false`                                                   |
 | U-25 | `exposure.anti_flicker` value `auto` (read-only)                                                                                 | never read from the camera; no recording shows it                                                               | if the vendor app offers automatic anti-flicker: set it there (recorded), then read the status block from Linux; if not, the check fails | the value leaves `values`; the camera's value shows as `raw:3`; no 0.13.2 row is lost                                  |
 | U-26 | `power_on.start.source` values `preset_<slot>`                                                                                   | the action is captured (capture 10); no readback after it                                                       | `do power_on.use_preset slot=N` for each slot, read `power_on.start.source`                                                              | the values leave `values`; such a source shows as `raw:<n>`; no 0.13.2 row is lost                                     |
+
+**Results of CS-1 (2026-11-25).** Evidence: the session notes, file names in brackets.
+
+| U    | Result                                                                                                                                       | Evidence                                                           |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| U-4  | answered, kept: ±0.16 read back; +x moves the person right in the picture, +y lower                                                          | `cs1-live_cam_23_*.txt`, `cs1-D-observations.txt`, `cs1-D-offset-*.jpg` |
+| U-5  | `hand.axes.pan` failed: off was not honoured (pan moved −38..+17°), it left the description (PX-U-5); `hand.axes.tilt` read back, its effect is still open | `cs1-D-U5-panoff.txt`, `cs1-D-observations.txt`, `cs1-live_cam_23_*.txt` |
+| U-6  | answered, kept: read back                                                                                                                    | `cs1-live_cam_23_*.txt`                                            |
+| U-7  | answered, kept: a narrowed area went back to pan ±45, tilt ±30                                                                               | `cs1-E-quick-U7-U12-CAM14.txt`                                     |
+| U-8  | open: min first measured (a range wholly above the stored one is clamped); max first not yet measured                                       | `cs1-live_cam_16_*.txt`                                            |
+| U-9  | failed and applied: speed 1–100 °/s, tilt at most 80 with a speed; exact limits open (not needed)                                            | `cs1-live_cam_17_*.txt`, `rerun-live_cam_17_*.txt`                 |
+| U-12 | answered, kept: 1× to 2× in 4.9 s at 10, 3.2 s at 50                                                                                        | `cs1-E-quick-U7-U12-CAM14.txt`                                     |
+| U-16 | failed: the picture blurred at both points; `focus.point` left the description (PX-U-16)                                                     | `cs1-D-observations.txt`, `u16-*.jpg`                              |
+| U-18 | written values read back, `close_up` named by the vendor app; open: the start mode after a power cycle for a mode written from Linux; `lower_body` and `hand` were never read and show as `raw:<n>` | `cs1-live_cam_23_*.txt`, `vendor-U19-power_on.txt`, `cs1-vendor-observations.txt` |
+| U-19 | open: one value each for `tracking_speed` (1 = Motion), `autofocus` 1, `auto_exposure` 1, `exposure_compensation` 11 (0.7 EV); the others were not set | `vendor-U19-power_on.txt`, `vendor-center-initial-state.png`       |
+| U-20 | answered: the vendor app steps 1/3 EV over −3..+3, so raw 0..18 with 9 = 0 EV                                                               | `cs1-vendor-observations.txt`, `vendor-center-image-tab.png`       |
+| U-23 | answered: the readback stays the presence of the audio interface; it stays away with the microphone off, also over a cold re-plug          | `cs1-E-observations.txt`                                           |
+| U-25 | failed: the vendor app offers no automatic anti-flicker; `auto` left `values` (`raw:3`)                                                      | `cs1-vendor-observations.txt`, `vendor-center-image-tab.png`       |
+| U-26 | answered: `power_on.use_preset` slot N reads `preset_N` for all three; it stays after the preset is deleted                                  | `vendor-U26.txt`                                                   |
 
 ### 9.4 Check script
 
@@ -2090,6 +2126,44 @@ everything here is unknown until captures)
 | CAM-T12 | The auto-sleep "off" encoding; does a timer write disconnect USB? (one third-party report, unverified)        |
 | CAM-T13 | `settle_ms` and `asleep` behaviour per field (step 7)                                                         |
 
+### 14.1 Answers of camera session 1 (Tiny 2 Lite, 2026-11-25)
+
+CS-1 ran blocks A to F and a session with the vendor app (OBSBOT Center 2.0.15.186) on
+`rebuild` 9fcf96f and the PR head of the contract changes. Evidence: the session notes, file
+names in the last column. The field ledger's section "Camera session 1" holds the details of
+blocks B and C.
+
+| CAM    | Answer                                                                                                                                                  | Stays open                                                         | Evidence                                                                                      |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| CAM-1  | answered: 14 characters in about 110 ms awake, right after plug-in, after the microphone restart, after a cold re-plug and after the factory reset        | the query while asleep                                             | `cs1A-live_cam_1_*.txt`, `cs1E-cam1-after-*.txt`, `cs1F-live_cam_1_*.txt`                     |
+| CAM-2  | answered: 48 leaves written asleep read back after the wake (`accepted`); `zoom.factor` and `zoom.field_of_view` did not; every group answered asleep     | the leaves not swept (areas, `audio.enabled`, `led.blink`, …)     | `cs1-live_cam_2_cam_3_cam_22_asleep.txt`                                                      |
+| CAM-3  | answered: awake at plug-in; asleep 2.5 s after `sleep`, awake 0.5 s after `wake`; `zoom.factor` is ignored asleep                                      |                                                                    | `cs1A-live_cam_10_*.txt`, `cs1-live_cam_2_cam_3_cam_22_asleep.txt`                            |
+| CAM-4  | answered: the readback shows the factor on the way (1.17 to 4 over 4.4 s at `slow`)                                                                    |                                                                    | `cs1-live_cam_4_*.txt`                                                                        |
+| CAM-5  | answered: the slowest leaf read back after 1.5 s (`image.mirror`), the framing leaves after about 0.4 s; `settle_ms` stays 3000 model-wide             |                                                                    | `cs1-live_cam_5_*.txt`, `rerun-live_cam_5_*.txt`                                              |
+| CAM-6  | answered: `led.blink` survives sleep and wake and the restart of the microphone switch                                                                  | a cold re-plug, the factory reset                                  | `cs1-E-observations.txt`                                                                      |
+| CAM-7  | answered: a running `gimbal.turn` goes on while asleep until the pan stop (about 148°); the tilt goes to the sleep pose −85                            |                                                                    | `cs1-E-observations.txt`                                                                      |
+| CAM-8  | answered: with the microphone off the audio interface is absent, also after a cold re-plug; on again it is back after about 20 s                       | a status-block value that follows the microphone (not read)        | `cs1-E-observations.txt`                                                                      |
+| CAM-10 | answered: a cold read of every group took 1.4 s (2.4 s after the factory reset)                                                                        |                                                                    | `cs1A-live_cam_10_*.txt`, `cs1F-live_cam_10_*.txt`                                            |
+| CAM-13 | answered: `exposure.anti_flicker` before `exposure.mode` (8.8)                                                                                         | the change back to `auto` in the losing order                      | `cs1-live_cam_13_*.txt`                                                                       |
+| CAM-14 | answered: with the UVC continuous autofocus off, `focus.mode` reads `manual` and `focus.position` becomes writable (60 read back)                       | whether `focus.mode=manual` should write the UVC control           | `cs1-E-quick-U7-U12-CAM14.txt`                                                                |
+| CAM-15 | answered: both are refused (EACCES) while their automatic control is on; `focus.mode=manual` alone does not open `focus.position`                       |                                                                    | `cs1-live_cam_15_*.txt`, `cs1-live_cam_5_*.txt`                                               |
+| CAM-16 | answered in part: see U-8                                                                                                                               | max first                                                          | `cs1-live_cam_16_*.txt`                                                                       |
+| CAM-17 | answered: see U-9                                                                                                                                       | the exact limits                                                   | `cs1-live_cam_17_*.txt`, `rerun-live_cam_17_*.txt`                                            |
+| CAM-18 | answered in part: after the vendor app deleted preset 1, presets 0 and 2 were unchanged. The capture holds no delete frame (only Center's read and a save into slot 1, which matches our `0x3944` layout) | which preset the second (clearing) frame addresses: needs a new capture | `cam18-presets-before.txt`, `cam18-presets-after.json`, `cam18-capture/cam18b-framed.txt` |
+| CAM-19 | answered in part: at attach Center only reads: query `0x3b44` (answer `00 02`, the used slots) and query `0x3b04` per used slot (its name); no write, no selector `0x0c`/`0x0d` read, no pose query | where Center takes the preset poses; the `0x3b44` format with 0, 1 and 3 presets; whether this path replaces the rewind | `cam18-capture/cam18b-control.txt`, `cam18-capture/cam18b-framed.txt` |
+| CAM-20 | answered: no: the first status read after plug-in and after the factory reset had byte 0 = `0x27`; no zero block was seen                               |                                                                    | `cs1A-live_cam_10_*.txt`, `cs1F-live_cam_10_*.txt`                                            |
+| CAM-22 | answered: asleep the live pose reads tilt −85, so the pose-taking actions are refused by their pose check; `gimbal.move` and `zoom.move` sent asleep did not show after the wake | the go-return actions                                              | `cs1-live_cam_2_cam_3_cam_22_asleep.txt`                                                      |
+| CAM-23 | see 9.3, "Results of CS-1"                                                                                                                               | U-5 (tilt), U-8, U-18, U-19                                        | 9.3                                                                                           |
+| CAM-25 | answered: `3564:fef9`, bcdDevice `0510`, no serial, interfaces `0e 0e 01 01`, the extension unit 2 with 19 controls, video node index 0              |                                                                    | `cs1A-live_cam_25_*.txt`                                                                      |
+| CAM-33 | answered in part: no visible difference between `standard`, `sport` and `headroom` while the person sat still; `no_effect` stays false                 | the effect with a moving person; `tracking.speed`, `framing.*`     | `cs1-D-observations.txt`, `cs1-D-standard*.jpg`, `cs1-D-headroom*.jpg`                        |
+| CAM-34 | answered: with `upper_body` on, `gimbal.move` and `gimbal.turn` make a short swing and the tracking pulls back; the mode stays (4.4, 8.8)             |                                                                    | `cs1-D-CAM34-move.txt`, `cs1-D-observations.txt`                                              |
+| CAM-35 | answered: a preset saved without a name reads with the name `""` (empty)                                                                               |                                                                    | `cs1-live_cam_35_*.txt`                                                                       |
+| CAM-36 | open, hypothesis: the zoom and field-of-view writes of the sweep came after the camera had fallen asleep, where both are ignored (CAM-2)                 | a rerun of `live_cam_5`, which now wakes the camera before each leaf | `cs1-live_cam_5_*.txt`, `rerun-live_cam_5_*.txt`                                              |
+
+New after CS-1: #328 (a pose-taking action asleep fails with the pose check's message; the
+refusal now names the pose it read), #329 (a zoom or field-of-view write equal to what the
+camera's UVC control or register holds does nothing after the camera's own auto zoom).
+
 ## 15. Changes from revision 1
 
 One row per changed decision. **REVERSAL** marks a change to something Thomas approved on
@@ -2220,3 +2294,4 @@ on its own.
 | 108 | 2026-11-24 | Test sockets and locks | not stated | the CLI test sockets live in `$TMPDIR`; every harness that starts a daemon removes the daemon's `<socket>.lock` | W2's harnesses would otherwise leave files behind | the W2/W3 cross-check |
 | 109 | 2026-11-24 | Milestones | 0.14.0 = groundwork, #47 and #61 in it, 0.15.0 and 0.16.0 after 1.0 (10.5) | 0.14.0 = groundwork; #47 and #61 in 1.0.0; research and other apps in the Backlog, no milestone | #47 and #61 are fixed in the rebuild; no camera for research | the W2/W3 cross-check |
 | 110 | 2026-11-25 | CS-1 blocks B and C in the contract | the order of `exposure.anti_flicker` and `exposure.mode` is CAM-13; `exposure.time` without a step ("the camera rounds down"); `focus.position` writable after `focus.mode=manual`; the area frames min then max (U-8 open); U-9 with one axis unmeasured | `exposure.anti_flicker` goes before `exposure.mode` (8.8); `exposure.time` has step 100 µs and refuses a time between steps; a kernel refusal of `focus.position` is the camera's refusal with its reason, and CAM-14 decides what makes it writable; the area rule measured for one direction is recorded and U-8 stays open; U-9 failed and is applied: speed 1–100 °/s, a tilt above 80 with a speed refused; new CAM-36 (field of view and zoom); the live tests put back what they wrote also when they fail (4.3, 8.8, 9.3, 14) | measured on the camera in CS-1 on 2026-11-25 (live tests `live_cam_5`, `_13`, `_15`, `_16`, `_17`, and the rerun of `_5` and `_17`) | CS-1, 2026-11-25 |
+| 111 | 2026-11-25 | CS-1 complete | the U-rows of 9.3 unbacked; `asleep` `unknown` on every leaf but `zoom.field_of_view`; `exposure.anti_flicker` with `auto`; `hand.axes.pan` and `focus.point` in the description; CAM-1 to CAM-35 open | 9.3 has a results table and 14.1 the answers with their evidence files; U-4, U-6, U-7, U-12, U-20, U-23 and U-26 are backed; `hand.axes.pan` (PX-U-5) and `focus.point` (PX-U-16) left the description, and the value `auto` of `exposure.anti_flicker` (U-25); `power_on.start.mode` names only values read from the camera; 48 leaves are `asleep: accepted` and `zoom.factor` `ignored` (CAM-2, CAM-3); CAM-34 and CAM-35 texts in 4.4 and 8.8; open: U-5 (tilt), U-8, U-18 (effect at power-on), U-19, CAM-18, CAM-19, CAM-33, CAM-36 (4.3, 4.4, 8.8, 9.1, 9.2, 9.3, 14.1) | measured on the camera and against the vendor app in CS-1 | CS-1, 2026-11-25 |

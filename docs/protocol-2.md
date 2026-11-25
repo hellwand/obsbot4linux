@@ -204,7 +204,7 @@ line here.
 | `zone.return`                                                                            | pose         | pan, tilt deg; zoom factor | where zone tracking returns (read-only)                                                                                                                                                                            |
 | `hand.side`                                                                              | enum         | –                          | the hand the hand tracking follows                                                                                                                                                                                 |
 | `hand.area.pan`, `hand.area.tilt`                                                        | range        | deg                        | the hand tracking area                                                                                                                                                                                             |
-| `hand.axes.pan`, `hand.axes.tilt`                                                        | bool         | –                          | hand tracking may pan; may tilt                                                                                                                                                                                    |
+| `hand.axes.tilt`                                                                         | bool         | –                          | hand tracking may tilt                                                                                                                                                                                             |
 | `hand.return_after`                                                                      | number       | s                          | time outside the area before the return                                                                                                                                                                            |
 | `hand.move_gimbal`                                                                       | bool         | –                          | hand tracking moves the gimbal                                                                                                                                                                                     |
 | `hand.return`                                                                            | pose         | pan, tilt deg; zoom factor | where hand tracking returns (read-only)                                                                                                                                                                            |
@@ -246,7 +246,7 @@ Paths of the test models only (fake mode): `beacon.color` (enum) and `beacon.pul
 Actions: `gimbal.move`, `gimbal.stop`, `gimbal.turn`, `zoom.move`, `zoom.stop`, `preset.save`,
 `preset.recall`, `preset.rename`, `preset.delete`, `view.save`, `view.go`, `view.rename`,
 `view.delete`, `zone.return_here`, `zone.go_return`, `hand.return_here`, `hand.go_return`,
-`hand.return_clear`, `hand.area_reset`, `focus.point`, `power_on.set_pose`,
+`hand.return_clear`, `hand.area_reset`, `power_on.set_pose`,
 `power_on.use_current`, `power_on.use_preset`, `power_on.go`, `sleep`, `wake`,
 `factory_reset`; `beacon.flash` of `fake-b`. Their parameters are in each model's description.
 
