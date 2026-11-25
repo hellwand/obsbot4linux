@@ -57,11 +57,13 @@ fn no_leaf_is_read_from_the_byte_that_follows_the_microphone_until_u_23() {
 /// at plug-in and after the factory reset) the host's minimum, maximum, resolution and default
 /// queries of the status selector were answered with 60 zero bytes; every status read after an
 /// enumeration returned a full block, and no recorded status read has 0 in its first field.
-/// So the recordings do not show whether a status read during boot returns such a block; CS-1
-/// checks that. The decoder turns a zero block into values that look real
-/// (`sleep.auto.seconds` 0, `image.frame_rate` 0). CS-1 decides whether a block whose first
-/// byte is 0 counts as no read (spec 14, CAM-20); until then this test pins today's decoding,
-/// and the pull request of that decision changes it.
+/// So the recordings do not show whether a status read during boot returns such a block. The
+/// decoder turns a zero block into values that look real (`sleep.auto.seconds` 0,
+/// `image.frame_rate` 0). CS-1 answered CAM-20 with no on 2026-11-25 (spec 14, field ledger):
+/// the first status read after a cold re-plug and after a factory reset returned a full block
+/// with byte 0 `0x27`, so the model has no not-ready block to recognise, and a zero block stays
+/// decoded as values. This test pins that decision (w2-7 closed without a change); the test's
+/// name predates the answer.
 #[test]
 fn a_boot_block_decodes_as_values_until_cam_20_is_settled() {
     let values = decode::status(&[0u8; 60]);
