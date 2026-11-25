@@ -9,10 +9,9 @@ obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and command lin
 knowledge of 0.13 (frames, status decoding, recorded bytes and their tests) is carried over; the
 rest is new. Read "Upgrading from 0.13" below before installing.
 
-### Untested models
+### Supported models
 
-- OBSBOT Tiny 2 Lite (USB 3564:fef9): built from an owner's recordings, not verified by the
-  maintainers
+- OBSBOT Tiny 2 Lite (USB 3564:fef9): tested on firmware 6.2.8.1
 
 ### Added
 
@@ -57,9 +56,9 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 - Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
   `asleep: accepted`; `exposure.anti_flicker` no longer lists `auto` and
   `power_on.start.mode` names only `normal`, `close_up` and `unset`, the values the vendor app
-  shows (another start mode shows as `raw:<n>`); a pose-taking action that fails for the pose it read names that
-  pose (#328); a zone or hand area whose new min lies above the stored max is sent max
-  first, so the camera does not clamp the min to the old max.
+  shows (another start mode shows as `raw:<n>`); a pose-taking action that fails for the pose
+  it read names that pose (#328); a zone or hand area whose new min lies above the stored max
+  is sent max first, so the camera does not clamp the min to the old max.
 
 ### Removed
 

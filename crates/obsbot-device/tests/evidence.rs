@@ -49,11 +49,27 @@ fn every_registered_model_meets_the_evidence_rule() {
     }
 }
 
+/// The Tiny 2 Lite's evidence with one mark of 9.3 put back (CS-1 left none): the U-8 mark of
+/// the area order, with its row of level none, so that the two tests below have a mark to fail.
+fn with_a_mark() -> Evidence {
+    let mut rows = levels::LEVELS.to_vec();
+    rows.push(Row {
+        key: "zone.area.pan#order",
+        level: Level::None,
+        evidence: "none",
+    });
+    Evidence {
+        levels: Box::leak(rows.into_boxed_slice()),
+        unbacked: &[("zone.area.pan#order", "U-8")],
+        ..levels::EVIDENCE
+    }
+}
+
 /// From 1.0 on, every mark of 9.3 still in the description fails, and nothing else does.
 #[test]
 fn strict_fails_exactly_the_marks_of_9_3() {
     let entry = &plan::ENTRY;
-    let e = levels::EVIDENCE;
+    let e = with_a_mark();
     let problems = evidence::check(entry, &description_of("tiny2lite"), &e, true);
     let want: Vec<String> = e
         .unbacked
@@ -70,9 +86,9 @@ fn a_tested_model_may_keep_no_mark_of_9_3() {
         support: Support::Tested,
         ..plan::ENTRY
     };
-    let e = levels::EVIDENCE;
+    let e = with_a_mark();
     let problems = evidence::check(&tested, &description_of("tiny2lite"), &e, false);
-    assert_eq!(problems.len(), e.unbacked.len(), "{problems:#?}");
+    assert_eq!(problems.len(), 1, "{problems:#?}");
     assert!(
         problems
             .iter()

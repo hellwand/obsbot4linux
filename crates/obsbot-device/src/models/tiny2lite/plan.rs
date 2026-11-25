@@ -26,7 +26,8 @@ pub const IDENTITY: u8 = 0x0d;
 /// unit 2 with 19 controls.
 pub const XU_GUID: &str = "9a1e7291-6843-4683-6d92-39bc7906ee49";
 
-/// The registry entry (8.1, 8.2, 8.8). `support` is `untested` on `rebuild` until stage W3.
+/// The registry entry (8.1, 8.2, 8.8). `support: tested` from stage W3 on: the claim that stage W4
+/// verifies on every parity row.
 pub const ENTRY: ModelEntry = ModelEntry {
     key: "tiny2lite",
     display_name: "OBSBOT Tiny 2 Lite",
@@ -34,7 +35,7 @@ pub const ENTRY: ModelEntry = ModelEntry {
         vendor: 0x3564,
         product: 0xfef9,
     }],
-    support: Support::Untested,
+    support: Support::Tested,
     identity: IdentitySource::Query,
     firmware_query: true,
     identity_tier: Tier::FiveSeconds,
@@ -455,11 +456,7 @@ mod tests {
                 product: 0xfef9
             }]
         );
-        assert_eq!(
-            ENTRY.support,
-            Support::Untested,
-            "tested only from W3 on (8.8)"
-        );
+        assert_eq!(ENTRY.support, Support::Tested, "tested from W3 on (8.8)");
         assert_eq!(ENTRY.identity, IdentitySource::Query);
         let firmware_query = ENTRY.firmware_query;
         assert!(firmware_query, "the firmware query of 8.8");
