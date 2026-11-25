@@ -589,6 +589,39 @@ fn a_sleeping_camera_is_woken_first_when_the_person_agrees() {
     );
 }
 
+/// A start mode that the camera's own app stored and that the model reads but does not write
+/// (`close_up`, U-18) cannot be put back after a row: the leaf gets no row and keeps the owner's
+/// value, instead of ending at the last value the script wrote (the restore would be refused).
+#[test]
+fn a_value_that_cannot_be_written_back_is_left_alone() {
+    let d = Daemon::start("nr");
+    d.bus
+        .store(A, "power_on.start.mode", serde_json::json!("close_up"))
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    while d.state(A)["power_on"]["start"]["mode"] != "close_up" {
+        assert!(
+            Instant::now() < until,
+            "the daemon does not show the stored mode"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    let from = d.bus.ops(A).len();
+    let (out, rows) = d.check("nr", &["--device", "fake-a", "--assume-pass"]);
+    assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    assert_eq!(
+        row(&rows, "setting", "power_on.start.mode", "\"close_up\"").result,
+        "not run: the value it reads cannot be written back"
+    );
+    let written: Vec<Op> = d.bus.ops(A)[from..]
+        .iter()
+        .filter(|op| matches!(op, Op::Apply(leaf, _) if leaf == "power_on.start.mode"))
+        .cloned()
+        .collect();
+    assert!(written.is_empty(), "{written:?}");
+    assert_eq!(d.state(A)["power_on"]["start"]["mode"], "close_up");
+}
+
 #[test]
 fn without_device_it_is_a_usage_error() {
     let out = Command::new("bash")

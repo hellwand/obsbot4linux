@@ -18,7 +18,9 @@
 # against the fake devices). Rows whose `warning` holds `restart` or `destructive` run only
 # with `--destructive`, last; they are not restored row by row (the camera restarts for each).
 # A leaf with `requires` gets its required values set first, each as its own `set` the output
-# names, and restored after its rows.
+# names, and restored after its rows. A leaf whose snapshot value cannot be written back (an
+# enum value outside `writable`, as one stored by the camera's own app, or `raw:<n>`) gets no
+# row: its row says so and the leaf keeps the owner's value.
 #
 # Actions and asleep rows ask first. What an action stores on the camera is not restored:
 # stored presets, views, power-on and return poses. The state before the first action row is
@@ -372,8 +374,25 @@ setting_row() {
 	restore_row "$path"
 }
 
+# Whether the snapshot value of a leaf is one the script cannot write back: an enum value
+# outside `writable` (a start mode that the camera's own app stored) or `raw:<n>`. Such a leaf
+# gets no row, so the owner's value is not lost.
+cannot_restore() {
+	jq -e --arg p "$1" --argjson v "$(leaf "$SNAP" "$1")" '.settings[$p] as $s
+        | ($v | type == "string" and startswith("raw:"))
+          or ($s.type == "enum" and $v != null and ($s.writable | any(. == $v) | not))' <<<"$DESC" >/dev/null
+}
+
+not_restorable_row() {
+	record "$1" "$2" "$(leaf "$SNAP" "$2")" "not run: the value it reads cannot be written back" "" "" "$(how_of "$2")"
+}
+
 check_leaf() {
 	local path=$1 value
+	if cannot_restore "$path"; then
+		not_restorable_row setting "$path"
+		return
+	fi
 	setup_leaf "$path" setting || {
 		restore_setup "$path"
 		return
@@ -590,6 +609,10 @@ asleep_row() {
 	local kind=$1 name=$2 value="" reply code stop="" how params
 	if [ "$kind" = setting ]; then
 		how=$(how_of "$name")
+		if cannot_restore "$name"; then
+			not_restorable_row asleep "$name"
+			return
+		fi
 		value=$(differing_value "$name") || {
 			record asleep "$name" - "not run: no value that differs from the snapshot" "" "" "$how"
 			return

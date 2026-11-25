@@ -354,7 +354,7 @@ pub const LEVELS: &[Row] = &[
     row(
         "power_on.start.mode",
         Level::Captured,
-        "capture 08 (normal, unset); written values read back: measured 2026-11-25 (U-18); close_up read: measured 2026-11-25 (U-18)",
+        "capture 08 (normal, unset); close_up read: measured 2026-11-25 (U-18)",
     ),
     row(
         "do:gimbal.move",

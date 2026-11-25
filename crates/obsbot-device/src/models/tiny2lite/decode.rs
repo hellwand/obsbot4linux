@@ -72,17 +72,11 @@ pub const SLEEP_BACKGROUND: [(&str, u8); 3] = [("black", 0), ("image", 1), ("own
 pub const HAND_SIDE: [(&str, u8); 2] = [("right", 0), ("left", 1)];
 /// `focus.mode`: framed `0x3442` (u32), query `0x3642` word 0.
 pub const FOCUS_MODE: [(&str, u8); 3] = [("continuous", 1), ("single", 2), ("manual", 3)];
-/// `power_on.start.mode`: byte 0 of the initial-state block (`0x3e84` / `0x3e44`). Only bytes
-/// read from the camera are named; another byte reads `raw:<n>` (U-18).
-pub const START_MODE: [(&str, u8); 7] = [
-    ("static", 0xff),
-    ("normal", 0x00),
-    ("upper_body", 0x01),
-    ("close_up", 0x02),
-    ("headless", 0x03),
-    ("group", 0x09),
-    ("unset", 0xfe),
-];
+/// `power_on.start.mode`: byte 0 of the initial-state block (`0x3e84` / `0x3e44`). Named are
+/// only the bytes the vendor app confirms (U-18): `normal` and `unset` (capture 08) and
+/// `close_up` (its "AI Close-up", measured 2026-11-25). Any other byte, one that Linux wrote
+/// and read back included, shows as `raw:<n>`.
+pub const START_MODE: [(&str, u8); 3] = [("normal", 0x00), ("close_up", 0x02), ("unset", 0xfe)];
 
 /// The name of `v` in `table`, else `raw:<v>`.
 pub fn named(table: &[(&str, u8)], v: u8) -> Value {
@@ -922,14 +916,18 @@ mod tests {
             d
         };
         for (byte, name) in [
-            (0xffu8, "static"),
+            (0x00u8, "normal"),
             (0xfe, "unset"),
-            // U-18: never read from the camera, so not named
+            (2, "close_up"),
+            // U-18: a byte the vendor app never showed has no name, also when Linux wrote it
+            // and it read back (static ff, upper_body 01, headless 03, group 09 in 0.13.2)
+            (0xff, "raw:255"),
+            (1, "raw:1"),
+            (3, "raw:3"),
+            (9, "raw:9"),
             (7, "raw:7"),
             (8, "raw:8"),
             (4, "raw:4"),
-            (9, "group"),
-            (2, "close_up"),
         ] {
             assert_eq!(
                 power_on(&src(3), &block(byte)).unwrap()["power_on.start.mode"],
@@ -1062,8 +1060,9 @@ mod tests {
                 assert_eq!(named(table, *byte), json!(name));
             }
         }
-        // U-18: lower_body and hand were never read from the initial state (raw:<n>)
+        // U-18: only the start modes the vendor app confirms have a name (raw:<n>)
         assert_eq!(named(&START_MODE, 7), json!("raw:7"));
+        assert_eq!(named(&START_MODE, 0xff), json!("raw:255"));
         assert_eq!(mode_pair("close_up"), Some([2, 2]));
         assert_eq!(mode_pair("off"), None);
     }

@@ -90,14 +90,8 @@ fn name() -> Setting {
 
 /// The Tiny 2 Lite's settings (4.3), actions (4.4) and limits.
 pub fn description() -> Description {
-    // U-18: lower_body and hand were never read from the camera's initial state; such a byte
-    // shows as raw:<n>
-    let mut start_modes: Vec<&str> = MODES
-        .iter()
-        .copied()
-        .filter(|m| !["lower_body", "hand"].contains(m))
-        .collect();
-    start_modes.push("unset");
+    // U-18: only the start modes the vendor app confirms; another byte shows as raw:<n>
+    let start_modes = super::decode::START_MODE.map(|(name, _)| name);
     let mut d = Description::default()
         .setting("asleep", Setting::boolean("Asleep").readonly())
         .setting("on_air.active", Setting::boolean("On air").readonly())
@@ -452,7 +446,8 @@ pub fn description() -> Description {
             "power_on.start.mode",
             w(
                 // U-18: the start mode after a power cycle was never seen for a mode written from
-                // Linux; only the values recorded from the vendor app stay writable (PX-U-18)
+                // Linux; only the values recorded as written by the vendor app are writable
+                // (PX-U-18)
                 Setting::enumeration("Initial tracking mode", &start_modes)
                     .writable_only(&["normal", "unset"]),
             ),
