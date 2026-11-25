@@ -5,6 +5,13 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-11-25
+
+This is the second release candidate. Since 1.0.0-rc.1 the daemon reads `asleep` again right
+before a request the camera ignores while asleep (#328); `scripts/check-model.sh` puts the zoom
+and the pose back reliably (#347) and gains `--observe`, which answers the questions it can
+measure from the state and the picture (#345); the project page describes 1.0.
+
 ### Fixed
 
 - A setting or action that the camera ignores while asleep (on the Tiny 2 Lite the
