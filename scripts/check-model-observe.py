@@ -32,8 +32,11 @@ except ImportError:
 # A shift of at least this many pixels (of a 320 px wide frame: 1.25 %) with a clear peak, a
 # scale off 1 by 4 % or a correlation below 0.9 is a moved picture. Measured on the Tiny 2
 # Lite in a dim room: two frames of an unchanged view correlate at 0.94 to 1.00, a tilt of
-# 16 degrees at 0.73 (its phase-correlation peak too low to count). A person in view who moves
-# a lot can also fall below 0.9; check-model.sh then asks rather than passes or ignores.
+# 16 degrees at 0.73 (its phase-correlation peak too low to count). Unchanged pairs peak at
+# 0.33 to 0.44 with no shift and a scale within one step of 1 (1.01); a 5 degree pan shifts by
+# 23 px at a peak of 0.17. Unchanged frames of a dim scene correlate at 0.94 only, and a person
+# who moves a lot can fall below 0.9: check-model.sh therefore passes a move only after a still
+# baseline, and asks otherwise.
 SHIFT_PX = 4.0
 PEAK_MIN = 0.05
 SCALE_MIN = 0.04
