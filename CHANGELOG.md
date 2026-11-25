@@ -58,10 +58,10 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   move at all).
 - Tiny 2 Lite, from camera session 1: the settings the camera keeps while it sleeps are marked
   `asleep: accepted`; `exposure.anti_flicker` no longer lists `auto` and
-  `power_on.start.mode` names only `normal`, `close_up` and `unset`, the values the vendor app
-  shows (another start mode shows as `raw:<n>`); a pose-taking action that fails for the pose
-  it read names that pose (#328); a zone or hand area whose new min lies above the stored max
-  is sent max first, so the camera does not clamp the min to the old max.
+  `power_on.start.mode` names only `normal`, `close_up` and `unset` (another start mode shows
+  as `raw:<n>`); a pose-taking action that fails for the pose it read names that pose (#328); a
+  zone or hand area whose new min lies above the stored max is sent max first, so the camera does
+  not clamp the min to the old max.
 
 ### Removed
 
