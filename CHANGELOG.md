@@ -74,6 +74,10 @@ rest is new. Read "Upgrading from 0.13" below before installing.
 
 ### Fixed
 
+- `obsbot4linuxd`: a write the camera kept another value for (a clamped zone area) stayed
+  `pending` with the written value until its group's next periodic read, up to 60 s, so `get`
+  showed it as taken. The daemon now reads the group once when the leaf's `settle_ms` has
+  passed, and the camera's value shows within that time (#335).
 - The Arch `PKGBUILD` no longer rewrites itself when built from a checkout, so `makepkg -si`
   leaves the repository clean; a local build is labelled with the release version (#120).
 
