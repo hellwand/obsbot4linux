@@ -136,26 +136,28 @@ fn a_missing_wrong_or_stray_row_fails() {
     // a mark of 9.3 on an aspect needs its row of level none, and a row of level none a mark
     let anti = all
         .iter()
-        .position(|r| r.key == "zone.area.pan#order")
-        .expect("the area order (U-8) has its row of level none");
+        .position(|r| r.key == "power_on.settings.hue#values")
+        .expect("the hue values (U-19) have their row of level none");
     assert_eq!(all[anti].level, Level::None);
     let mut no_row: Vec<Row> = all.to_vec();
     no_row.remove(anti);
     let p = evidence::check(entry, &d, &with(no_row), false);
     assert_eq!(
         p,
-        ["zone.area.pan#order (U-8): a mark of 9.3 without a row of level none"]
+        ["power_on.settings.hue#values (U-19): a mark of 9.3 without a row of level none"]
     );
     let mut inherited: Vec<Row> = all.to_vec();
     inherited[anti] = Row {
-        key: "zone.area.pan#order",
+        key: "power_on.settings.hue#values",
         level: Level::Captured,
-        evidence: "capture 11",
+        evidence: "capture 08b",
     };
     let p = evidence::check(entry, &d, &with(inherited), false);
     assert_eq!(
         p,
-        ["zone.area.pan#order (U-8): a mark of 9.3, but its row has level Captured, not none"]
+        [
+            "power_on.settings.hue#values (U-19): a mark of 9.3, but its row has level Captured, not none"
+        ]
     );
     let mut no_mark: Vec<Row> = all.to_vec();
     no_mark.push(Row {

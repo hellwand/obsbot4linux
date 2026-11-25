@@ -145,12 +145,12 @@ pub const LEVELS: &[Row] = &[
     row(
         "zone.area.pan",
         Level::Captured,
-        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16)",
+        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16); order: measured 2026-11-25 (U-8)",
     ),
     row(
         "zone.area.tilt",
         Level::Captured,
-        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16)",
+        "capture 11; measured 2026-10-25, 2026-10-27 (#58), 2026-11-25 (CAM-16); order: measured 2026-11-25 (U-8)",
     ),
     row(
         "zone.return",
@@ -161,12 +161,12 @@ pub const LEVELS: &[Row] = &[
     row(
         "hand.area.pan",
         Level::Captured,
-        "capture 11; measured 2026-11-25 (CAM-16)",
+        "capture 11; measured 2026-11-25 (CAM-16); order: measured 2026-11-25 (U-8)",
     ),
     row(
         "hand.area.tilt",
         Level::Captured,
-        "capture 11; measured 2026-11-25 (CAM-16)",
+        "capture 11; measured 2026-11-25 (CAM-16); order: measured 2026-11-25 (U-8)",
     ),
     row("hand.axes.tilt", Level::None, "none"),
     row(
@@ -486,10 +486,6 @@ pub const LEVELS: &[Row] = &[
         "capture 16; measured 2026-10-24",
     ),
     // marks of spec 9.3 on a value, a bound or an aspect: no backing
-    row("hand.area.pan#order", Level::None, "none"),
-    row("hand.area.tilt#order", Level::None, "none"),
-    row("zone.area.pan#order", Level::None, "none"),
-    row("zone.area.tilt#order", Level::None, "none"),
     row("power_on.start.mode#power_on_effect", Level::None, "none"),
     row(
         "power_on.settings.tracking_speed#values",

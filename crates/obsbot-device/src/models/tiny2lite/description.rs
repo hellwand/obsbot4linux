@@ -31,10 +31,6 @@ pub const SETTLE_MS: u32 = 3000;
 /// `do:<action>#<aspect>` the same for actions.
 pub const UNBACKED: &[(&str, &str)] = &[
     ("hand.axes.tilt", "U-5"),
-    ("hand.area.pan#order", "U-8"),
-    ("hand.area.tilt#order", "U-8"),
-    ("zone.area.pan#order", "U-8"),
-    ("zone.area.tilt#order", "U-8"),
     ("power_on.start.mode#power_on_effect", "U-18"),
     ("power_on.settings.tracking_speed#values", "U-19"),
     ("power_on.settings.autofocus#values", "U-19"),
@@ -1000,8 +996,8 @@ mod tests {
         }
         let rows: BTreeSet<&str> = UNBACKED.iter().map(|(_, r)| *r).collect();
         // CS-1 (2026-11-25) settled the others: kept and measured, or removed (PX-U-5, PX-U-16,
-        // U-25) or narrowed (U-9)
-        let want: BTreeSet<&str> = ["U-5", "U-8", "U-18", "U-19"].into();
+        // U-25), narrowed (U-9) or applied (U-8)
+        let want: BTreeSet<&str> = ["U-5", "U-18", "U-19"].into();
         assert_eq!(rows, want);
     }
 

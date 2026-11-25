@@ -123,7 +123,7 @@ fn angle(x: f64) -> Value {
     rounded(x, 0.1)
 }
 
-fn f32_at(d: &[u8], word: usize) -> Option<f64> {
+pub fn f32_at(d: &[u8], word: usize) -> Option<f64> {
     let bytes: [u8; 4] = d.get(word * 4..word * 4 + 4)?.try_into().ok()?;
     let v = f32::from_le_bytes(bytes);
     v.is_finite().then_some(f64::from(v))
