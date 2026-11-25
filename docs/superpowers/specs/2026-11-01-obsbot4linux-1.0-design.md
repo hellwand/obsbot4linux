@@ -1709,6 +1709,14 @@ its own description. It replaces 0.13's `check-readback.sh`.
   is `null` is skipped.
 - Output: one line per row and a results file. The ledger update takes `measured` and the
   date from it.
+- `--observe state|<video node>` answers the questions it can measure and asks only the
+  rest; starting the script with it is the go for every action and asleep row (restart and
+  destructive rows still ask). An action passes when the state shows its change; a move (the
+  pose changed) only when the frames of the video node, compared by
+  `scripts/check-model-observe.py`, moved too; a stop when the picture stays still. An asleep
+  action whose state and picture show no change is `ignored`. `readback:false` rows and
+  whatever the measurement does not decide are asked, with the measurement printed; the
+  result names the measurement (`pass (observed: …)`). It never fails an awake row on its own.
 - CI runs it against `fake-a` and `fake-b` with `--assume-pass`, which answers every
   question to the person with pass. In stage W4 the release PR maps its results to every row
   of 9.1.

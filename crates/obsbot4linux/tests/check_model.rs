@@ -683,3 +683,78 @@ fn without_device_it_is_a_usage_error() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("usage: check-model.sh --device"));
 }
+
+/// `--observe state`: starting the script is the go for every action and asleep row, so no
+/// row is declined although every answer is no. A row whose effect the state shows (a preset
+/// saved: the list changed) passes with the measurement in its result. A move is never passed
+/// on the state alone (the pose leaves are the daemon's own report, the picture is the
+/// evidence): with no picture it is asked, and the answer no fails it. Nothing fails without
+/// a person's answer: every failed row is one the person declined to confirm.
+#[test]
+fn observe_answers_from_the_state_and_asks_the_rest() {
+    let d = Daemon::start("obs");
+    let results = results_file("obs");
+    let out = d
+        .command(
+            &results,
+            Path::new(env!("CARGO_BIN_EXE_obsbot4linux")),
+            &["--device", "fake-a", "--asleep", "--observe", "state"],
+        )
+        .env("CHECK_MODEL_TTY", answers("obs", &"n\n".repeat(400)))
+        .env("CHECK_MODEL_SETTLE", "3")
+        .env("CHECK_MODEL_QUIET", "1")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "{}", report(&out));
+    let rows = rows(&results);
+    let declined: Vec<&Row> = rows
+        .iter()
+        .filter(|r| r.result.contains("declined"))
+        .collect();
+    assert!(declined.is_empty(), "{declined:#?}");
+    let save = rows
+        .iter()
+        .find(|r| r.kind == "action" && r.path == "preset.save")
+        .unwrap();
+    assert!(
+        save.result.starts_with("pass (observed: state: presets"),
+        "{save:#?}"
+    );
+    let moved = rows
+        .iter()
+        .find(|r| r.kind == "action" && r.path == "gimbal.move")
+        .unwrap();
+    assert_eq!(moved.result, "fail (not confirmed)", "{}", report(&out));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("observed: pose "));
+    let unconfirmed_fail = rows
+        .iter()
+        .filter(|r| r.result.starts_with("fail") && r.result != "fail (not confirmed)")
+        .collect::<Vec<_>>();
+    assert!(unconfirmed_fail.is_empty(), "{unconfirmed_fail:#?}");
+    // sleep and wake are seen in the state
+    for action in ["sleep", "wake"] {
+        let r = rows
+            .iter()
+            .find(|r| r.kind == "action" && r.path == action)
+            .unwrap();
+        assert!(
+            r.result.starts_with("pass (observed: state: asleep"),
+            "{r:#?}"
+        );
+    }
+}
+
+/// A video node that is not one stops the run before it touches the camera (exit 2), rather
+/// than running without the picture it was asked to use.
+#[test]
+fn observe_with_a_missing_video_node_is_a_usage_error() {
+    let d = Daemon::start("obs-bad");
+    let (out, rows) = d.check(
+        "obs-bad",
+        &["--device", "fake-a", "--observe", "/nonexistent/video9"],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", report(&out));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is not a video device"));
+    assert!(rows.is_empty(), "{rows:#?}");
+    assert!(acts(&d, 0).is_empty());
+}
