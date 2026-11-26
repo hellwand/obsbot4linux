@@ -18,7 +18,7 @@ obsbot-proto = { path = "crates/obsbot-proto" }
 obsbot4linuxd = { path = "crates/obsbot4linuxd" }
 schemars = "1.2"
 clap = { version = "4", features = ["derive"] }
-nix = { version = "0.31", features = ["fs", "ioctl"] }
+nix = { version = "0.32", features = ["fs", "ioctl"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
