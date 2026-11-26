@@ -409,7 +409,12 @@ pub fn description() -> Description {
                 .step(1.0)
                 .precision(1.0)),
         )
-        .setting("led.blink", w_no_readback(Setting::boolean("LED blink")))
+        // A blink written asleep leaves the LED dark after the wake until the camera restarts
+        // (measured 2026-11-26, #369): refused with `asleep` (5.7).
+        .setting(
+            "led.blink",
+            w_no_readback(Setting::boolean("LED blink")).asleep(Asleep::Ignored),
+        )
         .setting("sleep.auto.enabled", w(Setting::boolean("Auto-sleep")))
         .setting(
             "sleep.auto.seconds",
@@ -826,6 +831,8 @@ mod tests {
             d.settings["zoom.field_of_view"].asleep,
             Some(Asleep::Ignored)
         );
+        // #369: a blink written asleep sticks the LED dark until a camera restart
+        assert_eq!(d.settings["led.blink"].asleep, Some(Asleep::Ignored));
         assert_eq!(d.actions["power_on.go"].asleep, Asleep::Ignored);
         assert_eq!(d.actions["wake"].asleep, Asleep::Accepted);
         for pose_taking in [
