@@ -1449,6 +1449,38 @@ mod tests {
         );
     }
 
+    /// #369: on the Tiny 2 Lite a `led.blink` written while the camera sleeps leaves the LED
+    /// dark after the wake until the camera restarts. The description marks it `ignored`, so
+    /// the write is refused with `asleep` and nothing reaches the camera, also when the camera
+    /// fell asleep since the last poll.
+    #[test]
+    fn a_led_blink_write_while_asleep_is_refused_and_not_sent() {
+        let (mut w, bus) = worker_timed("fake-a", fast());
+        let id = "sn:FAKEA0000001";
+        w.first_read();
+        assert!(!w.state.asleep());
+        bus.sleep(id).unwrap();
+        let before = bus.ops(id).len();
+        let (out, replies) = Outbound::new(2, None, 10_000);
+        let set = Job {
+            id: RequestId::Int(1),
+            out: Some(out),
+            conn: 2,
+            device: id.into(),
+            work: Work::Set(Patch::new().leaf("led.blink", true)),
+            arrived: Instant::now(),
+            stop: false,
+        };
+        w.batch(vec![set], vec![false]);
+        let reply = next(&replies);
+        assert_eq!(reply["error"]["code"], "asleep", "{reply}");
+        let ops = bus.ops(id)[before..].to_vec();
+        assert!(
+            !ops.iter().any(|o| matches!(o, Op::Apply(..))),
+            "nothing was sent: {ops:?}"
+        );
+    }
+
     /// The same read the other way: the camera woke since the last poll, so an `ignored`
     /// setting is written, not refused with the stale `asleep`.
     #[test]

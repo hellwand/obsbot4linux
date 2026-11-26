@@ -281,7 +281,8 @@ fn fake_a_passes_every_row_and_is_left_as_it_was() {
         ["factory_reset", "audio.enabled", "audio.enabled"]
     );
     // asleep rows only for `asleep: unknown`; zoom.field_of_view is `ignored` and audio.volume
-    // `accepted` (measured)
+    // `accepted` (measured); led.blink is `ignored` because a blink written asleep sticks the
+    // LED dark until a camera restart (#369), so the script must not write it asleep
     assert!(
         rows.iter()
             .any(|r| r.kind == "asleep" && r.path == "exposure.anti_flicker")
@@ -295,6 +296,11 @@ fn fake_a_passes_every_row_and_is_left_as_it_was() {
         !rows
             .iter()
             .any(|r| r.kind == "asleep" && r.path == "zoom.field_of_view")
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.kind == "asleep" && r.path == "led.blink")
     );
     // an asleep row writes a value that differs from the snapshot (otherwise `accepted` proves
     // nothing), and a leaf with `requires` gets its setup while awake: no row is answered

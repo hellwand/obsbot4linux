@@ -289,7 +289,7 @@ mod tests {
         );
         assert_eq!(
             s("led.blink"),
-            "bool, no readback, asleep unknown (LED blink)"
+            "bool, no readback, asleep ignored (LED blink)"
         );
         assert_eq!(
             a("factory_reset"),

@@ -5,6 +5,14 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Tiny 2 Lite: `led.blink` written while the camera sleeps left the LED dark after the wake,
+  although `led.blink` read `true`, until the camera restarted (turning `audio.enabled` off and
+  on, or a factory reset). The daemon now refuses `led.blink` with `asleep` while the camera
+  sleeps and sends nothing, and `scripts/check-model.sh --asleep` no longer writes it asleep
+  (measured on the camera, #369).
+
 ## [1.0.0-rc.3] - 2026-11-26
 
 This is the third release candidate. Since 1.0.0-rc.2 the daemon answers the requests of a

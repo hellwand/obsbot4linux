@@ -26,9 +26,11 @@
 # stored presets, views, power-on and return poses. The state before the first action row is
 # printed, and the rows that work on a list item use a preset slot or a view the snapshot
 # shows free or absent, saved by the script itself and deleted by it again; an action that
-# needs such an item and finds none is not run. `--asleep` adds the asleep rows: sleep, write
-# a value that differs from the snapshot (after the `requires` set while awake), wake, look
-# for it. A `.turn` action runs asleep only with its `.stop`. The state is snapshot first; on
+# needs such an item and finds none is not run. `--asleep` adds the asleep rows, one per leaf
+# and action marked `asleep: unknown` (an `ignored` one is refused asleep and never written
+# there: `led.blink` written asleep leaves the LED dark until a camera restart, #369): sleep,
+# write a value that differs from the snapshot (after the `requires` set while awake), wake,
+# look for it. A `.turn` action runs asleep only with its `.stop`. The state is snapshot first; on
 # exit, an interrupt or a termination every leaf the script wrote is set back to its snapshot
 # value (a value read while the leaf's `requires` were not met is its automatic control's: it
 # is written back only while the `requires` hold and within the bounds, else it is named), the
