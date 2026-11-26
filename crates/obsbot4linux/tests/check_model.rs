@@ -1084,3 +1084,58 @@ fn observe_without_a_frame_exits_2_and_leaves_no_stream() {
     assert!(rows(&results).is_empty());
     assert!(!still_running(&pidfile), "ffmpeg left running");
 }
+
+/// `--observe`: a pose change in the row of an action that does not move the camera is not
+/// its effect. Measured 2026-11-26: in the `preset.save` row `zoom.factor` read 1.47 -> 1
+/// while the picture stayed still, so the row was asked instead of passed on its preset
+/// list. Here the fake's zoom changes the moment `preset.save` reaches it; the row passes on
+/// the list and names the pose change.
+#[test]
+fn observe_does_not_take_a_pose_change_for_the_effect_of_a_save() {
+    let d = Daemon::start("obs-drift");
+    let bus = Arc::clone(&d.bus);
+    let from = bus.ops(A).len();
+    let done = Arc::new(AtomicBool::new(false));
+    let stop = Arc::clone(&done);
+    let drift = thread::spawn(move || {
+        let mut seen = from;
+        while !stop.load(Ordering::SeqCst) {
+            let ops = bus.ops(A);
+            if ops[seen..]
+                .iter()
+                .any(|op| matches!(op, Op::Act(a, _) if a == "preset.save"))
+            {
+                bus.store(A, "zoom.factor", serde_json::json!(1.5)).unwrap();
+                return true;
+            }
+            seen = ops.len();
+            thread::sleep(Duration::from_millis(5));
+        }
+        false
+    });
+    let results = results_file("obs-drift");
+    let out = d
+        .command(
+            &results,
+            Path::new(env!("CARGO_BIN_EXE_obsbot4linux")),
+            &["--device", "fake-a", "--observe", "state"],
+        )
+        .env("CHECK_MODEL_TTY", answers("obs-drift", &"n\n".repeat(400)))
+        // quiet for 2 s: the zoom the fake changes shows at the next 0.2 s read, also on a
+        // loaded machine
+        .env("CHECK_MODEL_SETTLE", "4")
+        .env("CHECK_MODEL_QUIET", "2")
+        .env("CHECK_MODEL_BASELINE", "0.1")
+        .output()
+        .unwrap();
+    done.store(true, Ordering::SeqCst);
+    assert!(drift.join().unwrap(), "preset.save did not run");
+    let rows = rows(&results);
+    let save = row(&rows, "action", "preset.save", "slot=0");
+    assert!(
+        save.result.starts_with("pass (observed: state: presets")
+            && save.result.contains("not a move"),
+        "{save:#?}\n{}",
+        report(&out)
+    );
+}
