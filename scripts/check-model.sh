@@ -431,8 +431,7 @@ restore_row() {
 # control's. It is written back only while the `requires` hold, as during the leaf's rows, and
 # when it lies within the bounds; otherwise this prints why it is not, and succeeds. Measured on
 # the Tiny 2 Lite (2026-11-26): the automatic exposure read a gain of 71, above the 64 a write
-# may set, and a gain written while the exposure is automatic is not kept and changes what the
-# gain reads from then on.
+# may set, and a gain written while the exposure is automatic is not kept.
 not_written_back() {
 	# shellcheck disable=SC2016 # jq variables, not shell ones
 	local unmet='def unmet($st): any((.requires // [])[]; . as $q | $st | getpath($q.path | split(".")) != $q.equals);'

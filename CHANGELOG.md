@@ -8,9 +8,9 @@ All notable changes to OBSBot4Linux. The format follows
 ### Changed
 
 - Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
-  written while the exposure is automatic does not change the picture and is not kept, and the
-  gain then reads the written value instead of the automatic exposure's (measured on the camera,
-  #357). The 0.13 command `image gain V` is now `set exposure.mode=manual exposure.gain=V`.
+  written while the exposure is automatic does not change the picture and is not kept, and after
+  a manual gain is set the gain read under automatic exposure stays at that value instead of the
+  automatic exposure's (measured on the camera, #357). The 0.13 command `image gain V` is now `set exposure.mode=manual exposure.gain=V`.
 
 ### Fixed
 
