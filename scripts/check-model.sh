@@ -301,10 +301,40 @@ go() {
 	ask "$1"
 }
 
+# The camera must be awake for the rows; a sleeping one is woken when the person agrees. It
+# is woken before the stream of --observe opens: asleep the camera sends no frame, and the
+# first one must come within 15 s (measured 2026-11-26: with the camera asleep the stream got
+# no frame and the run ended with exit 2).
+if [ "$(jq -r .asleep <<<"$SNAP")" = true ]; then
+	go "$SHORT is asleep: wake it for the check?" || exit 3
+	cli "do" wake >/dev/null || exit 3
+	wait_asleep "$SLEEP_WAIT" false || {
+		echo "check-model.sh: $SHORT is still asleep after ${SLEEP_WAIT} s" >&2
+		exit 3
+	}
+	SNAP=$(full_state) || exit 3
+fi
+
 # --observe with a video node: a stream stays open for the whole run; ffmpeg replaces one
 # small greyscale frame five times a second, and a row copies the first one written after it
 # asked. The stream ends in finish.
 OBS_DIR="" RECORDER="" OBSERVED=""
+# Ends the stream: SIGINT, as ffmpeg's own `q` (measured 2026-11-26: an ffmpeg that got no
+# frame from the camera did not end on SIGTERM within 5 s, it did on SIGINT), up to 5 s for
+# it to end, then SIGKILL; the run never leaves it behind.
+stop_recorder() {
+	[ -n "$RECORDER" ] || return 0
+	local i
+	kill -INT "$RECORDER" 2>/dev/null
+	for ((i = 0; i < 50; i++)); do
+		kill -0 "$RECORDER" 2>/dev/null || break
+		sleep 0.1
+	done
+	kill -0 "$RECORDER" 2>/dev/null && kill -KILL "$RECORDER" 2>/dev/null
+	wait "$RECORDER" 2>/dev/null
+	RECORDER=""
+	rm -rf "$OBS_DIR"
+}
 if [ -n "$VIDEO" ]; then
 	HELPER="$(dirname "$0")/check-model-observe.py"
 	if ! { command -v ffmpeg >/dev/null && command -v v4l2-ctl >/dev/null &&
@@ -338,7 +368,7 @@ if [ -n "$VIDEO" ]; then
 		-f image2 -update 1 -atomic_writing 1 -y "$OBS_DIR/latest.pgm" 2>"$OBS_DIR/ffmpeg.log" &
 	RECORDER=$!
 	# until finish takes over (it ends the stream too): an early exit must not leave it open
-	trap 'kill "$RECORDER" 2>/dev/null; rm -rf "$OBS_DIR"' EXIT
+	trap stop_recorder EXIT
 fi
 
 # Copies the first frame written after the call to $OBS_DIR/$1.pgm (at most $2 s, default 5);
@@ -359,22 +389,10 @@ if [ -n "$VIDEO" ]; then
 	grab first 15 || {
 		echo "check-model.sh: --observe: no frame from $VIDEO within 15 s (is it streaming elsewhere?):" >&2
 		head -n 3 "$OBS_DIR/ffmpeg.log" >&2
-		kill "$RECORDER" 2>/dev/null
-		rm -rf "$OBS_DIR"
+		stop_recorder
 		exit 2
 	}
 	echo "observe: frames from $VIDEO"
-fi
-
-# The camera must be awake for the rows; a sleeping one is woken when the person agrees.
-if [ "$(jq -r .asleep <<<"$SNAP")" = true ]; then
-	go "$SHORT is asleep: wake it for the check?" || exit 3
-	cli "do" wake >/dev/null || exit 3
-	wait_asleep "$SLEEP_WAIT" false || {
-		echo "check-model.sh: $SHORT is still asleep after ${SLEEP_WAIT} s" >&2
-		exit 3
-	}
-	SNAP=$(full_state) || exit 3
 fi
 
 # The setting rows of one leaf: the values to write, in order.
@@ -1056,11 +1074,7 @@ finish() {
 	trap - EXIT INT TERM
 	FINISHING=1
 	# the stream first: the restore needs no frames, and nothing after this may leave it open
-	if [ -n "$RECORDER" ]; then
-		kill "$RECORDER" 2>/dev/null
-		wait "$RECORDER" 2>/dev/null
-		rm -rf "$OBS_DIR"
-	fi
+	stop_recorder
 	WAIT=${CHECK_MODEL_FINISH_WAIT:-10}
 	# after a restart row the device may still be settling: wait for it
 	local until=$(($(date +%s) + WAIT))
