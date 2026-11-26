@@ -15,6 +15,15 @@ All notable changes to OBSBot4Linux. The format follows
   which stayed awake, while the reply was `ok`; the asleep rows of `scripts/check-model.sh`
   failed with "no asleep:true within 30 s". The model now sends a sleep no sooner than 3 s
   after the last wake it sent (#363).
+- `scripts/check-model.sh --destructive`: a restart row passed as soon as the device was listed,
+  before the camera went away to restart, so the final restore reached a restarting camera and
+  was refused (exit 1). The row now waits for the device to go away and return (#360).
+- `scripts/check-model.sh --observe <node>` with a sleeping camera opened the stream before it
+  woke the camera, got no frame and exited 2, and left its ffmpeg running. The camera is woken
+  first; the stream is ended with SIGINT and a bounded wait, then SIGKILL (#361).
+- `scripts/check-model.sh --observe` took a pose readback that changed during `preset.save` for
+  a move and asked instead of passing the row on the preset list. A pose change counts only for
+  the motion actions (#362).
 
 ## [1.0.0-rc.2] - 2026-11-25
 
