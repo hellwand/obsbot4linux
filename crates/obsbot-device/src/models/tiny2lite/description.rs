@@ -315,7 +315,7 @@ pub fn description() -> Description {
         .setting(
             "exposure.gain",
             // the camera does not keep a gain written while the exposure is automatic, and its
-            // automatic exposure reads above 64 (57, 71), measured 2026-11-26
+            // automatic exposure read up to 71, above the range (measured 2026-11-26, #357)
             uvc("Gain", 1.0, 64.0, 1.0)
                 .requires("exposure.mode", json!("manual"))
                 .live("auto"),

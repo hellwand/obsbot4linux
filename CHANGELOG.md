@@ -5,6 +5,20 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
+  written while the exposure is automatic does not change the picture and is not kept, and the
+  gain then reads the written value instead of the automatic exposure's (measured on the camera,
+  #357). The 0.13 command `image gain V` is now `set exposure.mode=manual exposure.gain=V`.
+
+### Fixed
+
+- `scripts/check-model.sh` writes back a value that was read while the field's `requires` were
+  not met (the automatic control's, such as the gain under automatic exposure) only while they
+  hold and when it lies within the bounds; otherwise it names the value. Before, a snapshot gain
+  of 71 made the restore fail with `out_of_range` and the run exit 1 (#357).
+
 ## [1.0.0-rc.2] - 2026-11-25
 
 This is the second release candidate. Since 1.0.0-rc.1 the daemon reads `asleep` again right
@@ -279,6 +293,7 @@ Exceptions:
   mode and the firmware version are no longer listed as missing; gestures are read back (#122).
 - `audio --help` says that every microphone change restarts the camera, not only turning it off, and
   `gimbal rate --help` says that an omitted axis is stopped (#123).
+
 ## [0.13.2] - 2026-10-31
 
 ### Fixed
