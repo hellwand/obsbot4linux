@@ -871,3 +871,83 @@ fn the_frame_comparison_tells_a_move_from_noise_and_darkness() {
         assert!(dark.starts_with("dark "), "{dark}");
     }
 }
+
+/// A restart row passes only once the device went away and came back: the camera answers a
+/// `restart` write or action before it restarts (measured 2026-11-26: the Tiny 2 Lite went
+/// away 2.9 s after the reply to `factory_reset`). A row that took the device that was still
+/// listed for the returned one let the next restart row and the final restore reach a camera
+/// that was about to go away, and the restore was refused (`unavailable`), exit 1. Here the
+/// command line delays every restart write and action by 1.5 s after its reply; the run must
+/// still exit 0 with every restart row `returned` and every leaf it wrote put back.
+#[test]
+fn a_restart_row_waits_for_the_device_to_go_away_and_return() {
+    let d = Daemon::start("late");
+    // a value the factory reset changes, so that a reset that lands after the restore shows
+    let (code, _, err) = common::cli(
+        Some(&d.socket),
+        &["set", "audio.volume=37", "--device", "fake-a"],
+    );
+    assert_eq!(code, 0, "{err}");
+    let until = Instant::now() + Duration::from_secs(10);
+    while d.state(A)["audio"]["volume"].as_f64() != Some(37.0) {
+        assert!(
+            Instant::now() < until,
+            "the fake does not show audio.volume=37"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    let before = writable_values(&d.state(A), "fake-a");
+    let wrapper = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/late-restart-cli.sh");
+    let results = results_file("late");
+    let out = d
+        .command(
+            &results,
+            &wrapper,
+            &["--device", "fake-a", "--assume-pass", "--destructive"],
+        )
+        .env("LATE_RESTART_REAL_CLI", env!("CARGO_BIN_EXE_obsbot4linux"))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains("restore refused"),
+        "{}",
+        report(&out)
+    );
+    let rows = rows(&results);
+    for (path, value) in [
+        ("audio.enabled", "false"),
+        ("audio.enabled", "true"),
+        ("factory_reset", "confirm=true"),
+    ] {
+        let kind = if path == "factory_reset" {
+            "action"
+        } else {
+            "setting"
+        };
+        let r = row(&rows, kind, path, value);
+        assert_eq!(
+            (r.result.as_str(), r.seen.as_str()),
+            ("pass", "returned"),
+            "{r:#?}"
+        );
+    }
+    // the delayed commands reached the fake: a row cannot have passed before its restart
+    let restarts = d
+        .bus
+        .ops(A)
+        .iter()
+        .filter(|op| {
+            matches!(op, Op::Apply(p, _) if p == "audio.enabled")
+                || matches!(op, Op::Act(a, _) if a == "factory_reset")
+        })
+        .count();
+    assert_eq!(restarts, 3);
+    let after = writable_values(&d.state(A), "fake-a");
+    let changed: Vec<_> = before
+        .iter()
+        .zip(&after)
+        .filter(|(b, a)| !same_json(&b.1, &a.1))
+        .collect();
+    assert!(changed.is_empty(), "not restored: {changed:#?}");
+}
