@@ -5,6 +5,14 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-11-26
+
+This is the third release candidate. Since 1.0.0-rc.2 the daemon answers the requests of a
+half-closed connection (#354); the Tiny 2 Lite keeps a gap of 3 s between a wake and a sleep
+(#363); `exposure.gain` requires manual exposure (#357); `scripts/check-model.sh` handles
+restart rows, a sleeping camera under `--observe` and pose changes of non-motion actions
+(#360, #361, #362); the field ledger records the zoom factor's lag (#356).
+
 ### Changed
 
 - Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
