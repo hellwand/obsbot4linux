@@ -1984,8 +1984,9 @@ spec, and the plan is first reconciled with the audit's fix plan.
 
 - **0.14.0, groundwork:** stage G (the carried-code fixes).
 - **1.0.0, rebuild:** W0 to W4; #47 and #61 (both in carried code, now fixed in the
-  rebuild, no longer a 0.14.0 item); #73 (target-box events, by the live topic `target`) and #89
-  (start pose, start settings and preset names in the state) move into it.
+  rebuild, no longer a 0.14.0 item) and #73 (target-box events, by the live topic `target`)
+  move into it; #89 (start pose, start settings and preset names in the state) stays in the
+  Backlog (15.1 row 123).
 - **Backlog (camera research, other apps):** no milestone before 1.0; the issues stay in the
   Backlog until a camera is at hand.
 - A second camera model never blocks 1.0; it is M4.
@@ -2002,8 +2003,8 @@ Release day, in this order:
    repository's default branch by fast-forward. Its `plugin.json` requires
    obsbot4linux ≥ 1.0. The widget's entry in the DankMaterialShell plugin registry is
    updated.
-5. The 0.13.2 packages and widget 0.29.2 stay downloadable for rollback. The release notes
-   name them. Rollback beyond that is a fix forward.
+5. The 0.14.0 packages and widget 0.29.2 stay downloadable for rollback (15.1 row 122). The
+   release notes name them. Rollback beyond that is a fix forward.
 
 1.0 is done when:
 
@@ -2376,3 +2377,6 @@ on its own.
 | 118 | 2026-11-26 | A sleep keeps a gap to the last wake | a sleep is sent at once (5.8 names no gap for it) | the Tiny 2 Lite model sends a `sleep` no sooner than `WAKE_GAP` (3 s) after the last `wake` it sent; the request waits out the rest (5.8, the ledger's `sleep` row) | the camera drops a sleep sent within about 2 s of a wake and stays awake, while the reply is `ok`; the check script's asleep rows hit it (measured 2026-11-26: dropped 4 of 4 times at 0.3 s, none of 14 at 2 s and 6 at 3 s) | measured 2026-11-26, #363 |
 | 119 | 2026-11-26 | Exposure gain only with manual exposure | `exposure.gain` 1–64 without `requires`; parity row `image gain V` → `set exposure.gain=V` | `exposure.gain` `requires` `exposure.mode=manual` (4.3); 9.1 row `set exposure.mode=manual exposure.gain=V`; the check script writes back a value read while the snapshot did not meet the field's `requires` only while they hold and within the bounds, else names it (9.4) | the camera does not keep a gain written while the exposure is automatic, although uvcvideo then shows it as written, and after a manual gain is set the gain read under automatic exposure stays at that value; its automatic exposure read 71, so a snapshot of 71 could not be restored | measured 2026-11-26 (CS-2 blocks B and G; re-enumeration reads; #357, #366) |
 | 120 | 2026-11-26 | `led.blink` refused while asleep | `led.blink` `asleep: unknown`: written while asleep, pending until the wake | `led.blink` is `asleep: ignored` in the Tiny 2 Lite description: the daemon refuses it with `asleep` while the camera sleeps, after the fresh `asleep` read of row 116, and sends nothing; the check script runs no asleep row for it (4.2, 5.7, 8.8, 9.4). `ignored` is used because it is the one mark that refuses: the camera does not ignore the write, it breaks the LED until a restart | written asleep, the LED stays dark after the wake although `led.blink` reads `true`; blink off and on awake and a sleep and wake do not recover it, a camera restart (`audio.enabled` off and on) or a factory reset does; written awake it works. `check-model.sh --asleep` wrote it in its asleep row | measured 2026-11-26 on 1.0.0-rc.3, #369 |
+| 121 | 2026-11-26 | Project page in its own pull request | rewritten in W4's release pull request (row 107) | rewritten in its own pull request into `rebuild` before the release pull request; it deploys on `v1.0.0` as before | the page deploys only on `v1.0.0`, so it can land any time before; its own pull request gets its own text review instead of growing the release pull request | none: planning choice (W4 plan, decision 12) |
+| 122 | 2026-11-26 | Rollback packages | the 0.13.2 packages and widget 0.29.2 stay downloadable (10.6 step 5) | the 0.14.0 packages and widget 0.29.2 (10.6 step 5); the 1.0 release notes name them | 0.14.0 was released after this spec as the last 0.x release (stage G) | CS-2 block A went back to 0.14.0 and widget 0.29.2 and upgraded from there as the notes say, measured 2026-11-26 |
+| 123 | 2026-11-26 | #89 stays in the Backlog | #89 moves into milestone 1.0.0 (10.5) | #89 stays in the Backlog | the start pose and the preset names are in 1.0's state; the start actions left the description after CS-1 (row 114, PX-U-19) | none: planning choice (W4 plan, Q4) |

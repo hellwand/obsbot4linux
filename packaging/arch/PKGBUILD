@@ -3,7 +3,7 @@
 pkgname=obsbot4linux
 # Cargo.toml's version, with the "-" of a pre-release dropped (1.0.0-rc.1 is 1.0.0rc.1, which
 # vercmp sorts before 1.0.0); scripts/changelog-section.sh fails the release unless they match.
-pkgver=1.0.0rc.4
+pkgver=1.0.0
 pkgrel=1
 pkgdesc='Control OBSBOT webcams on Linux: a camera daemon and its command line'
 arch=('x86_64' 'aarch64')

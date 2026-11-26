@@ -5,82 +5,7 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
-## [1.0.0-rc.4] - 2026-11-26
-
-This is the fourth release candidate: since 1.0.0-rc.3, `led.blink` is refused while the
-camera is asleep (#369).
-
-### Fixed
-
-- Tiny 2 Lite: `led.blink` written while the camera sleeps left the LED dark after the wake,
-  although `led.blink` read `true`, until the camera restarted (turning `audio.enabled` off and
-  on, or a factory reset). The daemon now refuses `led.blink` with `asleep` while the camera
-  sleeps and sends nothing, and `scripts/check-model.sh --asleep` no longer writes it asleep
-  (measured on the camera, #369).
-
-## [1.0.0-rc.3] - 2026-11-26
-
-This is the third release candidate. Since 1.0.0-rc.2 the daemon answers the requests of a
-half-closed connection (#354); the Tiny 2 Lite keeps a gap of 3 s between a wake and a sleep
-(#363); `exposure.gain` requires manual exposure (#357); `scripts/check-model.sh` handles
-restart rows, a sleeping camera under `--observe` and pose changes of non-motion actions
-(#360, #361, #362); the field ledger records the zoom factor's lag (#356).
-
-### Changed
-
-- Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
-  written while the exposure is automatic does not change the picture and is not kept, and after
-  a manual gain is set the gain read under automatic exposure stays at that value instead of the
-  automatic exposure's (measured on the camera, #357). The 0.13 command `image gain V` is now `set exposure.mode=manual exposure.gain=V`.
-
-### Fixed
-
-- The daemon answers every request of a connection whose client shut down only its sending
-  side after writing them (a half-close, as `socat` does at the end of its input). Before, a
-  client that wrote `hello` and a request and then half-closed got only the reply to `hello`
-  (#354).
-- On the Tiny 2 Lite a `sleep` sent within about 2 s of a `wake` was dropped by the camera,
-  which stayed awake, while the reply was `ok`; the asleep rows of `scripts/check-model.sh`
-  failed with "no asleep:true within 30 s". The model now sends a sleep no sooner than 3 s
-  after the last wake it sent (#363).
-- `scripts/check-model.sh --destructive`: a restart row passed as soon as the device was listed,
-  before the camera went away to restart, so the final restore reached a restarting camera and
-  was refused (exit 1). The row now waits for the device to go away and return (#360).
-- `scripts/check-model.sh --observe <node>` with a sleeping camera opened the stream before it
-  woke the camera, got no frame and exited 2, and left its ffmpeg running. The camera is woken
-  first; the stream is ended with SIGINT and a bounded wait, then SIGKILL (#361).
-- `scripts/check-model.sh --observe` took a pose readback that changed during `preset.save` for
-  a move and asked instead of passing the row on the preset list. A pose change counts only for
-  the motion actions (#362).
-- `scripts/check-model.sh` writes back a value that was read while the field's `requires` were
-  not met (the automatic control's, such as the gain under automatic exposure) only while they
-  hold and when it lies within the bounds; otherwise it names the value. Before, a snapshot gain
-  of 71 made the restore fail with `out_of_range` and the run exit 1 (#357).
-
-## [1.0.0-rc.2] - 2026-11-25
-
-This is the second release candidate. Since 1.0.0-rc.1 the daemon reads `asleep` again right
-before a request the camera ignores while asleep (#328); `scripts/check-model.sh` puts the zoom
-and the pose back reliably (#347) and gains `--observe`, which answers the questions it can
-measure from the state and the picture (#345); the project page describes 1.0.
-
-### Fixed
-
-- A setting or action that the camera ignores while asleep (on the Tiny 2 Lite the
-  pose-taking actions such as `preset.save`, `view.save` and `power_on.use_current`) is
-  refused with `asleep` also when the camera fell asleep since the daemon's last status read;
-  the daemon reads `asleep` right before such a request. Before, the action read the sleep
-  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0". This gap
-  is a likely cause of #328, which stays open until the cause is confirmed.
-- `scripts/check-model.sh` puts the zoom back at its end whenever an action row ran, whatever the
-  state shows. Before, it trusted a state that did not yet show the zoom of `zoom.move` (the
-  zoom is read every 5 s): most runs left the camera zoomed in and exited 0, some exited 1 with
-  `not restored: zoom.factor` although every row passed (#347).
-
-## [1.0.0-rc.1] - 2026-11-25
-
-This is a release candidate: the maintainers verify every row of the parity table on it before
-1.0.0.
+## [1.0.0] - 2026-11-26
 
 obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and command line. The camera
 knowledge of 0.13 (frames, status decoding, recorded bytes and their tests) is carried over; the
@@ -134,6 +59,11 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   as `raw:<n>`); a pose-taking action that fails for the pose it read names that pose (#328); a
   zone or hand area whose new min lies above the stored max is sent max first, so the camera does
   not clamp the min to the old max.
+- Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
+  written while the exposure is automatic does not change the picture and is not kept, and after
+  a manual gain is set the gain read under automatic exposure stays at that value instead of the
+  automatic exposure's (measured on the camera, #357). The 0.13 command `image gain V` is now
+  `set exposure.mode=manual exposure.gain=V`.
 
 ### Removed
 
@@ -153,6 +83,42 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   `pending` with the written value until its group's next periodic read, up to 60 s, so `get`
   showed it as taken. The daemon now reads the group once when the leaf's `settle_ms` has
   passed, and the camera's value shows within that time (#335).
+- A setting or action that the camera ignores while asleep (on the Tiny 2 Lite the
+  pose-taking actions such as `preset.save`, `view.save` and `power_on.use_current`) is
+  refused with `asleep` also when the camera fell asleep since the daemon's last status read;
+  the daemon reads `asleep` right before such a request. Before, the action read the sleep
+  pose and failed with "pose needs pan -150..150, tilt -70..90 and zoom 1.0-4.0". This gap
+  is a likely cause of #328, which stays open until the cause is confirmed.
+- `scripts/check-model.sh` puts the zoom back at its end whenever an action row ran, whatever the
+  state shows. Before, it trusted a state that did not yet show the zoom of `zoom.move` (the
+  zoom is read every 5 s): most runs left the camera zoomed in and exited 0, some exited 1 with
+  `not restored: zoom.factor` although every row passed (#347).
+- The daemon answers every request of a connection whose client shut down only its sending
+  side after writing them (a half-close, as `socat` does at the end of its input). Before, a
+  client that wrote `hello` and a request and then half-closed got only the reply to `hello`
+  (#354).
+- On the Tiny 2 Lite a `sleep` sent within about 2 s of a `wake` was dropped by the camera,
+  which stayed awake, while the reply was `ok`; the asleep rows of `scripts/check-model.sh`
+  failed with "no asleep:true within 30 s". The model now sends a sleep no sooner than 3 s
+  after the last wake it sent (#363).
+- `scripts/check-model.sh --destructive`: a restart row passed as soon as the device was listed,
+  before the camera went away to restart, so the final restore reached a restarting camera and
+  was refused (exit 1). The row now waits for the device to go away and return (#360).
+- `scripts/check-model.sh --observe <node>` with a sleeping camera opened the stream before it
+  woke the camera, got no frame and exited 2, and left its ffmpeg running. The camera is woken
+  first; the stream is ended with SIGINT and a bounded wait, then SIGKILL (#361).
+- `scripts/check-model.sh --observe` took a pose readback that changed during `preset.save` for
+  a move and asked instead of passing the row on the preset list. A pose change counts only for
+  the motion actions (#362).
+- `scripts/check-model.sh` writes back a value that was read while the field's `requires` were
+  not met (the automatic control's, such as the gain under automatic exposure) only while they
+  hold and when it lies within the bounds; otherwise it names the value. Before, a snapshot gain
+  of 71 made the restore fail with `out_of_range` and the run exit 1 (#357).
+- Tiny 2 Lite: `led.blink` written while the camera sleeps left the LED dark after the wake,
+  although `led.blink` read `true`, until the camera restarted (turning `audio.enabled` off and
+  on, or a factory reset). The daemon now refuses `led.blink` with `asleep` while the camera
+  sleeps and sends nothing, and `scripts/check-model.sh --asleep` no longer writes it asleep
+  (measured on the camera, #369).
 
 ### Upgrading from 0.13
 
@@ -265,7 +231,7 @@ Command map (PX-n: the exceptions after the table):
 | `image brightness\|contrast\|saturation\|hue\|sharpness V`              | `set image.<name>=V`                                                 |                                                                                                             |
 | `image white_balance_auto 0\|1`                                         | `set image.white_balance.auto=off\|on`                               |                                                                                                             |
 | `image white_balance_temperature V`                                     | `set image.white_balance.auto=off image.white_balance.temperature=V` | needs white balance auto off                                                                                |
-| `image gain V`                                                          | `set exposure.gain=V`                                                |                                                                                                             |
+| `image gain V`                                                          | `set exposure.mode=manual exposure.gain=V`                           | the gain needs the manual exposure                                                                          |
 | `image power_line_frequency 0\|1\|2`                                    | `set exposure.anti_flicker=off\|50hz\|60hz`                          |                                                                                                             |
 | `image backlight_compensation V`                                        | `set exposure.compensation=V`                                        |                                                                                                             |
 | `image auto_exposure 0\|1\|3`                                           | `set exposure.mode=auto\|manual\|auto`                               | V4L2 1 = manual; 0.13.2 writes 0 for automatic, and 3 maps to `auto` too                                    |
@@ -307,8 +273,8 @@ Exceptions:
   (#99).
 - **PX-U-18** `startup set --ai M` with M `static`, `upper_body`, `headless` or `group`: not
   carried over. Whether the camera starts in such a mode after a power cycle was never
-  verified; `normal` and `none` stay. A start mode the vendor app does not show (`close_up`
-  is shown) reads as `raw:<n>`.
+  verified; `normal` and `none` stay. A start mode other than `normal`, `close_up` and `unset`
+  reads as `raw:<n>`.
 - **PX-U-19** the picture settings of `startup show`: not carried over. Their values could not
   be read with a known meaning; `get power_on` shows the start pose, source and mode.
 
