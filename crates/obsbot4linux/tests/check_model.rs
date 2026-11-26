@@ -682,7 +682,7 @@ fn an_automatic_value_outside_the_bounds_is_not_written_back() {
 }
 
 /// A gain read under automatic exposure is the automatic exposure's: a gain written then is not
-/// kept, and from then on the gain reads the written value (measured 2026-11-26, #357). So once
+/// kept, and after a manual gain the gain read stays at it (measured 2026-11-26, #357). So once
 /// the exposure is automatic again, the final restore does not write the snapshot's gain, also
 /// when the camera now reads another one (as after a re-enumeration); it names it. Here a
 /// wrapper around the command line makes the gain read 20 right after the gain rows put the
