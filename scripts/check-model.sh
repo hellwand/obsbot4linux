@@ -819,8 +819,18 @@ action_row() {
 	fi
 }
 
-# A row whose write or action restarts the camera: it passes when the device returns under
-# the same id within 60 s with the expected state.
+# Whether the device with the script's id is listed as available (`devices`, not the state:
+# a device that is gone has none).
+available() {
+	[ "$("$CLI" --json devices 2>/dev/null | jq -r --arg id "$ID" '.devices[] | select(.id == $id) | .available')" = true ]
+}
+
+# A row whose write or action restarts the camera: it passes when the device first goes away
+# and then returns under the same id, both within 60 s of the reply, with the expected state.
+# The camera answers the write or the action before it restarts (measured 2026-11-26: the
+# Tiny 2 Lite went away 2.9 s after the reply to `factory_reset` and was back 22.5 s after it),
+# so a device that is still available right after the reply has not returned yet: the next
+# row, or the restore in finish, would reach a camera that is about to go away.
 restart_row() {
 	local kind=$1 name=$2 value=$3 reply until how
 	if [ "$kind" = setting ]; then
@@ -845,8 +855,15 @@ restart_row() {
 		}
 	fi
 	until=$(($(date +%s) + RETURN_WAIT))
+	while available; do
+		[ "$(date +%s)" -lt "$until" ] || {
+			record "$kind" "$name" "$value" "fail: $SHORT did not go away within ${RETURN_WAIT} s (no restart)" "" "" "$how"
+			return
+		}
+		sleep "$POLL"
+	done
 	while :; do
-		if [ "$("$CLI" --json devices 2>/dev/null | jq -r --arg id "$ID" '.devices[] | select(.id == $id) | .available')" = true ]; then
+		if available; then
 			if [ "$kind" = action ] || wait_for "$WAIT" "$name" "$value" "$(precision_of "$name")"; then
 				record "$kind" "$name" "$value" pass "" returned "$how"
 				return
