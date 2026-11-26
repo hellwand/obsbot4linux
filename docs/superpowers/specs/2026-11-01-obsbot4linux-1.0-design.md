@@ -1702,8 +1702,10 @@ its own description. It replaces 0.13's `check-readback.sh`.
   `accepted` when the value or the effect is there after the wake, and `ignored` when the
   camera refused it or the value or effect is not there. The ledger takes the results.
 - Rows whose `warning` holds `restart` or `destructive` run only with `--destructive`, last,
-  after presets and views are printed. Such a row passes when the device returns under the
-  same id within 60 s with the expected state.
+  after presets and views are printed. Such a row passes when the device first goes away and
+  then returns under the same id, both within 60 s of the reply, with the expected state; a
+  device that never goes away fails the row. The camera answers before it restarts, so a
+  device still listed right after the reply has not returned yet.
 - It snapshots the state first and restores it through a `trap` on EXIT, INT and TERM: the
   snapshot's tracking mode and pose, never hard-coded values. A field whose snapshot value
   is `null` is skipped.
@@ -1717,12 +1719,15 @@ its own description. It replaces 0.13's `check-readback.sh`.
   not its effect; a move (a motion action, the pose changed) only when the frames of the
   video node, compared by `scripts/check-model-observe.py`, moved too and the baseline was
   steady; a stop only when the picture moved in its baseline and stays still from a second
-  after it until the state has settled. An asleep action whose state and picture show no change is `ignored`; a pose change
-  in an asleep row counts only when a plain sleep and wake brought back the same pose and
-  picture. The video node must be the device's own and its format one the script can read and
-  keep (MJPG, YUYV), else exit 2. `readback:false` rows and whatever the measurement does not
-  decide are asked, with the measurement printed; the result names the measurement
-  (`pass (observed: …)`). It never fails an awake row on its own.
+  after it until the state has settled. The description does not say which actions move the
+  camera: the script lists the Tiny 2 Lite's motion actions (`moves()`), and a new model adds
+  its own there, else the pose change of its motion action is not taken as the effect and
+  its row fails or asks. An asleep action whose state and picture show no change is
+  `ignored`; a pose change in an asleep row counts only when a plain sleep and wake brought
+  back the same pose and picture. The video node must be the device's own and its format one
+  the script can read and keep (MJPG, YUYV), else exit 2. `readback:false` rows and whatever
+  the measurement does not decide are asked, with the measurement printed; the result names
+  the measurement (`pass (observed: …)`). It never fails an awake row on its own.
 - CI runs it against `fake-a` and `fake-b` with `--assume-pass`, which answers every
   question to the person with pass. In stage W4 the release PR maps its results to every row
   of 9.1.
