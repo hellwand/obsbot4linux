@@ -5,6 +5,11 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-11-26
+
+This is the fourth release candidate: since 1.0.0-rc.3, `led.blink` is refused while the
+camera is asleep (#369).
+
 ### Fixed
 
 - Tiny 2 Lite: `led.blink` written while the camera sleeps left the LED dark after the wake,
