@@ -5,6 +5,13 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Tiny 2 Lite a `sleep` sent within about 2 s of a `wake` was dropped by the camera,
+  which stayed awake, while the reply was `ok`; the asleep rows of `scripts/check-model.sh`
+  failed with "no asleep:true within 30 s". The model now sends a sleep no sooner than 3 s
+  after the last wake it sent (#363).
+
 ## [1.0.0-rc.2] - 2026-11-25
 
 This is the second release candidate. Since 1.0.0-rc.1 the daemon reads `asleep` again right
