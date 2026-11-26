@@ -75,9 +75,13 @@ struct Hookup {
 impl Hookup {
     /// Starts the daemon with the spec's intervals and waits (at most 20 s) until it accepts.
     fn start(name: &str) -> Hookup {
+        Hookup::start_on(name, support::recorded())
+    }
+
+    /// `start` on another recording.
+    fn start_on(name: &str, replay: Replay) -> Hookup {
         let socket = common::socket(&format!("r-{name}"));
         let _ = std::fs::remove_file(&socket);
-        let replay = support::recorded();
         let log = replay.log();
         let opens = Arc::new(AtomicUsize::new(0));
         let bus: Arc<dyn Bus> = Arc::new(ReplayBus {
@@ -251,4 +255,59 @@ fn a_refused_value_reaches_the_camera_as_nothing() {
     let (code, _, err) = h.cli(&["set", "led.brightness=9"]);
     assert_eq!(code, 2, "out_of_range: {err}");
     assert_eq!(h.writes(), []);
+}
+
+/// The target in Static (8.8): the camera tracks (`normal`) and the daemon publishes its target;
+/// then the status block reads `static`, the target is no longer asked, and the state no longer
+/// claims the last box: both target leaves are in `unread` (4.2). Measured on 1.0.0: the state
+/// kept `detected: true` and the last box for as long as the mode was static.
+#[test]
+fn in_static_the_target_leaves_go_to_unread_instead_of_keeping_the_last_box() {
+    let tracking = support::status_tracking();
+    let replay = support::recorded().reads(6, &[tracking, tracking]).answer(
+        0x04,
+        0x01c4,
+        &support::target_answer(),
+    );
+    let h = Hookup::start_on("static-target", replay);
+    let get = || {
+        let (code, out, err) = h.cli(&["get", "--json", "tracking.mode", "tracking.target"]);
+        assert_eq!(code, 0, "{err}");
+        parse(&out)["state"].clone()
+    };
+    let unread = |state: &Value, leaf: &str| {
+        state["unread"]
+            .as_array()
+            .is_some_and(|u| u.contains(&json!(leaf)))
+    };
+
+    let state = get();
+    assert_eq!(state["tracking"]["mode"], json!("normal"), "{state}");
+    assert_eq!(
+        state["tracking"]["target"]["detected"],
+        json!(true),
+        "{state}"
+    );
+    assert!(!unread(&state, "tracking.target.box"), "{state}");
+
+    // the recorded status block (static) once the two tracking reads are used up
+    let until = Instant::now() + Duration::from_secs(10);
+    let state = loop {
+        let state = get();
+        if state["tracking"]["mode"] == json!("static") {
+            // one more tick of the 1 s tier, so the target group had its turn in static
+            thread::sleep(Duration::from_millis(1500));
+            break get();
+        }
+        assert!(
+            Instant::now() < until,
+            "the mode never read static: {state}"
+        );
+        thread::sleep(Duration::from_millis(100));
+    };
+    assert_eq!(state["tracking"]["mode"], json!("static"), "{state}");
+    assert!(
+        unread(&state, "tracking.target.detected") && unread(&state, "tracking.target.box"),
+        "in static the state must not present the last target as current: {state}"
+    );
 }

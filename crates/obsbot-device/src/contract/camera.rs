@@ -261,8 +261,9 @@ pub trait Camera: Send {
     /// set, `raw:<n>` where undecodable). An error means the group's leaves go to `unread`.
     /// A group whose read depends on a condition (on the Tiny 2 Lite the target, read only
     /// while the tracking mode is not `static`, 8.8) is decided by the model from its own
-    /// last reads: while the condition does not hold, it returns its last values, or `null`
-    /// for a nullable leaf, without sending a frame.
+    /// last reads: while the condition does not hold, it returns an error without sending a
+    /// frame, so the group's leaves are in `unread` (4.2: not current, last value kept) until
+    /// a read under the condition answers.
     fn read(&mut self, group: &str, ctx: &Ctx) -> Result<Values>;
 
     /// The safe apply order of the leaves of one patch: a permutation of `leaves` in which

@@ -5,6 +5,13 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Tiny 2 Lite: in Static the state no longer presents the last target as current. The target is
+  asked only while the camera tracks; in Static its leaves (`tracking.target.detected`,
+  `tracking.target.box`) are now in `unread` until the next read, instead of keeping
+  `detected: true` and the last box (#375).
+
 ## [1.0.0] - 2026-11-26
 
 obsbot4linux 1.0 replaces the 0.13 daemon, protocol, state model and command line. The camera

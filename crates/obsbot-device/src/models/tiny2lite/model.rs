@@ -31,14 +31,12 @@ pub const SERIAL_QUERY: u16 = 0x18c8;
 pub const FIRMWARE_QUERY: u16 = 0x0408;
 
 /// What the model keeps from its own last reads and writes: the tracking mode (the target is
-/// read only while it is not `static`, 8.8), the values of the last target read (the group's
-/// values while it is not read, trait `Camera::read`) and the auto-sleep word
+/// read only while it is not `static`, 8.8) and the auto-sleep word
 /// (`sleep.auto.enabled` and `sleep.auto.seconds` are one word on the camera, 4.3) and when it
 /// last sent `wake` (a `sleep` keeps [`WAKE_GAP`](crate::family::link::WAKE_GAP) to it, 5.8).
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Memory {
     pub mode: Option<Value>,
-    pub target: Option<Values>,
     pub sleep_word: Option<i16>,
     pub woke: Option<Instant>,
 }

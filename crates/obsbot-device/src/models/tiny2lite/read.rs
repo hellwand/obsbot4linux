@@ -43,23 +43,19 @@ pub fn read(link: &mut Link, memory: &mut Memory, group: &str, ctx: &Ctx) -> Res
         }
         "target" => {
             // the target is asked only while the tracking mode is known and not static (8.8);
-            // else the group keeps the values of its last read without a frame, and before its
-            // first read it is not read at all, so its leaves stay in `unread` (trait
-            // `Camera::read`: `detected` is not nullable, and `false` is not what the camera said)
+            // else nothing is sent and the group is not read, so its leaves go to `unread` (trait
+            // `Camera::read`): the last box is not where the target is now, `detected` is not
+            // nullable, and `false` is not what the camera said
             let tracking = matches!(&memory.mode, Some(m) if m != &json!("static"));
             if !tracking {
                 ctx.check()?;
-                return memory.target.clone().ok_or_else(|| {
-                    CameraError::NoAnswer(
-                        "the target, which is asked only while the tracking mode is known \
-                         and not static (8.8)"
-                            .into(),
-                    )
-                });
+                return Err(CameraError::NoAnswer(
+                    "the target, which is asked only while the tracking mode is known and not \
+                     static (8.8)"
+                        .into(),
+                ));
             }
-            let values = decode::target(&ask(link, TRACKING, 0x01c4, ctx)?);
-            memory.target = Some(values.clone());
-            Ok(values)
+            Ok(decode::target(&ask(link, TRACKING, 0x01c4, ctx)?))
         }
         "pose" => decode::pose(&ask(link, GIMBAL, 0x0043, ctx)?).ok_or(short_answer(0x0043)),
         "gestures" => {

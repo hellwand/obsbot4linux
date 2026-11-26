@@ -162,8 +162,10 @@ fn the_target_is_read_only_while_the_tracking_mode_is_known_and_not_static() {
     ));
     assert!(log.sent().is_empty());
 
-    // tracking: the query and the camera's answer; then static: the values of the last read,
-    // without a query (trait `Camera::read`)
+    // tracking: the query and the camera's answer; then static: no query and no values, so
+    // the leaves go to `unread` instead of the last box standing as current (trait
+    // `Camera::read`; measured on 1.0.0: the box and `detected: true` of the last read stayed
+    // for as long as the mode was static); tracking again: the target is read again
     let replay = recorded()
         .reads(6, &[status_tracking()])
         .answer(0x04, 0x01c4, &target_answer());
@@ -178,8 +180,28 @@ fn the_target_is_read_only_while_the_tracking_mode_is_known_and_not_static() {
     );
     cam.read("status", &Ctx::none()).unwrap();
     assert_eq!(cam.memory().mode, Some(json!("static")));
-    assert_eq!(cam.read("target", &Ctx::none()).unwrap(), v);
+    assert!(matches!(
+        cam.read("target", &Ctx::none()),
+        Err(CameraError::NoAnswer(_))
+    ));
     assert_eq!(queries(&log), [(0x04, 0x01c4)]);
+}
+
+#[test]
+fn the_target_is_read_again_when_the_tracking_mode_leaves_static() {
+    // normal, static, normal: the target is asked in both normal phases, never in static
+    let replay = recorded()
+        .reads(6, &[status_tracking(), block(STATUS), status_tracking()])
+        .answer(0x04, 0x01c4, &target_answer());
+    let (mut cam, log) = model(replay);
+    cam.read("status", &Ctx::none()).unwrap();
+    let first = cam.read("target", &Ctx::none()).unwrap();
+    cam.read("status", &Ctx::none()).unwrap();
+    assert!(cam.read("target", &Ctx::none()).is_err());
+    cam.read("status", &Ctx::none()).unwrap();
+    assert_eq!(cam.memory().mode, Some(json!("normal")));
+    assert_eq!(cam.read("target", &Ctx::none()).unwrap(), first);
+    assert_eq!(queries(&log), [(0x04, 0x01c4), (0x04, 0x01c4)]);
 }
 
 #[test]

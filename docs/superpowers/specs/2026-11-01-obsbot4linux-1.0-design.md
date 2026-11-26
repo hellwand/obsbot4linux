@@ -1408,7 +1408,8 @@ M4 is the first model that completes these steps.
   other pose query arms its switch to static after a zone return (#67) and is not in the
   send table.
 - **Poll plan.** 1 s: the status block (asleep, tracking mode and the other status values),
-  the on-air probe, and the target while the tracking mode is not `static`. 1 s while a
+  the on-air probe, and the target while the tracking mode is not `static` (in `static` the
+  target leaves are in `unread`: not asked, so not current). 1 s while a
   connection subscribes `pose`, else
   5 s: the live pose. 5 s: the settings readbacks (tracking, framing, gestures, zoom,
   exposure, image, focus, audio, LED, sleep). 60 s: zone, hand, power-on, views.
