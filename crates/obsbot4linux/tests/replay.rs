@@ -260,15 +260,17 @@ fn a_refused_value_reaches_the_camera_as_nothing() {
 /// The target in Static (8.8): the camera tracks (`normal`) and the daemon publishes its target;
 /// then the status block reads `static`, the target is no longer asked, and the state no longer
 /// claims the last box: both target leaves are in `unread` (4.2). Measured on 1.0.0: the state
-/// kept `detected: true` and the last box for as long as the mode was static.
+/// kept `detected: true` and the last box for as long as the mode was static. Leaving Static,
+/// the target is read again and leaves `unread`.
 #[test]
 fn in_static_the_target_leaves_go_to_unread_instead_of_keeping_the_last_box() {
+    // normal twice, static three times (about 3 s of the 1 s tier), then normal for good
     let tracking = support::status_tracking();
-    let replay = support::recorded().reads(6, &[tracking, tracking]).answer(
-        0x04,
-        0x01c4,
-        &support::target_answer(),
-    );
+    let still = support::block(support::STATUS);
+    let replay = support::recorded()
+        .reads(6, &[tracking, tracking, still, still, still])
+        .buffer(6, tracking)
+        .answer(0x04, 0x01c4, &support::target_answer());
     let h = Hookup::start_on("static-target", replay);
     let get = || {
         let (code, out, err) = h.cli(&["get", "--json", "tracking.mode", "tracking.target"]);
@@ -280,6 +282,21 @@ fn in_static_the_target_leaves_go_to_unread_instead_of_keeping_the_last_box() {
             .as_array()
             .is_some_and(|u| u.contains(&json!(leaf)))
     };
+    // the first state in the mode `mode`; a tick publishes the status and the target together
+    let first_in = |mode: &str| {
+        let until = Instant::now() + Duration::from_secs(10);
+        loop {
+            let state = get();
+            if state["tracking"]["mode"] == json!(mode) {
+                return state;
+            }
+            assert!(
+                Instant::now() < until,
+                "the mode never read {mode}: {state}"
+            );
+            thread::sleep(Duration::from_millis(50));
+        }
+    };
 
     let state = get();
     assert_eq!(state["tracking"]["mode"], json!("normal"), "{state}");
@@ -290,24 +307,20 @@ fn in_static_the_target_leaves_go_to_unread_instead_of_keeping_the_last_box() {
     );
     assert!(!unread(&state, "tracking.target.box"), "{state}");
 
-    // the recorded status block (static) once the two tracking reads are used up
-    let until = Instant::now() + Duration::from_secs(10);
-    let state = loop {
-        let state = get();
-        if state["tracking"]["mode"] == json!("static") {
-            // one more tick of the 1 s tier, so the target group had its turn in static
-            thread::sleep(Duration::from_millis(1500));
-            break get();
-        }
-        assert!(
-            Instant::now() < until,
-            "the mode never read static: {state}"
-        );
-        thread::sleep(Duration::from_millis(100));
-    };
-    assert_eq!(state["tracking"]["mode"], json!("static"), "{state}");
+    let state = first_in("static");
     assert!(
         unread(&state, "tracking.target.detected") && unread(&state, "tracking.target.box"),
         "in static the state must not present the last target as current: {state}"
+    );
+
+    let state = first_in("normal");
+    assert!(
+        !unread(&state, "tracking.target.detected") && !unread(&state, "tracking.target.box"),
+        "tracking again, the target is read again: {state}"
+    );
+    assert_eq!(
+        state["tracking"]["target"]["detected"],
+        json!(true),
+        "{state}"
     );
 }

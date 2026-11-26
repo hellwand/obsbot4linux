@@ -445,7 +445,8 @@ Rules:
   that was not written since the device last became available.
 - **`unread`** is part of every state: the leaf paths that were never read since the device
   last became available (`null`; a group not read while asleep included), and those whose
-  last read failed or was cut short (they keep their last value). Their group is read again
+  last read failed or was cut short, or that the model did not ask because its own condition
+  for the read does not hold (the target in `static`, 8.8) (they keep their last value). Their group is read again
   at its next tier tick while the camera is awake; at a wake, and for a `touched` group, 5.7
   ("Wake and retries") says when.
 - **Undecodable values.** A camera value the model cannot decode is published as the
@@ -2381,3 +2382,4 @@ on its own.
 | 121 | 2026-11-26 | Project page in its own pull request | rewritten in W4's release pull request (row 107) | rewritten in its own pull request into `rebuild` before the release pull request; it deploys on `v1.0.0` as before | the page deploys only on `v1.0.0`, so it can land any time before; its own pull request gets its own text review instead of growing the release pull request | none: planning choice (W4 plan, decision 12) |
 | 122 | 2026-11-26 | Rollback packages | the 0.13.2 packages and widget 0.29.2 stay downloadable (10.6 step 5) | the 0.14.0 packages and widget 0.29.2 (10.6 step 5); the 1.0 release notes name them | 0.14.0 was released after this spec as the last 0.x release (stage G) | CS-2 block A went back to 0.14.0 and widget 0.29.2 and upgraded from there as the notes say, measured 2026-11-26 |
 | 123 | 2026-11-26 | #89 stays in the Backlog | #89 moves into milestone 1.0.0 (10.5) | #89 stays in the Backlog | the start pose and the preset names are in 1.0's state; the start actions left the description after CS-1 (row 114, PX-U-19) | none: planning choice (W4 plan, Q4) |
+| 124 | 2026-11-26 | The target in Static | the target keeps its last values while it is not read (trait `Camera::read`, 8.8) | the target leaves are `unread` while the model does not read them (tracking mode `static`), last values kept, until the next read while tracking (4.2, 8.8) | the state presented `detected: true` and the last box as current for as long as the mode was static; the widget drew the frame where the target was last seen (#375) | measured 2026-11-26 on 1.0.0 (Tiny 2 Lite, owner in view: the same box for the whole time in Static, `unread: []`), #375 |
