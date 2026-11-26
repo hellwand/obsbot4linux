@@ -657,7 +657,9 @@ fn an_automatic_value_outside_the_bounds_is_not_written_back() {
         "no restore warning: {rows:#?}"
     );
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("not written back: exposure.gain 71"),
+        String::from_utf8_lossy(&out.stdout).contains(
+            "not written back: exposure.gain 71 (the automatic control's value; outside the bounds)"
+        ),
         "{}",
         report(&out)
     );
@@ -671,6 +673,83 @@ fn an_automatic_value_outside_the_bounds_is_not_written_back() {
             .iter()
             .any(|op| matches!(op, Op::Apply(_, v) if *v == serde_json::json!(71))),
         "{gains:?}"
+    );
+    assert_eq!(
+        d.state(A)["exposure"]["mode"],
+        "auto",
+        "the mode is put back"
+    );
+}
+
+/// A gain read under automatic exposure is the automatic exposure's: a gain written then is not
+/// kept, and from then on the gain reads the written value (measured 2026-11-26, #357). So once
+/// the exposure is automatic again, the final restore does not write the snapshot's gain, also
+/// when the camera now reads another one (as after a re-enumeration); it names it. Here a
+/// wrapper around the command line makes the gain read 20 right after the gain rows put the
+/// automatic exposure back.
+#[test]
+fn an_automatic_value_is_not_written_back_while_its_automatic_control_is_on() {
+    let d = Daemon::start("aon");
+    assert_eq!(d.state(A)["exposure"]["mode"], "auto");
+    let snap = d.state(A)["exposure"]["gain"].clone();
+    let other = if snap == 20 { 21 } else { 20 };
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("check-model-aon");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let wrapper = dir.join("obsbot4linux");
+    std::fs::write(
+        &wrapper,
+        format!(
+            r#"#!/usr/bin/env bash
+cli={cli}
+"$cli" "$@"
+rc=$?
+case " $* " in *" exposure.gain="*) touch {dir}/gain ;; esac
+if [ "$rc" = 0 ] && [ "$1" = set ] && [ "${{@: -1}}" = exposure.mode=auto ] &&
+	[ -e {dir}/gain ] && [ ! -e {dir}/done ]; then
+	touch {dir}/done
+	"$cli" set --json --device fake-a exposure.mode=manual exposure.gain={other} >/dev/null &&
+		"$cli" set --json --device fake-a exposure.mode=auto >/dev/null
+fi
+exit "$rc"
+"#,
+            cli = env!("CARGO_BIN_EXE_obsbot4linux"),
+            dir = dir.display(),
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(
+        &wrapper,
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let results = results_file("aon");
+    let out = d
+        .command(&results, &wrapper, &["--device", "fake-a", "--assume-pass"])
+        .output()
+        .expect("bash runs");
+    let rows = rows(&results);
+    assert!(dir.join("done").exists(), "the wrapper changed the gain");
+    assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    assert!(
+        !rows.iter().any(|r| r.kind == "restore"),
+        "no restore warning: {rows:#?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains(&format!(
+            "not written back: exposure.gain {snap} (the automatic control's value; its automatic control is on)"
+        )),
+        "{}",
+        report(&out)
+    );
+    let last_gain = d.bus.ops(A).iter().rev().find_map(|op| match op {
+        Op::Apply(leaf, v) if leaf == "exposure.gain" => Some(v.clone()),
+        _ => None,
+    });
+    assert_eq!(
+        last_gain,
+        Some(serde_json::json!(other)),
+        "no gain written after it"
     );
     assert_eq!(
         d.state(A)["exposure"]["mode"],

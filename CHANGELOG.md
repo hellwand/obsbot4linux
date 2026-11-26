@@ -5,6 +5,13 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Tiny 2 Lite: `exposure.gain` requires `exposure.mode=manual`, as `exposure.time` does. A gain
+  written while the exposure is automatic does not change the picture and is not kept, and the
+  gain then reads the written value instead of the automatic exposure's (measured on the camera,
+  #357). The 0.13 command `image gain V` is now `set exposure.mode=manual exposure.gain=V`.
+
 ### Fixed
 
 - The daemon answers every request of a connection whose client shut down only its sending
@@ -24,6 +31,10 @@ All notable changes to OBSBot4Linux. The format follows
 - `scripts/check-model.sh --observe` took a pose readback that changed during `preset.save` for
   a move and asked instead of passing the row on the preset list. A pose change counts only for
   the motion actions (#362).
+- `scripts/check-model.sh` writes back a value that was read while the field's `requires` were
+  not met (the automatic control's, such as the gain under automatic exposure) only while they
+  hold and when it lies within the bounds; otherwise it names the value. Before, a snapshot gain
+  of 71 made the restore fail with `out_of_range` and the run exit 1 (#357).
 
 ## [1.0.0-rc.2] - 2026-11-25
 

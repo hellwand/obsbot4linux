@@ -556,11 +556,12 @@ Per group:
   two steps is refused with `out_of_range` (CS-1: 44990 was sent as 449 units and read back as
   44900); it `requires` `exposure.mode=manual` (a time written while automatic freezes the
   automatic exposure). `exposure.gain` 1–64 (the camera's UVC range), and it `requires`
-  `exposure.mode=manual`: the camera does not keep a gain written while the exposure is
-  automatic, and its automatic exposure drives the gain above 64 (57 and 71 read after a
-  re-enumeration; measured 2026-11-26). uvcvideo keeps the last value it read or wrote, so the
-  state shows such a gain only as read at enumeration, and publishes it as read although it
-  lies outside the range. `exposure.time` and
+  `exposure.mode=manual`: a gain written while the exposure is automatic does not change the
+  picture and is not kept, and from then on the gain reads the written value under automatic
+  exposure, not the automatic exposure's (measured 2026-11-26). The automatic exposure's gain
+  read 4 to 64 in one run and 71 in another, above the range; the daemon publishes such a
+  read as it is. uvcvideo answers from the last value it read or wrote, so the state shows the
+  gain under automatic exposure as read at enumeration or written last (#366). `exposure.time` and
   `exposure.gain` have the live topic `auto`. `exposure.compensation`: the camera's raw
   value 0–18, default 9; one step is 1/3 EV and 9 is 0 EV, so 0–18 is −3..+3 EV (measured
   2026-11-25, U-20). `exposure.anti_flicker`: values `off|50hz|60hz`, no `default`. The
@@ -1716,10 +1717,11 @@ its own description. It replaces 0.13's `check-readback.sh`.
   device still listed right after the reply has not returned yet.
 - It snapshots the state first and restores it through a `trap` on EXIT, INT and TERM: the
   snapshot's tracking mode and pose, never hard-coded values. A field whose snapshot value
-  is `null` is skipped, and so is, with a line saying so, a number outside its bounds that
-  was read while the snapshot did not meet the field's `requires`: the automatic control's
-  value, which a write cannot set (the exposure gain read 71 under automatic exposure,
-  measured 2026-11-26).
+  is `null` is skipped. A value read while the snapshot did not meet the field's `requires`
+  is the automatic control's: it is written back only while the `requires` hold (during the
+  field's rows) and when it lies within the bounds; otherwise a line names it. The exposure
+  gain read 71 under automatic exposure, and a gain written while the exposure is automatic
+  is not kept (measured 2026-11-26).
 - Output: one line per row and a results file. The ledger update takes `measured` and the
   date from it.
 - `--observe state|<video node>` answers the questions it can measure and asks only the
@@ -2371,4 +2373,4 @@ on its own.
 | 116 | 2026-11-25 | Fresh asleep check | the asleep check uses the worker's last read of `asleep` (5.7) | before a request that names an `asleep: ignored` setting or action, the worker reads the group that holds `asleep` once more and checks against it; a failed read leaves the last value (4.4, 5.7) | the check could act on a stale `asleep`: the camera falls asleep about 10 s after a wake without a video stream, between two polls, and asleep the live pose reads tilt −85, which fails the pose check (CAM-22); likely the cause of #328 (not confirmed) | CAM-22, the ~10 s sleep; refs #328 |
 | 117 | 2026-11-26 | A half-closed connection | the end of a connection's stream ended the connection: its queued requests were dropped (rule 9) | a half-close (the client shuts down only its sending side) is not a close: every request read before it is answered, then the daemon closes; rule 9 applies when the whole connection goes (the daemon sees the hang-up) (4.1, `docs/protocol-2.md` 1) | a client that wrote `hello` and a request and then half-closed got only the hello reply, against 4.1's "kept and handled after the reply" (#354) | seen in CS-2 test G on 2026-11-26, reproduced with `obsbot4linuxd --fake`, #354 |
 | 118 | 2026-11-26 | A sleep keeps a gap to the last wake | a sleep is sent at once (5.8 names no gap for it) | the Tiny 2 Lite model sends a `sleep` no sooner than `WAKE_GAP` (3 s) after the last `wake` it sent; the request waits out the rest (5.8, the ledger's `sleep` row) | the camera drops a sleep sent within about 2 s of a wake and stays awake, while the reply is `ok`; the check script's asleep rows hit it (measured 2026-11-26: dropped 4 of 4 times at 0.3 s, none of 14 at 2 s and 6 at 3 s) | measured 2026-11-26, #363 |
-| 119 | 2026-11-26 | Exposure gain only with manual exposure | `exposure.gain` 1–64 without `requires`; parity row `image gain V` → `set exposure.gain=V` | `exposure.gain` `requires` `exposure.mode=manual` (4.3); 9.1 row `set exposure.mode=manual exposure.gain=V`; the check script does not write back an automatic control's value outside the bounds, read while the snapshot did not meet the field's `requires` (9.4) | the camera does not keep a gain written while the exposure is automatic, although uvcvideo then shows it as written; its automatic exposure reads above 64, so a snapshot of 71 could not be restored | measured 2026-11-26 (CS-2 blocks B and G; re-enumeration reads) |
+| 119 | 2026-11-26 | Exposure gain only with manual exposure | `exposure.gain` 1–64 without `requires`; parity row `image gain V` → `set exposure.gain=V` | `exposure.gain` `requires` `exposure.mode=manual` (4.3); 9.1 row `set exposure.mode=manual exposure.gain=V`; the check script writes back a value read while the snapshot did not meet the field's `requires` only while they hold and within the bounds, else names it (9.4) | the camera does not keep a gain written while the exposure is automatic, although uvcvideo then shows it as written, and the gain then reads the written value under automatic exposure; its automatic exposure read 71, so a snapshot of 71 could not be restored | measured 2026-11-26 (CS-2 blocks B and G; re-enumeration reads; #357, #366) |
