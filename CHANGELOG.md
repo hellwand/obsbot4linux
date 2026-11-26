@@ -120,6 +120,14 @@ rest is new. Read "Upgrading from 0.13" below before installing.
   sleeps and sends nothing, and `scripts/check-model.sh --asleep` no longer writes it asleep
   (measured on the camera, #369).
 
+### Known issues
+
+- Tiny 2 Lite: after the camera's own AI auto zoom has changed the zoom, a `zoom.factor` or
+  `zoom.field_of_view` write equal to the value the camera holds does nothing. Write another
+  value first, then the one you want (#329).
+- Tiny 2 Lite: under automatic exposure, `exposure.gain` and `exposure.time` show cached values
+  (the last read or write), not what the automatic exposure uses now (#366).
+
 ### Upgrading from 0.13
 
 1. Install the 1.0 package (it replaces the 0.13 one) and run `systemctl --user daemon-reload`.
@@ -297,6 +305,7 @@ Exceptions:
   mode and the firmware version are no longer listed as missing; gestures are read back (#122).
 - `audio --help` says that every microphone change restarts the camera, not only turning it off, and
   `gimbal rate --help` says that an omitted axis is stopped (#123).
+
 ## [0.13.2] - 2026-10-31
 
 ### Fixed
