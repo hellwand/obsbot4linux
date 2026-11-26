@@ -735,12 +735,17 @@ exit "$rc"
         !rows.iter().any(|r| r.kind == "restore"),
         "no restore warning: {rows:#?}"
     );
-    assert!(
-        String::from_utf8_lossy(&out.stdout).contains(&format!(
-            "not written back: exposure.gain {snap} (the automatic control's value; its automatic control is on)"
-        )),
-        "{}",
-        report(&out)
+    // the value as jq prints it: 1 or 1.0, by jq version
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let named = stdout
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("not written back: exposure.gain "))
+        .unwrap_or_else(|| panic!("the gain is named\n{}", report(&out)));
+    let (value, why) = named.split_once(' ').unwrap();
+    assert_eq!(value.parse::<f64>().ok(), snap.as_f64(), "{named}");
+    assert_eq!(
+        why,
+        "(the automatic control's value; its automatic control is on)"
     );
     let last_gain = d.bus.ops(A).iter().rev().find_map(|op| match op {
         Op::Apply(leaf, v) if leaf == "exposure.gain" => Some(v.clone()),
