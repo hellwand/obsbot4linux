@@ -5,6 +5,10 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-26
+
+The visible fix (no stale target frame in Static) pairs with obsbot4linux-dux (widget) 1.0.1.
+
 ### Fixed
 
 - Tiny 2 Lite: in Static the state no longer presents the last target as current. The target is

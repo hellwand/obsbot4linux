@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "obsbot-device"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "hex",
  "nix",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "obsbot-proto"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "schemars",
  "serde",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "obsbot4linux"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "clap",
  "hex",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "obsbot4linuxd"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nix",
  "obsbot-device",
