@@ -1716,10 +1716,11 @@ its own description. It replaces 0.13's `check-readback.sh`.
   rest; starting the script with it is the go for every action and asleep row (restart and
   destructive rows still ask). Before each action it takes a one-second baseline of the state
   and the picture. An action passes when the state shows its change, except a gimbal or zoom
-  action; a move (the pose changed) only when the frames of the video node, compared by
-  `scripts/check-model-observe.py`, moved too and the baseline was steady; a stop only when the
-  picture moved in its baseline and stays still from a second after it until the state has
-  settled. An asleep action whose state and picture show no change is `ignored`; a pose change
+  action; a pose change in the row of an action that is not a motion action (4.1 rule 6) is
+  not its effect; a move (a motion action, the pose changed) only when the frames of the
+  video node, compared by `scripts/check-model-observe.py`, moved too and the baseline was
+  steady; a stop only when the picture moved in its baseline and stays still from a second
+  after it until the state has settled. An asleep action whose state and picture show no change is `ignored`; a pose change
   in an asleep row counts only when a plain sleep and wake brought back the same pose and
   picture. The video node must be the device's own and its format one the script can read and
   keep (MJPG, YUYV), else exit 2. `readback:false` rows and whatever the measurement does not

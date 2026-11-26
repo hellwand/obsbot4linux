@@ -36,11 +36,12 @@
 # `--observe` answers the questions it can measure itself and asks only the rest. Starting the
 # script with it is the person's go for every action and asleep row (a restart or destructive
 # action still asks). Before each action the script takes a one-second baseline of the state
-# and the picture. A move (the pose changed by at least 1 degree or 0.05 zoom) passes only
-# when the picture moved too and the baseline was steady (no pose change, a still picture):
-# the pose leaves alone are the daemon's own report. Another action passes when the state
-# after it shows the change (a leaf of the action's group, a preset or view list, `asleep`
-# for sleep and wake), except a gimbal or zoom action, which only the picture passes. A stop
+# and the picture. A move (a motion action whose pose changed by at least 1 degree or 0.05
+# zoom) passes only when the picture moved too and the baseline was steady (no pose change, a
+# still picture): the pose leaves alone are the daemon's own report. Another action passes
+# when the state after it shows the change (a leaf of the action's group, a preset or view
+# list, `asleep` for sleep and wake), except a gimbal or zoom action, which only the picture
+# passes; a pose change in its row is not its effect and is only printed. A stop
 # passes when the picture moved in its baseline and stays still from a second after it until
 # the state has settled; a turn is looked at as soon as its pose moved, so that its stop has
 # something to stop. With a video node (the device's own, for example /dev/video0) the script
@@ -625,6 +626,17 @@ stop_of() {
 	return 0
 }
 
+# Whether an action moves the camera: the motion actions of spec 4.1 rule 6 (on the Tiny 2
+# Lite `gimbal.move`, `gimbal.turn`, `zoom.move`, `preset.recall`, `view.go`,
+# `zone.go_return`, `hand.go_return`, `power_on.go`). Only their rows count a pose change as
+# their effect.
+moves() {
+	case $1 in
+	gimbal.move | gimbal.turn | zoom.move | preset.recall | view.go | zone.go_return | hand.go_return | power_on.go) return 0 ;;
+	esac
+	return 1
+}
+
 # --observe: the state once the leaves of group $1 and the pose no longer change: the same for
 # $QUIET s, nothing pending (at most $SETTLE s; then the last read). Leaves that change on
 # their own (a tracked person's box) do not hold it up.
@@ -757,6 +769,16 @@ observed() {
 	pose=$(pose_change "$before" "$after")
 	grab after
 	pic=$(frames before after)
+	# The pose of an action that does not move the camera is not its effect: a pose leaf that
+	# changes in its row is a read catching up with the camera (measured 2026-11-26: in the
+	# `preset.save` row, the first action row, `zoom.factor` read 1.47 -> 1 while the picture
+	# stayed still, in two runs). Its row is judged on its own group's state, and the output
+	# names the pose change.
+	local drift_note=""
+	if [ -n "$pose" ] && ! moves "$action"; then
+		drift_note="; pose $pose (not a move: not this action's)"
+		pose=""
+	fi
 	# a move is seen in the picture of a steady camera; the pose leaves alone are the daemon's
 	# own report, and asleep the wake's own motion must be ruled out
 	if [ -n "$pose" ]; then
@@ -775,11 +797,11 @@ observed() {
 	# the state of the action's group, except for the pose's own groups (their other leaves,
 	# such as the field of view, are the daemon's report too)
 	if [ -n "$paths" ]; then
-		OBSERVED="state: $paths changed; picture: $pic"
+		OBSERVED="state: $paths changed$drift_note; picture: $pic"
 		case $group in gimbal | zoom) return 1 ;; esac
 		return 0
 	fi
-	OBSERVED="state: no change; picture: $pic"
+	OBSERVED="state: no change$drift_note; picture: $pic"
 	[[ $pic == still* ]] && return 2
 	return 1
 }
