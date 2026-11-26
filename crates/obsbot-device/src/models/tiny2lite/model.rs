@@ -34,7 +34,7 @@ pub const FIRMWARE_QUERY: u16 = 0x0408;
 /// read only while it is not `static`, 8.8), the values of the last target read (the group's
 /// values while it is not read, trait `Camera::read`) and the auto-sleep word
 /// (`sleep.auto.enabled` and `sleep.auto.seconds` are one word on the camera, 4.3) and when it
-/// last sent `wake` (a `sleep` keeps [`WAKE_GAP`](crate::family::link::WAKE_GAP) to it, 8.8).
+/// last sent `wake` (a `sleep` keeps [`WAKE_GAP`](crate::family::link::WAKE_GAP) to it, 5.8).
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Memory {
     pub mode: Option<Value>,
