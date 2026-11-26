@@ -188,3 +188,9 @@ very likely the camera's sleep pose (asleep it tilts down). This camera falls as
 after a wake while no video stream is open, although auto-sleep is set to 30 s, so −37.4 was
 probably the same pose on its way down. The guard and the sweeps now wake the camera before each
 step and print `asleep` with every FAIL and WARNING.
+
+## Camera behaviour observed in camera session 2 (2026-11-26)
+
+| Item                   | Observed                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No frames after a stream opened asleep | An `ffmpeg` that opened the video node while the camera was asleep got no frame, and a second attempt while the camera fell asleep again did not either. Afterwards `STREAMON` succeeded but no frame arrived within 15 s while `asleep` read `false`; `do sleep` and `do wake` and a USB re-enumeration did not bring frames back; a camera restart (`audio.enabled` off, then on) did. Cause not measured. |
