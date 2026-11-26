@@ -627,6 +627,58 @@ fn a_value_that_cannot_be_written_back_is_left_alone() {
     assert_eq!(d.state(A)["power_on"]["start"]["mode"], "close_up");
 }
 
+/// Under automatic exposure the Tiny 2 Lite read a gain of 71, above the 64 a write may set
+/// (measured 2026-11-26, #357): that value is the automatic exposure's, not the owner's, and a
+/// write of it is refused. The gain rows still run (in manual exposure, their `requires`); the
+/// value is named, not written back, and the run does not fail on it.
+#[test]
+fn an_automatic_value_outside_the_bounds_is_not_written_back() {
+    let d = Daemon::start("auto");
+    assert_eq!(d.state(A)["exposure"]["mode"], "auto");
+    d.bus
+        .store(A, "exposure.gain", serde_json::json!(71))
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    while d.state(A)["exposure"]["gain"] != 71 {
+        assert!(
+            Instant::now() < until,
+            "the daemon does not show the stored gain"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+    let from = d.bus.ops(A).len();
+    let (out, rows) = d.check("auto", &["--device", "fake-a", "--assume-pass"]);
+    assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    for value in ["1", "64"] {
+        assert_eq!(row(&rows, "setting", "exposure.gain", value).result, "pass");
+    }
+    assert!(
+        !rows.iter().any(|r| r.kind == "restore"),
+        "no restore warning: {rows:#?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("not written back: exposure.gain 71"),
+        "{}",
+        report(&out)
+    );
+    let gains: Vec<Op> = d.bus.ops(A)[from..]
+        .iter()
+        .filter(|op| matches!(op, Op::Apply(leaf, _) if leaf == "exposure.gain"))
+        .cloned()
+        .collect();
+    assert!(
+        !gains
+            .iter()
+            .any(|op| matches!(op, Op::Apply(_, v) if *v == serde_json::json!(71))),
+        "{gains:?}"
+    );
+    assert_eq!(
+        d.state(A)["exposure"]["mode"],
+        "auto",
+        "the mode is put back"
+    );
+}
+
 /// The zoom of the pose is put back after the action rows although the state does not show
 /// that a move changed it: `zoom.move` is not followed by a read, the zoom group shows the new
 /// factor only at its next 5 s tick. Here that tick does not come during the run, so the state

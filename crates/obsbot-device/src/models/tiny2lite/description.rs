@@ -312,7 +312,14 @@ pub fn description() -> Description {
             .live("auto")
             .default_value(json!(33_000)),
         )
-        .setting("exposure.gain", uvc("Gain", 1.0, 64.0, 1.0).live("auto"))
+        .setting(
+            "exposure.gain",
+            // the camera does not keep a gain written while the exposure is automatic, and its
+            // automatic exposure reads above 64 (57, 71), measured 2026-11-26
+            uvc("Gain", 1.0, 64.0, 1.0)
+                .requires("exposure.mode", json!("manual"))
+                .live("auto"),
+        )
         .setting(
             "exposure.compensation",
             uvc("Exposure compensation", 0.0, 18.0, 9.0),

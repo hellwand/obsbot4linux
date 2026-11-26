@@ -682,9 +682,9 @@ const ROWS: &[Row] = &[
     ),
     row(
         "image gain V",
-        &["set", "exposure.gain=8"],
+        &["set", "exposure.mode=manual", "exposure.gain=8"],
         0,
-        Apply(&[("exposure.gain", "8")]),
+        Apply(&[("exposure.mode", "\"manual\""), ("exposure.gain", "8")]),
     ),
     row(
         "image power_line_frequency 0",
