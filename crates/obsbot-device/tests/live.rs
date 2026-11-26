@@ -875,6 +875,70 @@ fn live_cam_4_the_zoom_readback_during_a_slow_zoom_move() {
 
 #[test]
 #[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
+fn live_cam_5_the_zoom_factor_lag_at_100_ms() {
+    // CAM-5 for `zoom.factor` (CS-2, 2026-11-26): the check script saw 4 only at the daemon's
+    // settle read (3106 and 3104 ms), which runs when `settle_ms` has passed and so gives no
+    // lag (spec 9.4). Here the zoom is read every 100 ms after each write, across the whole
+    // range both ways, three times; the largest lag must stay within `settle_ms`. The zoom
+    // is put back. (Measured 2026-11-26: 2527 to 2560 ms. A write of 2.5 read back as 2.51,
+    // so the values are the bounds, as the check script writes them.)
+    let Some((_, cam)) = camera(true) else {
+        return;
+    };
+    let mut guard = Guard::new(cam, false);
+    let cam = guard.cam();
+    if wake_up(cam, "zoom.factor") {
+        // a zoom write right after a wake was not taken (CAM-36; again 2026-11-26)
+        std::thread::sleep(Duration::from_secs(3));
+    }
+    let before = read_leaf(cam, "zoom.factor").unwrap();
+    let mut worst = Duration::ZERO;
+    let mut failed = Vec::new();
+    for round in 1..=3 {
+        for value in [json!(1), json!(4), json!(1)] {
+            if let Err(e) = cam.apply("zoom.factor", &value, &Ctx::none()) {
+                failed.push(format!("round {round}: {value} not written: {e}"));
+                continue;
+            }
+            let start = Instant::now();
+            let lag = loop {
+                let now = read_leaf(cam, "zoom.factor");
+                if now.as_ref().is_ok_and(|v| values::same(v, &value)) {
+                    break Some(start.elapsed());
+                }
+                if start.elapsed() > Duration::from_secs(10) {
+                    println!("round {round}: {value} not read within 10 s: {now:?}");
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            };
+            match lag {
+                Some(lag) => {
+                    println!(
+                        "round {round}: zoom.factor = {value} after {} ms",
+                        lag.as_millis()
+                    );
+                    worst = worst.max(lag);
+                }
+                None => failed.push(format!("round {round}: {value}")),
+            }
+        }
+    }
+    restore(cam, "zoom.factor", &before);
+    println!(
+        "largest lag {} ms, settle_ms {SETTLE_MS}",
+        worst.as_millis()
+    );
+    assert!(failed.is_empty(), "{failed:?}");
+    assert!(
+        worst <= Duration::from_millis(u64::from(SETTLE_MS)),
+        "zoom.factor lags {} ms, more than settle_ms {SETTLE_MS}",
+        worst.as_millis()
+    );
+}
+
+#[test]
+#[ignore = "writes to a Tiny 2 Lite: OBSBOT_LIVE=1 and OBSBOT_LIVE_WRITE=1"]
 fn live_cam_13_anti_flicker_and_exposure_mode_in_both_orders() {
     // CAM-13: `exposure.anti_flicker` and `exposure.mode` written one right after the other, in
     // both orders. CS-1 (2026-11-25): `exposure.mode=manual` and then `anti_flicker=off` loses
