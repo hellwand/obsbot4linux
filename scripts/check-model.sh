@@ -30,8 +30,9 @@
 # a value that differs from the snapshot (after the `requires` set while awake), wake, look
 # for it. A `.turn` action runs asleep only with its `.stop`. The state is snapshot first; on
 # exit, an interrupt or a termination every leaf the script wrote is set back to its snapshot
-# value, the script's own presets and views are deleted, a turn is stopped and the pose is
-# moved back. Output: one line per row and a results file (tab-separated).
+# value (not an automatic control's value outside the bounds, read while the leaf's
+# `requires` were not met: it is named instead), the script's own presets and views are
+# deleted, a turn is stopped and the pose is moved back. Output: one line per row and a results file (tab-separated).
 #
 # `--observe` answers the questions it can measure itself and asks only the rest. Starting the
 # script with it is the person's go for every action and asleep row (a restart or destructive
@@ -209,6 +210,7 @@ fi
 
 FAILED=0
 CHANGED=()
+declare -A AUTO_NOTED=()
 MOVED=0
 TURN_STOPS=()
 OWN_PRESET="" PRESET_SAVED=0 OWN_VIEW=""
@@ -408,6 +410,11 @@ restore_row() {
 	local path=$1 snap reply
 	snap=$(leaf "$SNAP" "$path")
 	[ "$snap" = null ] && return 0
+	if automatic_in_snapshot "$path"; then
+		[ -n "${AUTO_NOTED[$path]:-}" ] || echo "  not written back: $path $snap (the automatic control's value, outside the bounds)"
+		AUTO_NOTED[$path]=1
+		return 0
+	fi
 	if ! reply=$(cli set "$path=$(text "$snap")" 2>&1); then
 		restore_warning "$path" "$snap" "restore refused ($(errcode "$reply"))"
 		return 1
@@ -417,6 +424,19 @@ restore_row() {
 		restore_warning "$path" "$snap" "restore not shown within ${WAIT} s"
 		return 1
 	}
+}
+
+# Whether the snapshot value of a leaf is an automatic control's that a write cannot set: the
+# snapshot did not meet the leaf's `requires` (spec 4.2) and the value lies outside its bounds.
+# Such a value is not written back. The exposure gain read 71 under automatic exposure, above
+# the 64 a write may set (measured 2026-11-26).
+automatic_in_snapshot() {
+	jq -e --arg p "$1" --argjson snap "$SNAP" '.settings[$p] as $s
+        | ($snap | getpath($p | split("."))) as $v
+        | ($s.requires // []) as $r
+        | ($r | length > 0 and any(.[]; . as $q | $snap | getpath($q.path | split(".")) != $q.equals))
+          and ($v | type == "number")
+          and (($s.min != null and $v < $s.min) or ($s.max != null and $v > $s.max))' <<<"$DESC" >/dev/null
 }
 
 restore_warning() {
@@ -1091,6 +1111,7 @@ finish() {
 		[ -n "${done_[$path]:-}" ] && continue
 		done_[$path]=1
 		[ "$(leaf "$SNAP" "$path")" = null ] && continue
+		automatic_in_snapshot "$path" && continue
 		[ "$(readback_of "$path")" = true ] || continue
 		if ! shows "$st" "$path" "$(leaf "$SNAP" "$path")" "$(precision_of "$path")"; then
 			echo "not restored: $path (snapshot $(leaf "$SNAP" "$path"))"
