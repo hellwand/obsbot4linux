@@ -5,6 +5,13 @@ All notable changes to OBSBot4Linux. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The daemon answers every request of a connection whose client shut down only its sending
+  side after writing them (a half-close, as `socat` does at the end of its input). Before, a
+  client that wrote `hello` and a request and then half-closed got only the reply to `hello`
+  (#354).
+
 ## [1.0.0-rc.2] - 2026-11-25
 
 This is the second release candidate. Since 1.0.0-rc.1 the daemon reads `asleep` again right

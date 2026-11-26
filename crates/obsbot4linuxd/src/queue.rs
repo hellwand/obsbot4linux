@@ -65,6 +65,7 @@ impl Job {
     pub fn answer(&self, line: String) {
         if let Some(out) = &self.out {
             out.send(line);
+            out.replied();
         }
     }
 

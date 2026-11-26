@@ -81,6 +81,50 @@ fn queued_requests_of_a_closed_connection_are_never_sent() {
     );
 }
 
+/// 4.1: a client may shut down only its sending side after its last request and still read.
+/// That is not a close: hello and the requests sent with it in one write, and requests still
+/// queued behind a slow one, are all handled and answered; then the daemon closes. A daemon
+/// that took the end of the stream for a close dropped them and sent only the hello reply
+/// (measured 2026-11-26, live test G).
+#[test]
+fn a_half_closed_connection_still_gets_every_reply() {
+    let d = Daemon::start();
+    let mut c = d.connect();
+    d.bus.set_delay("fake-a", Duration::from_millis(300));
+    let mut lines = Vec::new();
+    for req in [
+        json!({"id": 1, "hello": {"protocol": 2, "client": "test 1.0", "subscribe": false}}),
+        json!({"id": 2, "device": A, "set": {"led.brightness": 1}}),
+        json!({"id": 3, "device": A, "set": {"gimbal.invert": true}}),
+        json!({"id": 4, "device": A, "get": ["led", "gimbal.invert"]}),
+    ] {
+        lines.extend_from_slice(req.to_string().as_bytes());
+        lines.push(b'\n');
+    }
+    c.send_raw(&lines);
+    c.shut_write();
+    assert!(c.reply(1)["ok"]["devices"].is_array());
+    assert!(
+        c.reply(2)["ok"]["rev"].is_u64(),
+        "queued behind the slow apply"
+    );
+    assert!(c.reply(3)["ok"]["rev"].is_u64());
+    let got = c.reply(4);
+    assert_eq!(
+        at(&got["ok"]["state"], "led.brightness"),
+        &json!(1),
+        "{got}"
+    );
+    assert_eq!(
+        at(&got["ok"]["state"], "gimbal.invert"),
+        &json!(true),
+        "{got}"
+    );
+    assert!(c.closed_within(T), "closed once every request is answered");
+    let ops = d.ops(A);
+    assert!(ops.contains(&Op::Apply("gimbal.invert".into(), json!(true))));
+}
+
 /// 4.1 rule 9 for requests already taken into a batch: the three writes arrive in one write
 /// while a slow poll runs, so the worker takes them as one batch; the connection closes during
 /// the first apply, and the other two are never sent.

@@ -4,7 +4,11 @@
 //! connection's writer thread. When the queue is full, the connection is closed and one log
 //! line names it by its connection number and the `client` of its `hello`.
 
+use nix::errno::Errno;
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use obsbot_proto::{ErrorBody, ErrorCode, OkBody, Reply, ReplyBody, RequestId};
+use std::io::Write;
+use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
@@ -19,6 +23,16 @@ struct Shared {
     client: Mutex<String>,
     closed: AtomicBool,
     stream: Option<UnixStream>,
+    drain: Mutex<Drain>,
+}
+
+/// The requests of a connection that wait for their reply, for the end of its stream (4.1).
+#[derive(Default)]
+struct Drain {
+    /// Requests queued for a worker and not answered yet.
+    open: usize,
+    /// Set while the reader waits at the end of the stream: written once when `open` is 0.
+    wake: Option<UnixStream>,
 }
 
 /// The sending end of a connection's outbound queue. Clones share the queue.
@@ -43,6 +57,7 @@ impl Outbound {
             client: Mutex::new(String::new()),
             closed: AtomicBool::new(false),
             stream,
+            drain: Mutex::new(Drain::default()),
         });
         (Outbound { tx, shared }, rx)
     }
@@ -98,6 +113,59 @@ impl Outbound {
 
     pub fn is_closed(&self) -> bool {
         self.shared.closed.load(Ordering::SeqCst)
+    }
+
+    fn drain(&self) -> std::sync::MutexGuard<'_, Drain> {
+        self.shared
+            .drain
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// A request of this connection goes to a worker; `replied` follows its reply.
+    pub fn expect_reply(&self) {
+        self.drain().open += 1;
+    }
+
+    /// A reply to a request counted by `expect_reply` was queued.
+    pub fn replied(&self) {
+        let mut d = self.drain();
+        d.open = d.open.saturating_sub(1);
+        if d.open == 0
+            && let Some(mut wake) = d.wake.take()
+        {
+            let _ = wake.write_all(&[1]);
+        }
+    }
+
+    /// The client ended its stream (4.1): waits until every request it sent before the end is
+    /// answered, since a client may shut down only its sending side and still read. Returns
+    /// at once when the whole connection is gone (the peer closed it, or the writer or a full
+    /// queue shut it down): then the requests not started are dropped (4.1 rule 9).
+    pub fn wait_for_replies(&self, conn: &UnixStream) {
+        let Ok((waiting, wake)) = UnixStream::pair() else {
+            return;
+        };
+        {
+            let mut d = self.drain();
+            if d.open == 0 || self.is_closed() {
+                return;
+            }
+            d.wake = Some(wake);
+        }
+        loop {
+            // No events asked on the connection: poll reports only its hang-up and errors,
+            // not the end of its stream, which is readable for good.
+            let mut fds = [
+                PollFd::new(conn.as_fd(), PollFlags::empty()),
+                PollFd::new(waiting.as_fd(), PollFlags::POLLIN),
+            ];
+            match poll(&mut fds, PollTimeout::NONE) {
+                Ok(_) => return,
+                Err(Errno::EINTR) => continue,
+                Err(_) => return,
+            }
+        }
     }
 
     fn shutdown(&self) {

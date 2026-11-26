@@ -332,6 +332,13 @@ impl Client {
         }
     }
 
+    /// Shuts down only the sending side (a half-close): the client still reads.
+    pub fn shut_write(&self) {
+        self.stream
+            .shutdown(std::net::Shutdown::Write)
+            .expect("shutdown");
+    }
+
     /// Closes this end.
     pub fn close(self) {
         let _ = self.stream.shutdown(std::net::Shutdown::Both);
