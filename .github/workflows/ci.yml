@@ -5,7 +5,7 @@ name: CI
 # always report.
 on:
   pull_request:
-    branches: [main, rebuild]
+    branches: [main]
 
 permissions:
   contents: read

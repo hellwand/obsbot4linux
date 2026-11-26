@@ -15,7 +15,7 @@ on:
         required: false
         type: string
   pull_request:
-    branches: [main, rebuild]
+    branches: [main]
     paths:
       - .github/workflows/release.yml
       - packaging/**
@@ -58,8 +58,7 @@ jobs:
           test -n "$ver"
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
-  # Fails at once unless the tagged commit is on main (a release candidate v1.0.0-rc.N: on
-  # main or rebuild), was green as a pull request (scripts/release-green.sh), Cargo.toml, PKGBUILD and
+  # Fails at once unless the tagged commit is on main, was green as a pull request (scripts/release-green.sh), Cargo.toml, PKGBUILD and
   # CHANGELOG.md match the tag and ci.yml tests with the same toolchain. On a pull request it
   # checks the toolchain and the section of the Cargo.toml version, so a release commit is checked
   # before its tag exists. The job itself must not be skipped: GitHub then skips every job that
@@ -87,14 +86,8 @@ jobs:
             echo "release refused: $SHA is not a commit" >&2
             exit 1
           }
-          # The release candidates of 1.0 are tagged on rebuild before main fast-forwards to it
-          # (design spec 10.3 W3, 10.6); every other release comes from main (10.7). The
-          # rebuild branch and its ruleset go after the final merge (10.1): W4's release pull
-          # request removes this exception and rebuild from ci.yml's triggers.
+          # Every release comes from main (design spec 10.7).
           branches=origin/main
-          case $GITHUB_REF_TYPE:$GITHUB_REF_NAME in
-          tag:v1.0.0-rc.*) branches="origin/main origin/rebuild" ;;
-          esac
           on=
           for branch in $branches; do
             if git merge-base --is-ancestor "$sha" "$branch" 2>/dev/null; then on=$branch; fi
