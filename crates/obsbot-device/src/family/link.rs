@@ -27,18 +27,23 @@ pub const REPLY_ATTEMPTS: usize = 20;
 pub const ANSWER_POLL: (usize, Duration) = (REPLY_ATTEMPTS, REPLY_GAP);
 /// `FRAME_GAP` (5.8): between two frames of one command where the model needs it (a pair).
 pub const FRAME_GAP: Duration = Duration::from_millis(100);
+/// `WAKE_GAP` (5.8): from a wake the model sent to a sleep it sends after it, where the model
+/// needs it: a sleep sent sooner is dropped by the camera.
+pub const WAKE_GAP: Duration = Duration::from_secs(3);
 
 /// The waits of a link. Tests use [`Timing::instant`]; the camera needs [`Timing::CAMERA`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Timing {
     pub reply_gap: Duration,
     pub frame_gap: Duration,
+    pub wake_gap: Duration,
 }
 
 impl Timing {
     pub const CAMERA: Timing = Timing {
         reply_gap: REPLY_GAP,
         frame_gap: FRAME_GAP,
+        wake_gap: WAKE_GAP,
     };
 
     /// No waiting: for tests on the replay transport.
@@ -46,6 +51,7 @@ impl Timing {
         Timing {
             reply_gap: Duration::ZERO,
             frame_gap: Duration::ZERO,
+            wake_gap: Duration::ZERO,
         }
     }
 }
@@ -501,6 +507,7 @@ mod tests {
             Timing {
                 reply_gap: Duration::ZERO,
                 frame_gap: Duration::from_millis(30),
+                wake_gap: Duration::ZERO,
             },
         );
         let a = frame(0x04, 0x3984, &[1, 0, 0, 0], 1);
@@ -527,6 +534,7 @@ mod tests {
             Timing {
                 reply_gap: Duration::ZERO,
                 frame_gap: Duration::from_millis(30),
+                wake_gap: Duration::ZERO,
             },
         );
         let x = frame(0x04, 0x0bc4, &0.1f32.to_le_bytes(), 1);

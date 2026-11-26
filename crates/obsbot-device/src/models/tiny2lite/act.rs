@@ -12,11 +12,14 @@ use crate::family::frame::FRAME_SIZE;
 use crate::family::link::Link;
 use crate::models::tiny2lite::commands as cmd;
 use crate::models::tiny2lite::decode;
+use crate::models::tiny2lite::model::Memory;
 use crate::models::tiny2lite::plan::{FRAMED, GIMBAL, SHORT, TRACKING};
 use crate::models::tiny2lite::presets::{self, MAX_ZOOM, Pose};
 use obsbot_proto::validate::Refusal;
 use obsbot_proto::{ErrorCode, Params, State};
 use serde_json::{Value, json};
+use std::thread::sleep;
+use std::time::Instant;
 
 /// The speeds of `zoom.move` (field ledger: slow 10, medium 30, fast 50).
 pub const ZOOM_MOVE_SPEED: [(&str, i32); 3] = [("slow", 10), ("medium", 30), ("fast", 50)];
@@ -239,6 +242,7 @@ fn start_pose(link: &mut Link, source: u32, pose: Pose, ctx: &Ctx) -> Result<()>
 /// Runs `action`; its parameters passed the validator and [`check`].
 pub fn act(
     link: &mut Link,
+    memory: &mut Memory,
     action: &str,
     params: &Params,
     state: &State,
@@ -427,8 +431,17 @@ pub fn act(
         }
         "power_on.go" => link.short(SHORT, &cmd::startup_go(), ctx)?,
         "sleep" | "wake" => {
-            let f = cmd::sleep(action == "sleep", link.seq());
+            // A sleep sent soon after a wake is dropped by the camera, which stays awake
+            // (measured 2026-11-26, a sleep sent after the reply to a wake: dropped 4 of 4
+            // times at 0.3 s, 1 of 4 at 1 s, 2 of 5 at 1.5 s, none of 14 at 2 s, 6 at 3 s and
+            // 3 at 4 s): it keeps `WAKE_GAP` to the last wake this model sent.
+            let asleep = action == "sleep";
+            if asleep && let Some(woke) = memory.woke {
+                sleep(link.timing().wake_gap.saturating_sub(woke.elapsed()));
+            }
+            let f = cmd::sleep(asleep, link.seq());
             send(link, f)?;
+            memory.woke = (!asleep).then(Instant::now);
         }
         "factory_reset" => {
             let f = cmd::factory_reset(link.seq());

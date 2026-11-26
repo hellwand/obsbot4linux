@@ -17,6 +17,7 @@ use crate::transport::checked::{Checked, Selectors};
 use obsbot_proto::validate::Refusal;
 use obsbot_proto::{Description, Params, State, Values};
 use serde_json::Value;
+use std::time::Instant;
 
 /// Where the Tiny 2 Lite's frames go (its registry entry, 8.8).
 pub const SELECTORS: Selectors = Selectors {
@@ -32,12 +33,14 @@ pub const FIRMWARE_QUERY: u16 = 0x0408;
 /// What the model keeps from its own last reads and writes: the tracking mode (the target is
 /// read only while it is not `static`, 8.8), the values of the last target read (the group's
 /// values while it is not read, trait `Camera::read`) and the auto-sleep word
-/// (`sleep.auto.enabled` and `sleep.auto.seconds` are one word on the camera, 4.3).
+/// (`sleep.auto.enabled` and `sleep.auto.seconds` are one word on the camera, 4.3) and when it
+/// last sent `wake` (a `sleep` keeps [`WAKE_GAP`](crate::family::link::WAKE_GAP) to it, 8.8).
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Memory {
     pub mode: Option<Value>,
     pub target: Option<Values>,
     pub sleep_word: Option<i16>,
+    pub woke: Option<Instant>,
 }
 
 /// One Tiny 2 Lite.
@@ -141,7 +144,7 @@ impl Camera for Tiny2Lite {
         state: &State,
         ctx: &Ctx,
     ) -> Result<Option<Params>> {
-        act::act(&mut self.link, action, params, state, ctx)
+        act::act(&mut self.link, &mut self.memory, action, params, state, ctx)
     }
 
     fn touched(&self, target: Target<'_>) -> Vec<String> {

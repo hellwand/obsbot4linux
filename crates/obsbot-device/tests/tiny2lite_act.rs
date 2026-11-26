@@ -378,6 +378,60 @@ fn a_short_initial_state_block_stops_the_start_pose_before_any_frame() {
     assert!(commands(&log).is_empty());
 }
 
+/// A sleep keeps `WAKE_GAP` to the last wake the model sent: sent sooner, the camera drops it
+/// and stays awake (measured 2026-11-26: dropped 4 of 4 times 0.3 s after the reply to a
+/// wake, none of 14 at 2 s; the check script's asleep rows sleep right after the previous
+/// row's wake). A sleep with no wake before it, or long enough after one, is sent at once.
+#[test]
+fn a_sleep_keeps_the_wake_gap_to_the_last_wake() {
+    use obsbot_device::family::link::Timing;
+    use obsbot_device::models::tiny2lite::model::Tiny2Lite;
+    use std::time::{Duration, Instant};
+    let gap = Duration::from_millis(300);
+    let timing = Timing {
+        wake_gap: gap,
+        ..Timing::instant()
+    };
+    let replay = recorded();
+    let log = replay.log();
+    let mut cam = Tiny2Lite::checked(replay, seq(1), timing);
+    let none = Params::new();
+    let act = |cam: &mut Tiny2Lite, action: &str| {
+        let start = Instant::now();
+        cam.act(action, &none, &state(), &Ctx::none()).unwrap();
+        start.elapsed()
+    };
+    assert!(act(&mut cam, "sleep") < gap, "no wake before it: at once");
+    assert!(act(&mut cam, "wake") < gap, "a wake never waits");
+    assert!(act(&mut cam, "sleep") >= gap - Duration::from_millis(5));
+    assert!(
+        act(&mut cam, "sleep") < gap,
+        "a second sleep: the wake is used up"
+    );
+    act(&mut cam, "wake");
+    std::thread::sleep(gap);
+    assert!(
+        act(&mut cam, "sleep") < gap / 2,
+        "the gap has passed: at once"
+    );
+    // the frames are the ledger row's, nothing more
+    let words: Vec<Vec<u8>> = payloads(&log);
+    let sleep = 1u32.to_le_bytes().to_vec();
+    let wake = 0u32.to_le_bytes().to_vec();
+    assert_eq!(
+        words,
+        [
+            sleep.clone(),
+            wake.clone(),
+            sleep.clone(),
+            sleep.clone(),
+            wake,
+            sleep
+        ]
+    );
+    assert!(commands(&log).iter().all(|f| *f == framed_to(0x02, 0xa0c2)));
+}
+
 #[test]
 fn sleep_wake_focus_point_and_factory_reset() {
     let (_, frames, data) = run("sleep", json!({}), &state());
