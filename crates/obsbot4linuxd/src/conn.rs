@@ -165,7 +165,10 @@ pub fn serve(stream: UnixStream, conn: ConnId, shared: Arc<Shared>) {
                 id: None,
                 message: "the line is not UTF-8".to_string(),
             }),
-            Ok(Line::Eof | Line::TooLong) | Err(_) => return,
+            // The end of the stream may be a half-close: the requests read before it are
+            // still answered (4.1).
+            Ok(Line::Eof) => return out.wait_for_replies(reader.get_ref()),
+            Ok(Line::TooLong) | Err(_) => return,
         };
         let arrived = Instant::now();
         if !said_hello {
@@ -270,6 +273,7 @@ fn later_line(
             return;
         }
     };
+    out.expect_reply();
     let mut job = Job {
         id,
         out: Some(out.clone()),

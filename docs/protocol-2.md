@@ -14,6 +14,9 @@ worked transcripts, lifecycles and the client library in use.
 - At most 64 connections; a further connection is closed at once.
 - The first message on a connection is `hello`. Requests sent after `hello` and before its
   reply are kept and handled after the reply.
+- A client may shut down only its sending side after its last request (a half-close): the
+  daemon still handles and answers every request it read, then closes the connection. Only
+  a close of the whole connection drops requests not started (design spec 4.1, rule 9).
 
 ## 2. Requests
 
@@ -335,6 +338,7 @@ connect ── hello ──► reply (devices, states) ──► requests, pipel
    │                     └─ before the first enumeration has read each device: the reply
    │                        waits, at most 15 s; a device not read by then is `unread`
    └─ first line not hello, or another protocol ──► error `protocol`, connection closed
+half-close ──► every request read is answered ──► the daemon closes
 close ──► requests still queued for this connection are dropped; a `gimbal.turn` it started
           without `keep: true` is stopped
 ```
