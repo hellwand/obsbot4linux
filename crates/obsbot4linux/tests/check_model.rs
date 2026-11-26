@@ -877,8 +877,10 @@ fn the_frame_comparison_tells_a_move_from_noise_and_darkness() {
 /// away 2.9 s after the reply to `factory_reset`). A row that took the device that was still
 /// listed for the returned one let the next restart row and the final restore reach a camera
 /// that was about to go away, and the restore was refused (`unavailable`), exit 1. Here the
-/// command line delays every restart write and action by 1.5 s after its reply; the run must
-/// still exit 0 with every restart row `returned` and every leaf it wrote put back.
+/// command line delays every restart write and action by 3 s after its reply; no other write
+/// or action may be sent between a reply and the moment its command reached the fake (the
+/// order the command line logs, not a timing), and the run must still exit 0 with every
+/// restart row `returned` and every leaf it wrote put back.
 #[test]
 fn a_restart_row_waits_for_the_device_to_go_away_and_return() {
     let d = Daemon::start("late");
@@ -899,6 +901,8 @@ fn a_restart_row_waits_for_the_device_to_go_away_and_return() {
     let before = writable_values(&d.state(A), "fake-a");
     let wrapper = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/late-restart-cli.sh");
     let results = results_file("late");
+    let log = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("check-model-late.log");
+    let _ = std::fs::remove_file(&log);
     let out = d
         .command(
             &results,
@@ -906,9 +910,34 @@ fn a_restart_row_waits_for_the_device_to_go_away_and_return() {
             &["--device", "fake-a", "--assume-pass", "--destructive"],
         )
         .env("LATE_RESTART_REAL_CLI", env!("CARGO_BIN_EXE_obsbot4linux"))
+        .env("LATE_RESTART_LOG", &log)
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(0), "{}", report(&out));
+    // the order the command line saw: after the reply to a restart command, nothing writes to
+    // the camera until that command reached it (the next row and the restore come later)
+    let log = std::fs::read_to_string(&log).unwrap_or_default();
+    let mut pending: Option<&str> = None;
+    let mut landed = 0;
+    for line in log.lines() {
+        if let Some(cmd) = line.strip_prefix("reply ") {
+            assert!(
+                pending.is_none(),
+                "{cmd} sent before {pending:?} landed:\n{log}"
+            );
+            pending = Some(cmd);
+        } else if let Some(cmd) = line.strip_prefix("landed ") {
+            assert_eq!(pending, Some(cmd), "{log}");
+            pending = None;
+            landed += 1;
+        } else if let Some(cmd) = line.strip_prefix("write ") {
+            assert!(
+                pending.is_none(),
+                "{cmd} sent before {pending:?} landed:\n{log}"
+            );
+        }
+    }
+    assert_eq!((pending, landed), (None, 3), "{log}");
     assert!(
         !String::from_utf8_lossy(&out.stdout).contains("restore refused"),
         "{}",
