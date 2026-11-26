@@ -122,7 +122,10 @@ impl Outbound {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// A request of this connection goes to a worker; `replied` follows its reply.
+    /// A request of this connection goes to a worker; `replied` follows its reply. Every
+    /// request counted here is answered through `Job::answer` or `Job::fail` exactly once, or
+    /// its connection is closed: a reply sent past them leaves the count above 0, and a
+    /// half-closed client then waits until it closes the connection itself.
     pub fn expect_reply(&self) {
         self.drain().open += 1;
     }
@@ -143,8 +146,14 @@ impl Outbound {
     /// at once when the whole connection is gone (the peer closed it, or the writer or a full
     /// queue shut it down): then the requests not started are dropped (4.1 rule 9).
     pub fn wait_for_replies(&self, conn: &UnixStream) {
-        let Ok((waiting, wake)) = UnixStream::pair() else {
-            return;
+        let (waiting, wake) = match UnixStream::pair() {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!(
+                    "obsbot4linuxd: cannot wait for the replies of a half-closed connection: {e}"
+                );
+                return;
+            }
         };
         {
             let mut d = self.drain();

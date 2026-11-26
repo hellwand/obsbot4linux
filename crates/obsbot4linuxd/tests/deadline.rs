@@ -85,7 +85,7 @@ fn queued_requests_of_a_closed_connection_are_never_sent() {
 /// That is not a close: hello and the requests sent with it in one write, and requests still
 /// queued behind a slow one, are all handled and answered; then the daemon closes. A daemon
 /// that took the end of the stream for a close dropped them and sent only the hello reply
-/// (measured 2026-11-26, live test G).
+/// (seen in CS-2 test G on 2026-11-26, reproduced with `obsbot4linuxd --fake`).
 #[test]
 fn a_half_closed_connection_still_gets_every_reply() {
     let d = Daemon::start();
@@ -104,11 +104,11 @@ fn a_half_closed_connection_still_gets_every_reply() {
     c.send_raw(&lines);
     c.shut_write();
     assert!(c.reply(1)["ok"]["devices"].is_array());
+    assert!(c.reply(2)["ok"]["rev"].is_u64(), "the slow apply");
     assert!(
-        c.reply(2)["ok"]["rev"].is_u64(),
+        c.reply(3)["ok"]["rev"].is_u64(),
         "queued behind the slow apply"
     );
-    assert!(c.reply(3)["ok"]["rev"].is_u64());
     let got = c.reply(4);
     assert_eq!(
         at(&got["ok"]["state"], "led.brightness"),
