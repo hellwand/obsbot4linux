@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Stands in for v4l2-ctl in tests/check_model.rs: the format of the Tiny 2 Lite's node.
+printf '\tWidth/Height      : 1920/1080\n'
+printf "\tPixel Format      : 'MJPG' (Motion-JPEG)\n"
+printf '\tFrames per second: 60.000 (60/1)\n'

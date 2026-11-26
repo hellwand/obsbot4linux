@@ -951,3 +951,136 @@ fn a_restart_row_waits_for_the_device_to_go_away_and_return() {
         .collect();
     assert!(changed.is_empty(), "not restored: {changed:#?}");
 }
+
+/// The script with `--observe <node>` against a stand-in stream: the command line names
+/// `/dev/null` as the fake's video node, and `ffmpeg` and `v4l2-ctl` on PATH are the
+/// fixtures in `tests/fixtures/observe-bin` (an ffmpeg that, as measured on the camera, gets
+/// no frame when it opens while the camera is asleep and does not end on SIGTERM then).
+fn observe_command(d: &Daemon, name: &str, pidfile: &Path) -> (Command, PathBuf) {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let results = results_file(name);
+    let _ = std::fs::remove_file(pidfile);
+    let mut c = d.command(
+        &results,
+        &fixtures.join("node-cli.sh"),
+        &[
+            "--device",
+            "fake-a",
+            "--assume-pass",
+            "--observe",
+            "/dev/null",
+        ],
+    );
+    let path = std::env::var("PATH").unwrap_or_default();
+    c.env(
+        "PATH",
+        format!("{}:{path}", fixtures.join("observe-bin").display()),
+    )
+    .env("NODE_CLI_REAL_CLI", env!("CARGO_BIN_EXE_obsbot4linux"))
+    .env("NODE_CLI_VIDEO", "/dev/null")
+    .env("FAKE_FFMPEG_CLI", env!("CARGO_BIN_EXE_obsbot4linux"))
+    .env("FAKE_FFMPEG_PIDFILE", pidfile)
+    .env("CHECK_MODEL_SETTLE", "3")
+    .env("CHECK_MODEL_QUIET", "1")
+    .env("CHECK_MODEL_BASELINE", "0.1");
+    (c, results)
+}
+
+/// Whether the process in `pidfile` is still running (it may need a moment to end).
+fn still_running(pidfile: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(pidfile) else {
+        return false;
+    };
+    let pid = nix::unistd::Pid::from_raw(text.trim().parse().unwrap());
+    let until = Instant::now() + Duration::from_secs(2);
+    while nix::sys::signal::kill(pid, None).is_ok() {
+        if Instant::now() > until {
+            nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGKILL).ok();
+            return true;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    false
+}
+
+/// `--observe <node>` with a sleeping camera wakes it before the stream opens: opened while
+/// the camera slept, the stream got no frame within 15 s and the run ended with exit 2
+/// (measured 2026-11-26). A run ended by SIGTERM leaves no ffmpeg behind, although this one
+/// ignores SIGTERM as the measured one did.
+#[test]
+fn observe_wakes_a_sleeping_camera_before_the_stream_and_ends_it() {
+    let d = Daemon::start("obs-asleep");
+    let (code, _, err) = common::cli(Some(&d.socket), &["do", "sleep", "--device", "fake-a"]);
+    assert_eq!(code, 0, "{err}");
+    let until = Instant::now() + Duration::from_secs(10);
+    while d.state(A)["asleep"] != Value::Bool(true) {
+        assert!(Instant::now() < until, "the fake does not fall asleep");
+        thread::sleep(Duration::from_millis(50));
+    }
+    let pidfile = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("obs-asleep.ffmpeg.pid");
+    let (mut c, results) = observe_command(&d, "obs-asleep", &pidfile);
+    // stderr to a file, not a pipe: a stream left running would hold a pipe open
+    let errfile = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("obs-asleep.stderr");
+    let mut child = c
+        .stdout(Stdio::null())
+        .stderr(std::fs::File::create(&errfile).unwrap())
+        .spawn()
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(60);
+    while rows(&results).len() < 3 {
+        if let Some(status) = child.try_wait().unwrap() {
+            let running = still_running(&pidfile);
+            panic!(
+                "the script ended early ({status}; ffmpeg left running: {running}): {}",
+                std::fs::read_to_string(&errfile).unwrap_or_default()
+            );
+        }
+        assert!(Instant::now() < until, "the script wrote no rows");
+        thread::sleep(Duration::from_millis(20));
+    }
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(child.id() as i32),
+        nix::sys::signal::Signal::SIGTERM,
+    )
+    .unwrap();
+    let until = Instant::now() + Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < until, "the script does not end on SIGTERM");
+        thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(status.code(), Some(143));
+    assert!(!still_running(&pidfile), "ffmpeg left running");
+}
+
+/// A stream that never delivers a frame ends the run with exit 2 and is stopped (SIGINT,
+/// bounded): the SIGTERM the script sent before left the measured ffmpeg running.
+#[test]
+fn observe_without_a_frame_exits_2_and_leaves_no_stream() {
+    let d = Daemon::start("obs-noframe");
+    let pidfile = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("obs-noframe.ffmpeg.pid");
+    let (mut c, results) = observe_command(&d, "obs-noframe", &pidfile);
+    // stderr to a file, not a pipe: a stream left running would hold a pipe open
+    let errfile = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("obs-noframe.stderr");
+    let mut child = c
+        .env("FAKE_FFMPEG_NO_FRAMES", "1")
+        .stdout(Stdio::null())
+        .stderr(std::fs::File::create(&errfile).unwrap())
+        .spawn()
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < until, "the script does not end");
+        thread::sleep(Duration::from_millis(50));
+    };
+    let err = std::fs::read_to_string(&errfile).unwrap();
+    assert_eq!(status.code(), Some(2), "{err}");
+    assert!(err.contains("no frame from /dev/null within 15 s"), "{err}");
+    assert!(rows(&results).is_empty());
+    assert!(!still_running(&pidfile), "ffmpeg left running");
+}
