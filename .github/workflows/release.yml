@@ -270,11 +270,11 @@ jobs:
           - runner: ubuntu-22.04
             arch: x86_64
             # Arch Linux, daily image, pinned by digest
-            arch_image: archlinux/archlinux@sha256:846dcf08b36edc8e4247e6abd622936f20dd620aae1f7fdfdc146a6b4e86e628
+            arch_image: archlinux/archlinux@sha256:c3581e5f269b95678eb55477592a7c030486bfdcb9b00ea75469c428d99cdf61
           - runner: ubuntu-22.04-arm
             arch: aarch64
             # Arch Linux ARM (menci/archlinuxarm, daily multi-arch), pinned by digest
-            arch_image: menci/archlinuxarm@sha256:0a4663459ee538d31c7f2fc496f32dfc3f87d1c134141ecded15f2e1d04b00ce
+            arch_image: menci/archlinuxarm@sha256:157c6067b44f364bac9a999d423506b6a85648b91d32d80b92a0cb5c5e39d84a
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
